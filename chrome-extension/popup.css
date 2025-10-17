@@ -1,0 +1,1304 @@
+body {
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  width: 380px;
+  height: 600px;
+  animation: fadeIn 0.3s ease-out;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#tryon-popup {
+  width: 380px;
+  height: 600px;
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tryon-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tryon-logo {
+  height: 32px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.user-email {
+  font-size: 12px;
+  color: #000;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 2px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.refresh-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.refresh-btn img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.refresh-btn:hover img {
+  transform: scale(1.1) rotate(90deg);
+}
+
+/* User button styles */
+.user-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 2px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.user-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.user-btn img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.user-btn:hover img {
+  transform: scale(1.1);
+}
+
+/* Update the signout button styles to work with the image */
+.signout-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 2px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.signout-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.signout-btn img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.signout-btn:hover img {
+  transform: scale(1.1);
+}
+
+/* Main app with Figma-inspired design */
+.main-app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: url('Hintegrund Dressing Room cut 1.png') center/cover no-repeat;
+  position: relative;
+  overflow: hidden;
+}
+
+
+/* Ensure all content appears above the overlay */
+.main-app > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Modern tryon body with Figma layout */
+.tryon-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Main container for all content */
+.main-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 8px;
+}
+
+/* Page info section */
+.page-info-section {
+  border-radius: 16px;
+}
+
+.page-url-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-url-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid rgba(12, 12, 12, 0.2);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  color: #666;
+  box-sizing: border-box;
+  text-align: center;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.toggle-text h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: #333;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  line-height: 1.2;
+  transition: color 0.2s ease;
+}
+
+.use-garment-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  position: relative;
+  z-index: 10;
+}
+
+.use-garment-toggle:hover {
+  background-color: rgba(0, 200, 83, 0.1);
+}
+
+.use-garment-toggle input[type="checkbox"] {
+  accent-color: #00c853;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin: 0;
+  position: relative;
+  z-index: 11;
+}
+
+.toggle-text {
+  font-size: 14px;
+  font-weight: 300;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.content-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 16px;
+  position: relative;
+  min-height: 400px;
+  overflow: hidden;
+}
+
+/* Avatar Section - Full Width */
+.avatar-section {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+
+
+/* Avatar containers */
+.avatar-container {
+  flex: 1;
+  width: 100%;
+  height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  gap: 5px;
+}
+
+.avatar-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  margin-top: 30px;
+  overflow: visible; /* Changed from hidden to visible */
+  position: relative;
+  border-radius: 12px;
+}
+
+.avatar-display-image {
+  width: 140%; /* Scale up the width */
+  height: 140%; /* Scale up the height */
+  object-fit: contain;
+  object-position: center 950%; /* This will now crop the top 20% */
+  margin-top: -50%; /* Offset to center the scaled image */
+  transform: none; /* Remove the scale transform */
+  transition: transform 0.3s ease;
+}
+
+.avatar-overlay-btn {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.avatar-overlay-btn img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+/* Enhanced positioning with better spacing */
+.avatar-btn-top-left {
+  top: 6px;
+  left: 6px;
+  z-index: 10;
+}
+
+.avatar-btn-bottom-right {
+  bottom: 6px;
+  right: 6px;
+  z-index: 10;
+}
+
+.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.upload-text {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* Avatar upload camera styling */
+.avatar-upload-camera {
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+  margin-bottom: 8px;
+  z-index: 10;
+}
+
+/* Avatar upload image styling */
+.avatar-upload-image {
+  width: 100%;
+  height: 40px;
+  object-fit: cover;
+  cursor: pointer;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+/* Camera overlay in center of avatar preview */
+.avatar-upload-camera-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  cursor: pointer;
+  z-index: 15;
+  transition: all 0.3s ease;
+  filter: drop-shadow(0 4px 8px rgb(255, 255, 255));
+  opacity: 0; /* Start hidden */
+  pointer-events: none; /* Disable clicks when hidden */
+}
+
+/* Show camera overlay on hover when avatar is present */
+.avatar-preview.has-avatar:hover .avatar-upload-camera-overlay {
+  opacity: 0.9;
+  pointer-events: auto; /* Enable clicks when visible */
+  background: rgba(255, 255, 255, 0.7); /* Add dark background for visibility */
+  border-radius: 50%;
+  padding: 5px;
+}
+
+.avatar-upload-camera-overlay:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  filter: drop-shadow(0 6px 12px rgba(19, 209, 98, 0.4)) brightness(1.2);
+  opacity: 1 !important;
+}
+
+.avatar-preview:not(.has-avatar) .avatar-upload-camera-overlay {
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
+
+
+/* Garment Preview */
+.garment-section {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 16px 0 0 0 !important;
+  padding: 0 !important;
+}
+
+/* Garment Header with Toggle Button */
+.garment-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  margin-bottom: 12px !important;
+  padding: 0 8px !important;
+}
+
+.garment-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+  margin: 0;
+  padding: 10px 15px;
+  background-color: #003500;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  flex: 1;
+}
+
+/* Garment Source Toggle Button */
+.garment-source-toggle {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  border-radius: 15px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.garment-source-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+  background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+}
+
+.garment-source-toggle:active {
+  transform: translateY(0);
+}
+
+#toggle-icon {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+.garment-source-toggle:hover #toggle-icon {
+  transform: scale(1.2);
+}
+
+.garment-source-toggle:disabled {
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+}
+
+.garment-source-toggle:disabled:hover {
+  transform: none;
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+}
+
+/* Garment Navigation */
+.garment-navigation {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 280px !important;
+  margin: 0 0 10px 0 !important;
+  padding: 10px !important;
+  box-sizing: border-box !important;
+}
+
+.nav-btn {
+  background: #003500 !important;
+  border-radius: 5px !important;
+  border: 2px solid black;
+  padding: 5px 10px !important;
+  cursor: pointer !important;
+  font-size: 11px !important;
+  color: #fff !important;
+  transition: all 0.2s ease !important;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background: #e0e0e0 !important;
+  border-color: #999 !important;
+}
+
+.nav-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.page-indicator {
+  font-size: 12px !important;
+  color: #666 !important;
+  font-weight: 500 !important;
+}
+
+/* Garment Item Try-On Hover Effect */
+.garment-item-tryon:hover .tryon-hover-badge {
+  opacity: 1 !important;
+}
+
+.garment-item-tryon:hover {
+  transform: scale(1.02) !important;
+  transition: transform 0.2s ease !important;
+}
+
+
+
+.garment-container {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  max-width: 280px !important;
+  width: 280px !important;
+  margin: 0 auto !important;
+  position: relative !important;
+}
+
+.garment-preview-overlay {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+}
+
+.garment-preview {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 260px !important;
+  max-width: 260px !important;
+  justify-items: center !important;
+  place-items: center !important;
+  margin: 0 auto !important;
+  position: relative !important;
+}
+
+.garment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,200,83,0.05);
+  border: 1px dashed rgba(0,200,83,0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 180px;
+  width: 160px;
+  position: relative;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.upload-placeholder:hover .image-remove-btn {
+  display: block;
+}
+
+
+.upload-placeholder:hover {
+  background: rgba(0,200,83,0.1);
+  border-color: #00c853;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 12px rgba(0,200,83,0.2);
+}
+
+/* Uploaded garment styling */
+.uploaded-garment {
+  position: relative;
+  cursor: pointer;
+  border: 1px solid #ffffff;
+  background: #e8f5e8;
+  transition: all 0.3s ease;
+}
+
+.uploaded-garment:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,200,83,0.3);
+}
+
+.uploaded-garment.selected {
+  border: 1px solid #ff6b35;
+  box-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+}
+
+/* Garment remove button */
+.garment-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.garment-remove-btn:hover {
+  background: rgba(255, 0, 0, 1);
+  transform: scale(1.1);
+}
+
+/* Garment type and number badges */
+.uploaded-garment .garment-type-badge {
+  position: absolute;
+  top: 4px;
+  right: 30px;
+  background: #1d211f;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  z-index: 5;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.uploaded-garment .garment-number-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 10px;
+  z-index: 5;
+}
+
+.image-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  background: red;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: bold;
+  display: none;
+}
+
+
+
+
+
+
+
+
+.use-garment-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Media Section - Side by side layout */
+.media-section {
+  width: 100%;
+}
+
+.media-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.media-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.media-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00c853;
+  text-align: center;
+}
+
+.tryon-result {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: none;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transform: scale(1.4);
+}
+
+/* Hide avatar image when try-on result is visible */
+.main-container.tryon-active .avatar-display-image {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.tryon-result img {
+  width: 180%;
+  height: 180%;
+  object-fit: contain;
+  background: none;
+  border-radius: 12px;
+  max-width: none;
+  max-height: none;
+}
+
+/* Close button for tryon result */
+.tryon-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 1001;
+  transition: all 0.2s ease;
+}
+
+.tryon-close-btn:hover {
+  background: rgba(255, 0, 0, 1);
+  transform: scale(1.1);
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0,200,83,0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0,200,83,0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,200,83,0.5);
+}
+
+/* Loading animation for processing state */
+.tryon-result.processing {
+  animation: pulse 1.5s ease-in-out infinite;
+  background: none;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+/* Sign In Page Styles */
+.signin-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 20px;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(12px);
+}
+
+.signin-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.signin-logo {
+  height: 50px;
+  width: auto;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 2px 8px rgba(0,200,83,0.15));
+}
+
+.signin-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #00c853;
+  margin: 0 0 8px 0;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.signin-subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+  font-weight: 400;
+}
+
+.signin-form {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.input-group {
+  position: relative;
+}
+
+.signin-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(0,200,83,0.3);
+  border-radius: 25px;
+  background: rgba(255,255,255,0.9);
+  font-size: 0.9rem;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.signin-input:focus {
+  outline: none;
+  border-color: #00c853;
+  background: rgba(255,255,255,1);
+  box-shadow: 0 0 0 3px rgba(0,200,83,0.1);
+}
+
+.signin-input::placeholder {
+  color: #999;
+}
+
+.signin-btn {
+  background: #003500;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,200,83,0.15);
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.signin-btn:hover {
+  background: linear-gradient(135deg, #121512 0%, #00c853 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,200,83,0.25);
+}
+
+.signin-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.signin-divider::before,
+.signin-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0,200,83,0.2);
+}
+
+.signin-divider span {
+  padding: 0 15px;
+}
+
+.guest-btn {
+  background: rgba(255,255,255,0.9);
+  color: #666;
+  border: 1px solid rgba(0,200,83,0.3);
+  border-radius: 25px;
+  padding: 12px 24px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.guest-btn:hover {
+  background: rgba(0,200,83,0.05);
+  border-color: #00c853;
+  color: #00c853;
+  transform: translateY(-1px);
+}
+
+.signin-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.signin-links a {
+  color: #00c853;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.signin-links a:hover {
+  color: #4caf50;
+  text-decoration: underline;
+}
+
+/* Account Creation Page Styles */
+.account-creation-scrollable {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 10px 20px;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(12px);
+  overflow-y: auto;  
+  overflow-x: hidden;
+}
+
+.account-creation-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.account-creation-scrollable::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.account-creation-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.account-creation-scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.account-creation-form {
+  padding-bottom: 40px;
+  width: 100%;
+  max-width: 280px;
+}
+
+/* Ensure header is visible in account creation */
+#account-creation-page .signin-header {
+  margin-top: 0;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+/* Account Creation Form Styles */
+.input-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.half-width {
+  flex: 1;
+}
+
+.input-label {
+  display: block;
+  color: #000;
+  font-size: 14px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  font-weight: 500;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.physique-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  margin-top: 8px;
+}
+
+.physique-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+}
+
+.physique-option:hover {
+  border-color: #00c853;
+  background: rgba(0, 200, 83, 0.1);
+  transform: translateY(-1px);
+}
+
+.physique-option input[type="radio"] {
+  margin-right: 10px;
+  accent-color: #00c853;
+  width: 16px;
+  height: 16px;
+}
+
+.physique-option input[type="radio"]:checked + .physique-text {
+  font-weight: 600;
+  color: #00c853;
+}
+
+.physique-text {
+  font-size: 14px;
+  color: #000;
+  transition: all 0.2s ease;
+}
+
+select.signin-input {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+  appearance: none;
+  cursor: pointer;
+  color: #000;
+}
+
+select.signin-input option {
+  background: #fff;
+  color: #000;
+  padding: 10px;
+}
+
+/* Ensure proper contrast for account creation inputs */
+#account-creation-page .signin-input {
+  color: #000;
+  background: rgba(255, 255, 255, 0.9);
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+#account-creation-page .signin-input::placeholder {
+  color: #666;
+}
+
+.signin-input:invalid {
+  border-color: rgba(244, 67, 54, 0.6);
+}
+
+.signin-input:valid {
+  border-color: rgba(76, 175, 80, 0.6);
+}
+
+/* Profile page specific styles */
+.input-label {
+  display: block;
+  font-size: 0.9rem;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 4px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.profile-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.profile-buttons .signin-btn {
+  flex: 1;
+  min-width: 120px;
+  margin-top: 0;
+}
+
+.secondary-btn {
+  background: #6c757d !important;
+}
+
+.secondary-btn:hover {
+  background: linear-gradient(135deg, #5a6268 0%, #6c757d 100%) !important;
+}
+
+.signin-input:read-only,
+.signin-input[readonly] {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.signin-input[disabled],
+select[disabled] {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.physique-options input[disabled] + .physique-text {
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+@media (max-width: 400px) {
+  .input-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .half-width {
+    width: 100%;
+  }
+  
+  .profile-buttons {
+    flex-direction: column;
+  }
+  
+  .profile-buttons .signin-btn {
+    flex: none;
+  }
+}
+
+/* Heart/Favorite button styling */
+.favorite-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.favorite-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.favorite-btn .heart-icon {
+  font-size: 16px;
+  transition: all 0.3s ease;
+  color: #ccc;
+}
+
+.favorite-btn.favorited .heart-icon {
+  color: #e74c3c;
+  transform: scale(1.2);
+}
+
+.favorite-btn:hover .heart-icon {
+  transform: scale(1.3);
+}
+
+/* Animation for when item is favorited */
+@keyframes heartPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.favorite-btn.favorited .heart-icon {
+  animation: heartPulse 0.6s ease;
+}
+
+/* Favorite status indicator */
+.favorite-status {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(231, 76, 60, 0.9);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  display: none;
+}
+
+.garment-item-tryon.favorited .favorite-status {
+  display: block;
+}

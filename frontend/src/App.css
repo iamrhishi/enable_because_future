@@ -1,0 +1,98 @@
+
+body, html, #root, .landing-page {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-page {
+  min-height: 100vh;
+  width: 100vw;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  transition: background-image 0.5s ease-in-out;
+}
+
+.landing-header {
+  display: flex;
+  align-items: center;
+  padding: 32px 48px 0 48px;
+  position: relative;
+}
+
+.landing-logo {
+  height: 60px;
+  margin-right: 24px;
+}
+
+.landing-title {
+  color: #fff;
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.bg-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24px;
+  gap: 16px;
+}
+
+.bg-btn {
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.bg-btn:hover {
+  background: rgba(0,0,0,0.7);
+}
+.bg-index {
+  color: #fff;
+  font-size: 1.1rem;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.center-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  margin-top: 60px;
+}
+
+.camera-btn {
+  background: rgba(255,255,255,0.8);
+  border: none;
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.camera-btn:hover {
+  background: #e0ffe0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.camera-icon {
+  width: 60px;
+  height: 60px;
+}

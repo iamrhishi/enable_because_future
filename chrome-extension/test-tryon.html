@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Try-On API</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 10px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        .result { margin: 10px 0; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>Try-On API Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Check if try-on endpoint is accessible</h2>
+        <button onclick="testAPIConnection()">Test API Connection</button>
+        <div id="api-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Upload a test garment and avatar</h2>
+        <input type="file" id="avatar-file" accept="image/*">
+        <label for="avatar-file">Upload Avatar</label><br>
+        <input type="file" id="garment-file" accept="image/*">
+        <label for="garment-file">Upload Garment</label><br>
+        <button onclick="testTryOn()">Test Try-On</button>
+        <div id="tryon-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Check Chrome Storage</h2>
+        <button onclick="checkStorage()">Check Chrome Storage</button>
+        <div id="storage-result" class="result"></div>
+    </div>
+
+    <script>
+        async function testAPIConnection() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = 'Testing API connection...';
+            
+            try {
+                const response = await fetch('http://192.168.178.48:5000/api/tryon', {
+                    method: 'OPTIONS'
+                });
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '✅ API endpoint is accessible';
+                } else {
+                    resultDiv.innerHTML = `❌ API returned status: ${response.status}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ API connection failed: ${error.message}`;
+            }
+        }
+        
+        async function testTryOn() {
+            const resultDiv = document.getElementById('tryon-result');
+            const avatarFile = document.getElementById('avatar-file').files[0];
+            const garmentFile = document.getElementById('garment-file').files[0];
+            
+            if (!avatarFile || !garmentFile) {
+                resultDiv.innerHTML = '❌ Please upload both avatar and garment files';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Testing try-on...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('person_image', avatarFile);
+                formData.append('cloth_image', garmentFile);
+                formData.append('cloth_type', 'upper');
+                formData.append('num_inference_steps', 65);
+                
+                const response = await fetch('http://192.168.178.48:5000/api/tryon', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    resultDiv.innerHTML = `✅ Try-on successful! <img src="${url}" style="max-width: 200px; height: auto;" />`;
+                } else {
+                    resultDiv.innerHTML = `❌ Try-on failed with status: ${response.status}`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Try-on error: ${error.message}`;
+            }
+        }
+        
+        function checkStorage() {
+            const resultDiv = document.getElementById('storage-result');
+            
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.get(null, function(items) {
+                    resultDiv.innerHTML = `✅ Chrome storage contents: <pre>${JSON.stringify(items, null, 2)}</pre>`;
+                });
+            } else {
+                resultDiv.innerHTML = '❌ Chrome storage not available (not running as extension)';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enable Chatbot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="tryon-popup">
+    <!-- Sign In Page -->
+    <div id="signin-page" class="signin-page">
+      <div class="signin-header">
+        <img src="bcf_green_logo.png" alt="Enable Logo" class="signin-logo" />
+        <p class="signin-subtitle">Sign in to access all virtual try-on features</p>
+      </div>
+      
+      <div class="signin-form">
+        <div class="input-group">
+          <input type="email" id="signin-email" class="signin-input" placeholder="Email address" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="signin-password" class="signin-input" placeholder="Password" required />
+        </div>
+        <button id="signin-btn" class="signin-btn">Sign In</button>
+        
+        <div class="signin-divider">
+          <span>or</span>
+        </div>
+        
+        <button id="guest-btn" class="guest-btn">Continue as Guest</button>
+        
+        <div class="signin-links">
+          <a href="#" id="forgot-password">Forgot password?</a>
+          <a href="#" id="create-account">Create account</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Creation Page -->
+    <div id="account-creation-page" class="signin-page account-creation-scrollable" style="display:none;">
+      <div class="signin-header">
+        <img src="bcf_green_logo.png" alt="Enable Logo" class="signin-logo" />
+        <p class="signin-subtitle">Create your account for personalized virtual try-on</p>
+      </div>
+      
+      <div class="signin-form account-creation-form">
+        <div class="input-group">
+          <input type="email" id="create-email" class="signin-input" placeholder="Email address" required />
+        </div>
+        
+        <div class="input-row">
+          <div class="input-group half-width">
+            <input type="text" id="create-firstname" class="signin-input" placeholder="First Name" required />
+          </div>
+          <div class="input-group half-width">
+            <input type="text" id="create-lastname" class="signin-input" placeholder="Last Name" required />
+          </div>
+        </div>
+        
+        <div class="input-group">
+          <input type="password" id="create-password" class="signin-input" placeholder="Password" required />
+        </div>
+        
+        <div class="input-row">
+          <div class="input-group half-width">
+            <input type="number" id="create-age" class="signin-input" placeholder="Age" min="13" max="100" required />
+          </div>
+          <div class="input-group half-width">
+            <select id="create-gender" class="signin-input" required>
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+              <option value="prefer-not-to-say">Prefer not to say</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="input-row">
+          <div class="input-group half-width">
+            <input type="number" id="create-weight" class="signin-input" placeholder="Weight (kg)" min="30" max="300" step="0.1" required />
+          </div>
+          <div class="input-group half-width">
+            <input type="number" id="create-height" class="signin-input" placeholder="Height (cm)" min="100" max="250" step="0.1" required />
+          </div>
+        </div>
+        
+        <div class="input-group">
+          <label class="input-label">Body Physique Type</label>
+          <div class="physique-options">
+            <label class="physique-option">
+              <input type="radio" name="physique" value="slim" required />
+              <span class="physique-text">Slim/Thin</span>
+            </label>
+            <label class="physique-option">
+              <input type="radio" name="physique" value="muscular" required />
+              <span class="physique-text">Muscular/Athletic</span>
+            </label>
+            <label class="physique-option">
+              <input type="radio" name="physique" value="thick" required />
+              <span class="physique-text">Thick/Solid</span>
+            </label>
+          </div>
+        </div>
+        
+        <button id="create-account-btn" class="signin-btn">Create Account</button>
+        
+        <div class="signin-links">
+          <a href="#" id="back-to-signin">Already have an account? Sign In</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Profile Page -->
+    <div id="user-profile-page" class="signin-page account-creation-scrollable" style="display:none;">
+      <div class="signin-header">
+        <img src="bcf_green_logo.png" alt="Enable Logo" class="signin-logo" />
+        <p class="signin-subtitle">Your Profile Information</p>
+      </div>
+      
+      <div class="signin-form account-creation-form">
+        <div class="input-group">
+          <label class="input-label">User ID</label>
+          <input type="text" id="profile-userid" class="signin-input" readonly />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Email Address</label>
+          <input type="email" id="profile-email" class="signin-input" readonly />
+        </div>
+        <div class="input-group">
+          <label class="input-label">First Name</label>
+          <input type="text" id="profile-firstname" class="signin-input" readonly />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Last Name</label>
+          <input type="text" id="profile-lastname" class="signin-input" readonly />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Age</label>
+          <input type="number" id="profile-age" class="signin-input" readonly min="13" max="100" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Gender</label>
+          <select id="profile-gender" class="signin-input" disabled>
+            <option value="">Select Gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer-not-to-say">Prefer not to say</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Weight (kg)</label>
+          <input type="number" id="profile-weight" class="signin-input" readonly step="0.1" min="30" max="300" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Height (cm)</label>
+          <input type="number" id="profile-height" class="signin-input" readonly min="100" max="250" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Body Physique</label>
+          <div class="physique-options">
+            <label class="physique-option">
+              <input type="radio" name="profile-physique" value="slim" disabled />
+              <span class="physique-text">Slim/Thin</span>
+            </label>
+            <label class="physique-option">
+              <input type="radio" name="profile-physique" value="muscular" disabled />
+              <span class="physique-text">Muscular/Athletic</span>
+            </label>
+            <label class="physique-option">
+              <input type="radio" name="profile-physique" value="thick" disabled />
+              <span class="physique-text">Thick/Solid</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="profile-buttons">
+          <button id="edit-profile-btn" class="signin-btn">Edit Profile</button>
+          <button id="save-profile-btn" class="signin-btn" style="display:none;">Save Changes</button>
+          <button id="cancel-edit-btn" class="signin-btn secondary-btn" style="display:none;">Cancel</button>
+        </div>
+        
+        <div class="signin-links">
+          <a href="#" id="back-to-main">Back to Main App</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App (hidden initially) -->
+    <div id="main-app" class="main-app" style="display:none;">
+      <div class="tryon-header">
+        <div class="header-left">
+          <img src="bcf_green_logo.png" alt="Enable Logo" class="tryon-logo" />
+        </div>
+        <div class="header-right">
+          <!-- <span id="user-email" class="user-email"></span> -->
+          <!-- Replace the signout button around line 48-50: -->
+            <button id="refresh-btn" class="refresh-btn" title="Refresh Session">
+            <img src="refresh.png" alt="Refresh" />
+          </button>
+          <button id="user-btn" class="user-btn" title="User Profile">
+            <img src="user.png" alt="User" />
+          </button>
+          <button id="signout-btn" class="signout-btn" title="Sign Out">
+            <img src="logout (2).png" alt="Sign Out" style="width: 20px; height: 20px; object-fit: contain;" />
+          </button>
+        </div>
+      </div>
+      
+      <div class="tryon-body">
+        <!-- Main Container with Figma-like Layout -->
+        <div class="main-container">
+          
+          <!-- Top Section: URL and Page Info -->
+          <div class="page-info-section">
+            <div class="page-url-container">
+              <input type="text" id="page-url" class="page-url-input" readonly />
+              <!-- <label class="use-garment-toggle" for="use-garment-checkbox">
+                <input type="checkbox" id="use-garment-checkbox"/>
+                <span class="toggle-text">get garments from this page</span>
+              </label> -->
+            </div>
+          </div>
+
+          <div id="tryon-result" class="tryon-result"></div>
+      
+          <!-- Main Content Area -->
+          <div class="content-area">
+
+            <div class="avatar-section">
+                <div class="avatar-container">
+                  <div id="avatar-preview" class="avatar-preview">
+                    <!-- Avatar upload button will be dynamically created by JavaScript -->
+                  </div>
+                  <button id="upper-garment-btn" class="avatar-overlay-btn avatar-btn-top-left" data-garment-type="upper">
+                    <img src="add.png" alt="Add Upper Garment" />
+                  </button>
+                  <button id="lower-garment-btn" class="avatar-overlay-btn avatar-btn-bottom-right" data-garment-type="lower">
+                    <img src="add.png" alt="Add Lower Garment" />
+                  </button>
+                  <input type="file" id="avatar-upload" accept="image/*" style="display: none;" />
+                  <input type="file" id="garment-upload" accept="image/*" style="display: none;" />
+                </div>
+            </div>
+
+            
+            <div class="garment-section">
+                <div class="garment-header">
+                    <h3 class="garment-section-title">Try-on Garments</h3>
+                    <button id="garment-source-toggle" class="garment-source-toggle">
+                        <span id="toggle-text">Switch to Wardrobe</span>
+                        <span id="toggle-icon">👗</span>
+                    </button>
+                </div>
+                
+                <!-- Pagination Navigation -->
+                <div id="garment-navigation" class="garment-navigation" style="display: none;">
+                    <button id="prev-images-btn" class="nav-btn">
+                        Prev
+                    </button>
+                    <span id="page-indicator" class="page-indicator">
+                        1 / 1 (select from 0 images)
+                    </span>
+                    <button id="next-images-btn" class="nav-btn">
+                        Next
+                    </button>
+                </div>
+                
+                <div class="garment-container">
+                    <div id="garment-preview" class="garment-preview">
+                      <!-- <div class="upload-placeholder">
+                        <span class="upload-text">Upload a garment to try on</span>
+                        <button class="image-remove-btn">×</button>
+                      </div>
+                      <div class="upload-placeholder">
+                        <span class="upload-text">Upload a garment to try on</span>
+                        <button class="image-remove-btn">×</button>
+                      </div>
+                      <div class="upload-placeholder">
+                        <span class="upload-text">Upload a garment to try on</span>
+                        <button class="image-remove-btn">×</button>
+                      </div>
+                      <div class="upload-placeholder">
+                        <span class="upload-text">Upload a garment to try on</span>
+                        <button class="image-remove-btn">×</button>
+                      </div> -->
+                    </div>
+                </div>
+            </div>
+          </div>
+            
+          </div>
+
+        </div>
+        
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

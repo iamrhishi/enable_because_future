@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        .success { color: green; }
+        .error { color: red; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .avatar-display { width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 50%; object-fit: cover; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Avatar Login Test</h1>
+        
+        <div class="section">
+            <h2>Test Login with Avatar Loading</h2>
+            <p>This simulates the Chrome extension login flow with avatar loading.</p>
+            
+            <div>
+                <label>Email:</label>
+                <input type="email" id="loginEmail" value="avatar@test.com">
+            </div>
+            <div>
+                <label>Password:</label>
+                <input type="password" id="loginPassword" value="test123456">
+            </div>
+            <button onclick="testLogin()">Sign In</button>
+            
+            <div id="loginResult"></div>
+        </div>
+
+        <div class="section">
+            <h2>Avatar Display</h2>
+            <div id="avatarDisplay">No avatar loaded</div>
+        </div>
+    </div>
+
+    <script>
+        async function testLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const resultDiv = document.getElementById('loginResult');
+            const avatarDiv = document.getElementById('avatarDisplay');
+            
+            if (!email || !password) {
+                resultDiv.innerHTML = '<p class="error">Please enter email and password</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p>Signing in...</p>';
+            avatarDiv.innerHTML = 'No avatar loaded';
+
+            try {
+                // Step 1: Login
+                const response = await fetch('http://localhost:5000/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <p class="success">✅ Login successful!</p>
+                        <pre>${JSON.stringify(result.user_data, null, 2)}</pre>
+                        <p>Loading avatar...</p>
+                    `;
+
+                    // Step 2: Load avatar
+                    await loadAvatar(result.user_data.userid);
+
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Login failed: ${result.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function loadAvatar(userId) {
+            const resultDiv = document.getElementById('loginResult');
+            const avatarDiv = document.getElementById('avatarDisplay');
+            
+            try {
+                const response = await fetch(`http://localhost:5000/api/get-avatar/${userId}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const imageUrl = URL.createObjectURL(blob);
+                    
+                    avatarDiv.innerHTML = `
+                        <p class="success">✅ Avatar loaded from database:</p>
+                        <img src="${imageUrl}" alt="User Avatar" class="avatar-display" />
+                    `;
+                    
+                    // Update result to show complete success
+                    const currentResult = resultDiv.innerHTML;
+                    resultDiv.innerHTML = currentResult.replace('Loading avatar...', '✅ Avatar loaded successfully!');
+                    
+                } else {
+                    avatarDiv.innerHTML = '<p class="error">❌ No avatar found</p>';
+                    const currentResult = resultDiv.innerHTML;
+                    resultDiv.innerHTML = currentResult.replace('Loading avatar...', 'ℹ️ No avatar found for user');
+                }
+                
+            } catch (error) {
+                avatarDiv.innerHTML = `<p class="error">❌ Error loading avatar: ${error.message}</p>`;
+                const currentResult = resultDiv.innerHTML;
+                resultDiv.innerHTML = currentResult.replace('Loading avatar...', `❌ Avatar load error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
