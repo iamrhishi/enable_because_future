@@ -23,13 +23,13 @@ class Config:
     
     # Background Removal Service
     BG_SERVICE_URL = os.environ.get('BG_SERVICE_URL', 'https://api.becausefuture.tech/bg-service/api/remove')
-    BG_SERVICE_USERNAME = os.environ.get('BG_SERVICE_USERNAME', 'becausefuture')
-    BG_SERVICE_PASSWORD = os.environ.get('BG_SERVICE_PASSWORD', 'becausefuture!2025')
+    BG_SERVICE_USERNAME = os.environ.get('BG_SERVICE_USERNAME', '')
+    BG_SERVICE_PASSWORD = os.environ.get('BG_SERVICE_PASSWORD', '')
     
     # Mixer Service (Try-On)
     MIXER_SERVICE_URL = os.environ.get('MIXER_SERVICE_URL', 'https://api.becausefuture.tech/mixer-service/tryon')
-    MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', 'becausefuture')
-    MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', 'becausefuture!2025')
+    MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', '')
+    MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', '')
     
     # Gemini/Nano Banana API (Recommended per context.md)
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
