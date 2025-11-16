@@ -1,54 +1,76 @@
 from flask import Flask, jsonify, request, Response, send_file
-import mysql.connector
-import requests
-from requests.auth import HTTPBasicAuth
-from flask_cors import CORS
+import requests  # type: ignore
+from requests.auth import HTTPBasicAuth  # type: ignore
+from flask_cors import CORS  # type: ignore
 import os
 import io
-import numpy as np
+# import numpy as np  # Not currently used
 # import cv2  # Commented out temporarily due to installation issue
 from io import BytesIO
 from werkzeug.utils import secure_filename
 import base64
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore
 from urllib.parse import urlparse
 import hashlib
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
+from config import Config
+from services.database import db_manager, get_db_connection
+from services.auth import generate_token
+from utils.response import success_response, error_response, error_response_from_string
+from utils.errors import ValidationError, AuthenticationError, DatabaseError, NotFoundError
+from utils.validators import validate_email, validate_password, validate_required
+from utils.middleware import require_auth, optional_auth
+from utils.logger import logger
 
+# Import blueprints
+from api.auth import auth_bp
+from api.body_measurements import body_measurements_bp
+from api.tryon import tryon_bp
+from api.garments import garments_bp
+from api.fitting import fitting_bp
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=Config.CORS_ORIGINS)
 
-MYSQL_HOST = os.environ.get('MYSQL_HOST', 'localhost')
-MYSQL_USER = os.environ.get('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD', 'root')
-MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE', 'hello_db')
+# Validate configuration
+Config.validate()
 
+# Register blueprints
+app.register_blueprint(auth_bp)
+app.register_blueprint(body_measurements_bp)
+app.register_blueprint(tryon_bp)
+app.register_blueprint(garments_bp)
+app.register_blueprint(fitting_bp)
 
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'root',  # Add your MySQL password here if you have one
-    'database': 'hello_db',
-    'charset': 'utf8mb4',
-    'collation': 'utf8mb4_unicode_ci',
-    'autocommit': True
-}
+# Global error handler
+@app.errorhandler(Exception)
+def handle_error(e):
+    """Global error handler"""
+    logger.error(f"Unhandled error: {str(e)}", exc_info=True)
+    return error_response_from_string(f'Internal server error: {str(e)}', 500, 'INTERNAL_ERROR')
 
-WARDROBE_FOLDER = "../frontend/public/images/wardrobe"
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+# Health check endpoint
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    try:
+        # Check database connection
+        db_manager.execute_query("SELECT 1", fetch_one=True)
+        return success_response(data={'status': 'healthy', 'database': 'connected'})
+    except Exception as e:
+        return error_response_from_string(f'Unhealthy: {str(e)}', 503, 'UNHEALTHY')
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
 
 # Proxy endpoint for background removal
 @app.route('/api/remove-bg', methods=['POST'])
 def remove_bg():
-    api_url = "https://api.becausefuture.tech/bg-service/api/remove"
-    api_username = 'becausefuture'  # TODO: Replace with your API username
-    api_password = 'becausefuture!2025'  # TODO: Replace with your API password
+    api_url = Config.BG_SERVICE_URL
+    api_username = Config.BG_SERVICE_USERNAME
+    api_password = Config.BG_SERVICE_PASSWORD
     if 'file' not in request.files:
         return {'error': 'No file uploaded'}, 400
     file = request.files['file']
@@ -69,48 +91,13 @@ def remove_bg():
         return {'error': str(e)}, 500
 
 
-# Proxy endpoint for remove.bg (temporarily disabled due to cv2 issues)
-# @app.route('/api/remove-bg-alt', methods=['POST'])
-def remove_bg_alt_disabled():
-    api_url = 'https://api.remove.bg/v1.0/removebg'
-    api_key = 'NmxgViaSgd1K2ahiJzqdeQzK'
-    if 'file' not in request.files:
-        return {'error': 'No file uploaded'}, 400
-    file = request.files['file']
-    files = {'image_file': (file.filename, file.stream, file.mimetype)}
-    data = {'size': 'auto'}
-    headers = {'X-Api-Key': api_key}
-    try:
-        resp = requests.post(api_url, files=files, data=data, headers=headers, timeout=60)
-        if resp.status_code == requests.codes.ok:
-            # Post-process: crop to main object (non-transparent area)
-            image_bytes = resp.content
-            image_array = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(image_array, cv2.IMREAD_UNCHANGED)
-            if img is not None and img.shape[2] == 4:
-                # Find non-transparent pixels
-                alpha = img[:,:,3]
-                coords = cv2.findNonZero((alpha > 0).astype(np.uint8))
-                if coords is not None:
-                    x, y, w, h = cv2.boundingRect(coords)
-                    cropped = img[y:y+h, x:x+w]
-                    # Encode back to PNG
-                    _, buf = cv2.imencode('.png', cropped)
-                    return Response(buf.tobytes(), mimetype='image/png')
-            # Fallback: return original if crop fails
-            return Response(image_bytes, mimetype='image/png')
-        else:
-            return {'error': resp.text}, resp.status_code
-    except Exception as e:
-        return {'error': str(e)}, 500
-    
-
-# --- Try-On API Proxy ---
+# --- Try-On API Proxy (Legacy - use /api/tryon from blueprint) ---
 @app.route('/api/tryon', methods=['POST'])
-def tryon():
-
-    api_username = 'becausefuture'  
-    api_password = 'becausefuture!2025' 
+@require_auth
+def tryon_legacy():
+    api_url = Config.MIXER_SERVICE_URL
+    api_username = Config.MIXER_SERVICE_USERNAME
+    api_password = Config.MIXER_SERVICE_PASSWORD 
 
     try:
         # Get files and form data
@@ -132,10 +119,9 @@ def tryon():
         if num_inference_steps:
             data['num_inference_steps'] = num_inference_steps        
         
-        print(data)
+        logger.debug(f"Try-on request data: {data}")
 
-        # Forward to the actual try-on API (replace URL and auth as needed)
-        api_url = 'https://api.becausefuture.tech/mixer-service/tryon'
+        # Forward to the actual try-on API
         headers = {"Accept":"image/png"}
         
         resp = requests.post(api_url, files=files, auth=(api_username, api_password), data=data, headers=headers, timeout=120)
@@ -143,8 +129,8 @@ def tryon():
         if resp.status_code == 200 and resp.headers.get('Content-Type', '').startswith('image/'):
             return send_file(BytesIO(resp.content), mimetype=resp.headers['Content-Type'])
         else:
-            print(f"[TRYON][ERROR] Try-on API error: {resp.text}")
-                # Try to return JSON if possible, else return raw text
+            logger.error(f"Try-on API error: {resp.text}")
+            # Try to return JSON if possible, else return raw text
             try:
                 return jsonify(resp.json()), resp.status_code
             except Exception:
@@ -156,12 +142,7 @@ def tryon():
 @app.route('/api/message')
 def get_message():
     try:
-        conn = mysql.connector.connect(
-            host=MYSQL_HOST,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=MYSQL_DATABASE
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT message FROM hello LIMIT 1;')
         result = cursor.fetchone()
@@ -184,8 +165,8 @@ def save_clothing():
         return jsonify({"error": "No selected file"}), 400
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
-        save_path = os.path.join(WARDROBE_FOLDER, filename)
-        os.makedirs(WARDROBE_FOLDER, exist_ok=True)
+        save_path = os.path.join(Config.WARDROBE_FOLDER, filename)
+        os.makedirs(Config.WARDROBE_FOLDER, exist_ok=True)
         file.save(save_path)
         return jsonify({"success": True, "filename": filename}), 200
     else:
@@ -193,7 +174,7 @@ def save_clothing():
 
 @app.route('/api/wardrobe-images', methods=['GET'])
 def get_wardrobe_images():
-    wardrobe_folder = "../frontend/public/images/wardrobe"
+    wardrobe_folder = Config.WARDROBE_FOLDER
     try:
         files = [
             f for f in os.listdir(wardrobe_folder)
@@ -297,11 +278,11 @@ def create_account():
         hashed_password = generate_password_hash(password)
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Check if email already exists
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
         if cursor.fetchone():
             return jsonify({
                 'success': False,
@@ -311,7 +292,7 @@ def create_account():
         # Insert user data (avatar left as NULL)
         insert_query = """
         INSERT INTO users (userid, email, first_name, last_name, password, age, gender, weight, height, physique, avatar)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         cursor.execute(insert_query, (
@@ -325,28 +306,28 @@ def create_account():
         cursor.close()
         connection.close()
         
-        return jsonify({
-            'success': True,
-            'message': 'Account created successfully',
-            'user_data': {
-                'id': user_id,
-                'userid': userid,
-                'email': email,
-                'first_name': first_name,
-                'last_name': last_name,
-                'age': age,
-                'gender': gender,
-                'weight': weight,
-                'height': height,
-                'physique': physique
-            }
-        }), 201
+        # Generate JWT token
+        token = generate_token(userid, email)
         
-    except mysql.connector.Error as e:
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
+        return success_response(
+            data={
+                'token': token,
+                'user': {
+                    'id': user_id,
+                    'userid': userid,
+                    'email': email,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'age': age,
+                    'gender': gender,
+                    'weight': weight,
+                    'height': height,
+                    'physique': physique
+                }
+            },
+            message='Account created successfully',
+            status_code=201
+        )
         
     except Exception as e:
         return jsonify({
@@ -355,7 +336,7 @@ def create_account():
         }), 500
 
 @app.route('/api/login', methods=['POST'])
-def login():
+def login_legacy():
         try:
             # Get form data
             data = request.get_json() if request.is_json else request.form
@@ -370,14 +351,14 @@ def login():
                 }), 400
             
             # Connect to database
-            connection = mysql.connector.connect(**db_config)
-            cursor = connection.cursor(dictionary=True)
+            connection = get_db_connection()
+            cursor = connection.cursor()
             
             # Get user by email
             cursor.execute("""
                 SELECT id, userid, email, first_name, last_name, password, age, gender, 
                     weight, height, physique, created_at, is_active 
-                FROM users WHERE email = %s AND is_active = TRUE
+                FROM users WHERE email = ? AND is_active = TRUE
             """, (email,))
             
             user = cursor.fetchone()
@@ -388,31 +369,29 @@ def login():
                     'error': 'Invalid email or password'
                 }), 401
             
+            # Generate JWT token
+            token = generate_token(user['userid'], user['email'])
+            
             # Remove password from response
-            del user['password']
+            user_dict = dict(user)
+            del user_dict['password']
             
             cursor.close()
             connection.close()
             
-            return jsonify({
-                'success': True,
-                'message': 'Login successful',
-                'user_data': user
-            }), 200
-            
-        except mysql.connector.Error as e:
-            return jsonify({
-                'success': False,
-                'error': f'Database error: {str(e)}'
-            }), 500
+            return success_response(
+                data={
+                    'token': token,
+                    'user': user_dict
+                },
+                message='Login successful'
+            )
             
         except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Server error: {str(e)}'
-            }), 500
+            return error_response_from_string(f'Server error: {str(e)}', 500)
 
 @app.route('/api/save-avatar', methods=['POST'])
+@require_auth
 def save_avatar():
     try:
         # Check if file and user_id are provided
@@ -422,12 +401,13 @@ def save_avatar():
                 'error': 'No avatar file provided'
             }), 400
         
-        user_id = request.form.get('user_id')
+        user_id = request.form.get('user_id') or request.user_id
         if not user_id:
-            return jsonify({
-                'success': False,
-                'error': 'User ID is required'
-            }), 400
+            return error_response_from_string('User ID is required', 400, 'VALIDATION_ERROR')
+        
+        # Verify user owns this avatar
+        if user_id != request.user_id:
+            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
         
         avatar_file = request.files['avatar']
         
@@ -449,14 +429,35 @@ def save_avatar():
                 'error': 'File too large. Maximum size is 5MB'
             }), 400
         
-        print(f"📸 Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes")
+        # Optional: Remove background if requested
+        # Per context.md: Avatar should be realistic digital twin, background removal available
+        remove_background = request.form.get('remove_background', 'false').lower() == 'true'
+        if remove_background:
+            try:
+                files = {'file': ('avatar.png', BytesIO(avatar_data), 'image/png')}
+                bg_response = requests.post(
+                    Config.BG_SERVICE_URL,
+                    files=files,
+                    auth=(Config.BG_SERVICE_USERNAME, Config.BG_SERVICE_PASSWORD),
+                    headers={"Accept": "image/png"},
+                    timeout=30
+                )
+                if bg_response.status_code == 200:
+                    avatar_data = bg_response.content
+                    logger.info(f"Background removed from avatar for user: {user_id}")
+                else:
+                    logger.warning(f"Background removal failed for user {user_id}, saving original image")
+            except Exception as e:
+                logger.warning(f"Background removal error for user {user_id}: {str(e)}, saving original image")
+        
+        logger.info(f"Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes, bg_removed: {remove_background}")
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE userid = %s", (user_id,))
+        cursor.execute("SELECT id FROM users WHERE userid = ?", (user_id,))
         user = cursor.fetchone()
         
         if not user:
@@ -468,29 +469,23 @@ def save_avatar():
             }), 404
         
         # Update user's avatar
-        update_query = "UPDATE users SET avatar = %s WHERE userid = %s"
+        update_query = "UPDATE users SET avatar = ? WHERE userid = ?"
         cursor.execute(update_query, (avatar_data, user_id))
         
         connection.commit()
         cursor.close()
         connection.close()
         
-        print(f"✅ Avatar saved successfully for user: {user_id}")
+        logger.info(f"Avatar saved successfully for user: {user_id}")
         
         return jsonify({
             'success': True,
-            'message': 'Avatar saved successfully'
+            'message': 'Avatar saved successfully',
+            'background_removed': remove_background
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -498,14 +493,15 @@ def save_avatar():
 
 # API to get avatar blob
 @app.route('/api/get-avatar/<user_id>', methods=['GET'])
+@require_auth
 def get_avatar(user_id):
     try:
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Get user's avatar
-        cursor.execute("SELECT avatar FROM users WHERE userid = %s", (user_id,))
+        cursor.execute("SELECT avatar FROM users WHERE userid = ?", (user_id,))
         result = cursor.fetchone()
         
         cursor.close()
@@ -529,15 +525,8 @@ def get_avatar(user_id):
             }
         )
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -545,6 +534,7 @@ def get_avatar(user_id):
 
 # API to update avatar (alternative endpoint)
 @app.route('/api/update-avatar', methods=['PUT'])
+@require_auth
 def update_avatar():
     try:
         # Get JSON data with base64 encoded image
@@ -580,14 +570,14 @@ def update_avatar():
                 'error': 'File too large. Maximum size is 5MB'
             }), 400
         
-        print(f"📸 Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
+        logger.info(f"Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE userid = %s", (user_id,))
+        cursor.execute("SELECT id FROM users WHERE userid = ?", (user_id,))
         user = cursor.fetchone()
         
         if not user:
@@ -599,29 +589,29 @@ def update_avatar():
             }), 404
         
         # Update user's avatar
-        update_query = "UPDATE users SET avatar = %s WHERE userid = %s"
+        update_query = "UPDATE users SET avatar = ? WHERE userid = ?"
         cursor.execute(update_query, (avatar_data, user_id))
         
         connection.commit()
         cursor.close()
         connection.close()
         
-        print(f"✅ Avatar updated successfully for user: {user_id}")
+        logger.info(f"Avatar updated successfully for user: {user_id}")
         
         return jsonify({
             'success': True,
             'message': 'Avatar updated successfully'
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
+    except Exception as e:
+        logger.error(f"Database error: {e}")
         return jsonify({
             'success': False,
             'error': f'Database error: {str(e)}'
         }), 500
         
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -629,19 +619,20 @@ def update_avatar():
 
 # API to get user data
 @app.route('/api/get-user-data/<user_id>', methods=['GET'])
+@require_auth
 def get_user_data(user_id):
     try:
-        print(f"📥 Fetching user data for user: {user_id}")
+        logger.info(f"Fetching user data for user: {user_id}")
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
-        cursor = connection.cursor(dictionary=True)
+        connection = get_db_connection()
+        cursor = connection.cursor()
         
         # Get user data (excluding password and avatar for security/performance)
         cursor.execute("""
             SELECT id, userid, email, first_name, last_name, age, gender, 
                    weight, height, physique, created_at, updated_at, is_active
-            FROM users WHERE userid = %s
+            FROM users WHERE userid = ?
         """, (user_id,))
         
         user = cursor.fetchone()
@@ -661,22 +652,15 @@ def get_user_data(user_id):
         if user['updated_at']:
             user['updated_at'] = user['updated_at'].isoformat()
         
-        print(f"✅ User data retrieved successfully for: {user_id}")
+        logger.info(f"User data retrieved successfully for: {user_id}")
         
         return jsonify({
             'success': True,
             'user_data': user
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -686,17 +670,17 @@ def get_user_data(user_id):
 @app.route('/api/get-user-data-by-email/<email>', methods=['GET'])
 def get_user_data_by_email(email):
     try:
-        print(f"📥 Fetching user data for email: {email}")
+        logger.info(f"Fetching user data for email: {email}")
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
-        cursor = connection.cursor(dictionary=True)
+        connection = get_db_connection()
+        cursor = connection.cursor()
         
         # Get user data (excluding password and avatar)
         cursor.execute("""
             SELECT id, userid, email, first_name, last_name, age, gender, 
                    weight, height, physique, created_at, updated_at, is_active
-            FROM users WHERE email = %s
+            FROM users WHERE email = ?
         """, (email,))
         
         user = cursor.fetchone()
@@ -716,22 +700,15 @@ def get_user_data_by_email(email):
         if user['updated_at']:
             user['updated_at'] = user['updated_at'].isoformat()
         
-        print(f"✅ User data retrieved successfully for email: {email}")
+        logger.info(f"User data retrieved successfully for email: {email}")
         
         return jsonify({
             'success': True,
             'user_data': user
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -739,9 +716,14 @@ def get_user_data_by_email(email):
 
 # API to update user data
 @app.route('/api/update-user-data/<user_id>', methods=['PUT'])
+@require_auth
 def update_user_data(user_id):
     try:
-        print(f"📝 Updating user data for user: {user_id}")
+        # Verify user owns this data
+        if user_id != request.user_id:
+            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        
+        logger.info(f"Updating user data for user: {user_id}")
         
         # Get JSON data
         data = request.get_json()
@@ -753,11 +735,11 @@ def update_user_data(user_id):
             }), 400
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE userid = %s", (user_id,))
+        cursor.execute("SELECT id FROM users WHERE userid = ?", (user_id,))
         user = cursor.fetchone()
         
         if not user:
@@ -775,7 +757,7 @@ def update_user_data(user_id):
         
         for field in allowed_fields:
             if field in data:
-                update_fields.append(f"{field} = %s")
+                update_fields.append(f"{field} = ?")
                 
                 # Validate and convert data types
                 if field in ['age']:
@@ -807,7 +789,7 @@ def update_user_data(user_id):
         update_fields.append("updated_at = CURRENT_TIMESTAMP")
         
         # Build and execute update query
-        update_query = f"UPDATE users SET {', '.join(update_fields)} WHERE userid = %s"
+        update_query = f"UPDATE users SET {', '.join(update_fields)} WHERE userid = ?"
         update_values.append(user_id)
         
         cursor.execute(update_query, update_values)
@@ -816,22 +798,15 @@ def update_user_data(user_id):
         cursor.close()
         connection.close()
         
-        print(f"✅ User data updated successfully for: {user_id}")
+        logger.info(f"User data updated successfully for: {user_id}")
         
         return jsonify({
             'success': True,
             'message': 'User data updated successfully'
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
@@ -878,27 +853,27 @@ def save_to_wardrobe():
             }), 400
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
-        # Insert or replace garment in wardrobe
+        # Insert or replace garment in wardrobe (SQLite uses INSERT OR REPLACE)
         insert_query = """
-            INSERT INTO wardrobe (user_id, garment_id, garment_image, garment_type, garment_url, date_added)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE
-            garment_image = VALUES(garment_image),
-            garment_type = VALUES(garment_type),
-            garment_url = VALUES(garment_url),
-            date_added = NOW()
+            INSERT OR REPLACE INTO wardrobe 
+            (user_id, garment_id, garment_image, garment_type, garment_url, 
+             category, garment_category_type, brand, color, is_external, title, date_added)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
         
-        cursor.execute(insert_query, (user_id, garment_id, image_binary, garment_type, garment_url))
+        cursor.execute(insert_query, (
+            user_id, garment_id, image_binary, garment_type, garment_url,
+            category, garment_category_type, brand, color, is_external, title
+        ))
         connection.commit()
         
         cursor.close()
         connection.close()
         
-        print(f"✅ Garment saved to wardrobe: {garment_id} for user {user_id}")
+        logger.info(f"Garment saved to wardrobe: {garment_id} for user {user_id}")
         
         return jsonify({
             'success': True,
@@ -906,29 +881,31 @@ def save_to_wardrobe():
             'garment_id': garment_id
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
         }), 500
 
 @app.route('/api/wardrobe/user/<user_id>', methods=['GET'])
+@require_auth
 def get_user_wardrobe(user_id):
     """Get all wardrobe items for a specific user"""
     try:
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
-        cursor = connection.cursor(dictionary=True)
+        connection = get_db_connection()
+        cursor = connection.cursor()
         
-        # Query to get all wardrobe items for the user
+        # Verify user owns this wardrobe
+        if user_id != request.user_id:
+            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        
+        # Get query parameters for filtering
+        category = request.args.get('category')
+        search = request.args.get('search', '').strip().lower()
+        
+        # Build query with filters
         select_query = """
             SELECT 
                 id,
@@ -937,13 +914,30 @@ def get_user_wardrobe(user_id):
                 garment_image,
                 garment_type,
                 garment_url,
+                category,
+                garment_category_type,
+                brand,
+                color,
+                is_external,
+                title,
                 date_added
             FROM wardrobe 
-            WHERE user_id = %s 
-            ORDER BY date_added DESC
+            WHERE user_id = ?
         """
+        params = [user_id]
         
-        cursor.execute(select_query, (user_id,))
+        if category:
+            select_query += " AND category = ?"
+            params.append(category)
+        
+        if search:
+            select_query += " AND (garment_category_type LIKE ? OR brand LIKE ? OR color LIKE ? OR title LIKE ?)"
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+        
+        select_query += " ORDER BY date_added DESC"
+        
+        cursor.execute(select_query, tuple(params))
         wardrobe_items = cursor.fetchall()
         
         # Convert binary image data to base64 for JSON response
@@ -960,25 +954,19 @@ def get_user_wardrobe(user_id):
         cursor.close()
         connection.close()
         
-        print(f"✅ Retrieved {len(wardrobe_items)} wardrobe items for user {user_id}")
+        logger.info(f"Retrieved {len(wardrobe_items)} wardrobe items for user {user_id}")
         
         return jsonify(wardrobe_items), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
         }), 500
 
 @app.route('/api/wardrobe/remove', methods=['DELETE'])
+@require_auth
 def remove_from_wardrobe():
     """Remove a garment from user's wardrobe"""
     try:
@@ -993,18 +981,19 @@ def remove_from_wardrobe():
         user_id = data.get('user_id')
         garment_id = data.get('garment_id')
         
+        # Verify user owns this wardrobe item
+        if user_id != request.user_id:
+            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        
         if not all([user_id, garment_id]):
-            return jsonify({
-                'success': False,
-                'error': 'Missing required fields: user_id, garment_id'
-            }), 400
+            return error_response_from_string('Missing required fields: user_id, garment_id', 400, 'VALIDATION_ERROR')
         
         # Connect to database
-        connection = mysql.connector.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # Delete garment from wardrobe
-        delete_query = "DELETE FROM wardrobe WHERE user_id = %s AND garment_id = %s"
+        delete_query = "DELETE FROM wardrobe WHERE user_id = ? AND garment_id = ?"
         cursor.execute(delete_query, (user_id, garment_id))
         
         if cursor.rowcount == 0:
@@ -1019,22 +1008,15 @@ def remove_from_wardrobe():
         cursor.close()
         connection.close()
         
-        print(f"✅ Garment removed from wardrobe: {garment_id} for user {user_id}")
+        logger.info(f"Garment removed from wardrobe: {garment_id} for user {user_id}")
         
         return jsonify({
             'success': True,
             'message': 'Garment removed from wardrobe successfully'
         }), 200
         
-    except mysql.connector.Error as e:
-        print(f"❌ Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"Server error: {e}")
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'

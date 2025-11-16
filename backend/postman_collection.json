@@ -1,0 +1,618 @@
+{
+	"info": {
+		"_postman_id": "becausefuture-v1",
+		"name": "Because Future API - V1",
+		"description": "API collection for Because Future backend - Version 1",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Create Account",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"age\": 25,\n  \"gender\": \"male\",\n  \"weight\": 70,\n  \"height\": 175,\n  \"physique\": \"slim\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/create-account",
+							"host": ["{{base_url}}"],
+							"path": ["api", "create-account"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.token) {",
+									"        pm.collectionVariables.set('jwt_token', jsonData.data.token);",
+									"        pm.collectionVariables.set('user_id', jsonData.data.user.userid);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "login"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.token) {",
+									"        pm.collectionVariables.set('jwt_token', jsonData.data.token);",
+									"        pm.collectionVariables.set('user_id', jsonData.data.user.userid);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Google OAuth",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id_token\": \"YOUR_GOOGLE_ID_TOKEN\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/oauth/google",
+							"host": ["{{base_url}}"],
+							"path": ["api", "oauth", "google"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Get User Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/get-user-data/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "get-user-data", "{{user_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update User Data",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"John Updated\",\n  \"age\": 26\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/update-user-data/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "update-user-data", "{{user_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Body Measurements",
+			"item": [
+				{
+					"name": "Create/Update Measurements",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"chest\": 95,\n  \"waist\": 80,\n  \"hips\": 95,\n  \"unit\": \"metric\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/body-measurements",
+							"host": ["{{base_url}}"],
+							"path": ["api", "body-measurements"]
+						}
+					}
+				},
+				{
+					"name": "Get Measurements",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/body-measurements/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "body-measurements", "{{user_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Measurements",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"weight\": 72,\n  \"waist\": 82\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/body-measurements/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "body-measurements", "{{user_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Avatar",
+			"item": [
+				{
+					"name": "Save Avatar",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/save-avatar",
+							"host": ["{{base_url}}"],
+							"path": ["api", "save-avatar"]
+						}
+					}
+				},
+				{
+					"name": "Get Avatar",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/get-avatar/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "get-avatar", "{{user_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Garments",
+			"item": [
+				{
+					"name": "Scrape Product",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com/product/123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garments/scrape",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garments", "scrape"]
+						}
+					}
+				},
+				{
+					"name": "Categorize Garment",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Blue Cotton T-Shirt",
+									"type": "text"
+								},
+								{
+									"key": "image",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garments/categorize",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garments", "categorize"]
+						}
+					}
+				},
+				{
+					"name": "Extract Images",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com/product/123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garments/extract-images",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garments", "extract-images"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Fitting",
+			"item": [
+				{
+					"name": "Check Fit",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"garment_id\": \"garment123\",\n  \"size\": \"M\",\n  \"size_chart\": {\n    \"S\": {\"chest\": 90, \"waist\": 75, \"hips\": 90},\n    \"M\": {\"chest\": 95, \"waist\": 80, \"hips\": 95},\n    \"L\": {\"chest\": 100, \"waist\": 85, \"hips\": 100}\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/fitting/check",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fitting", "check"]
+						}
+					}
+				},
+				{
+					"name": "Get Size Recommendation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/fitting/size-recommendation?garment_id=garment123&size_chart={\"S\":{\"chest\":90,\"waist\":75,\"hips\":90},\"M\":{\"chest\":95,\"waist\":80,\"hips\":95},\"L\":{\"chest\":100,\"waist\":85,\"hips\":100}}&brand=Nike",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fitting", "size-recommendation"],
+							"query": [
+								{
+									"key": "garment_id",
+									"value": "garment123"
+								},
+								{
+									"key": "size_chart",
+									"value": "{\"S\":{\"chest\":90,\"waist\":75,\"hips\":90},\"M\":{\"chest\":95,\"waist\":80,\"hips\":95},\"L\":{\"chest\":100,\"waist\":85,\"hips\":100}}"
+								},
+								{
+									"key": "brand",
+									"value": "Nike"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Try-On",
+			"item": [
+				{
+					"name": "Create Try-On Job",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "person_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "garment_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "garment_type",
+									"value": "upper",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tryon",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tryon"]
+						}
+					}
+				},
+				{
+					"name": "Get Job Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/job/:job_id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "job", ":job_id"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "YOUR_JOB_ID"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Job Result",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/job/:job_id/result",
+							"host": ["{{base_url}}"],
+							"path": ["api", "job", ":job_id", "result"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "YOUR_JOB_ID"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Multi-Garment Try-On",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "person_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "top_garment_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "bottom_garment_image",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tryon/multi",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tryon", "multi"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Wardrobe",
+			"item": [
+				{
+					"name": "Save Garment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"garment_id\": \"garment123\",\n  \"garment_image\": \"base64_encoded_image\",\n  \"garment_type\": \"upper\",\n  \"category\": \"upper\",\n  \"garment_category_type\": \"shirt\",\n  \"brand\": \"Nike\",\n  \"color\": \"blue\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/wardrobe/save",
+							"host": ["{{base_url}}"],
+							"path": ["api", "wardrobe", "save"]
+						}
+					}
+				},
+				{
+					"name": "Get User Wardrobe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/wardrobe/user/{{user_id}}?category=upper&search=shirt",
+							"host": ["{{base_url}}"],
+							"path": ["api", "wardrobe", "user", "{{user_id}}"],
+							"query": [
+								{
+									"key": "category",
+									"value": "upper"
+								},
+								{
+									"key": "search",
+									"value": "shirt"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Remove Garment",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"garment_id\": \"garment123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/wardrobe/remove",
+							"host": ["{{base_url}}"],
+							"path": ["api", "wardrobe", "remove"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Utilities",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Remove Background",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/remove-bg",
+							"host": ["{{base_url}}"],
+							"path": ["api", "remove-bg"]
+						}
+					}
+				}
+			]
+		}
+	]
+}
+
