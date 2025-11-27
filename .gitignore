@@ -8,6 +8,7 @@ venv/
 env/
 ENV/
 .venv
+backend/venv/
 *.egg-info/
 dist/
 build/
@@ -35,6 +36,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+backend/logs/
 
 # Database
 *.db

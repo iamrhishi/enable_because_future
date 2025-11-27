@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "becausefuture-v1",
 		"name": "Because Future API - V1",
-		"description": "API collection for Because Future backend - Version 1",
+		"description": "API collection for Because Future backend - Version 1\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -18,7 +18,7 @@
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "http://localhost:5000",
+			"value": "http://localhost:8000",
 			"type": "string"
 		},
 		{
@@ -28,6 +28,11 @@
 		},
 		{
 			"key": "user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "job_id",
 			"value": "",
 			"type": "string"
 		}
@@ -40,6 +45,9 @@
 					"name": "Create Account",
 					"request": {
 						"method": "POST",
+						"auth": {
+							"type": "noauth"
+						},
 						"header": [
 							{
 								"key": "Content-Type",
@@ -48,7 +56,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"age\": 25,\n  \"gender\": \"male\",\n  \"weight\": 70,\n  \"height\": 175,\n  \"physique\": \"slim\"\n}"
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"confirm_password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/create-account",
@@ -77,6 +85,9 @@
 					"name": "Login",
 					"request": {
 						"method": "POST",
+						"auth": {
+							"type": "noauth"
+						},
 						"header": [
 							{
 								"key": "Content-Type",
@@ -85,7 +96,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+							"raw": "{\n  \"email\": \"test.user@example.com\",\n  \"password\": \"TestPassword123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						},
 						"url": {
 							"raw": "{{base_url}}/api/login",
@@ -109,47 +125,26 @@
 							}
 						}
 					]
-				},
-				{
-					"name": "Google OAuth",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id_token\": \"YOUR_GOOGLE_ID_TOKEN\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/oauth/google",
-							"host": ["{{base_url}}"],
-							"path": ["api", "oauth", "google"]
-						}
-					}
 				}
 			]
 		},
 		{
-			"name": "User Management",
+			"name": "User Profile",
 			"item": [
 				{
-					"name": "Get User Data",
+					"name": "Get My Profile",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/get-user-data/{{user_id}}",
+							"raw": "{{base_url}}/api/users/profile",
 							"host": ["{{base_url}}"],
-							"path": ["api", "get-user-data", "{{user_id}}"]
+							"path": ["api", "users", "profile"]
 						}
 					}
 				},
 				{
-					"name": "Update User Data",
+					"name": "Update My Profile",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -160,12 +155,33 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"first_name\": \"John Updated\",\n  \"age\": 26\n}"
+							"raw": "{\n  \"first_name\": \"John Updated\",\n  \"last_name\": \"Doe Updated\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"456 Oak Ave\",\n  \"city\": \"Los Angeles\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/update-user-data/{{user_id}}",
+							"raw": "{{base_url}}/api/users/profile",
 							"host": ["{{base_url}}"],
-							"path": ["api", "update-user-data", "{{user_id}}"]
+							"path": ["api", "users", "profile"]
+						}
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"current_password\": \"password123\",\n  \"new_password\": \"newpassword456\",\n  \"confirm_password\": \"newpassword456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/profile/change-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "profile", "change-password"]
 						}
 					}
 				}
@@ -186,7 +202,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"chest\": 95,\n  \"waist\": 80,\n  \"hips\": 95,\n  \"unit\": \"metric\"\n}"
+							"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/body-measurements",
@@ -196,14 +212,14 @@
 					}
 				},
 				{
-					"name": "Get Measurements",
+					"name": "Get My Measurements",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/body-measurements/{{user_id}}",
+							"raw": "{{base_url}}/api/body-measurements",
 							"host": ["{{base_url}}"],
-							"path": ["api", "body-measurements", "{{user_id}}"]
+							"path": ["api", "body-measurements"]
 						}
 					}
 				},
@@ -219,12 +235,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"weight\": 72,\n  \"waist\": 82\n}"
+							"raw": "{\n  \"weight\": 72,\n  \"waist_circumference\": 82,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/body-measurements/{{user_id}}",
+							"raw": "{{base_url}}/api/body-measurements",
 							"host": ["{{base_url}}"],
-							"path": ["api", "body-measurements", "{{user_id}}"]
+							"path": ["api", "body-measurements"]
 						}
 					}
 				}
@@ -266,9 +282,31 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/get-avatar/{{user_id}}",
+							"raw": "{{base_url}}/api/get-avatar",
 							"host": ["{{base_url}}"],
-							"path": ["api", "get-avatar", "{{user_id}}"]
+							"path": ["api", "get-avatar"]
+						}
+					}
+				},
+				{
+					"name": "Update Avatar",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"avatar_data\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+						},
+						"description": "Update avatar with base64 encoded image. The avatar_data should be a base64 string (with or without data URL prefix).",
+						"url": {
+							"raw": "{{base_url}}/api/update-avatar",
+							"host": ["{{base_url}}"],
+							"path": ["api", "update-avatar"]
 						}
 					}
 				}
@@ -337,8 +375,9 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"url\": \"https://example.com/product/123\"\n}"
+							"raw": "{\n  \"url\": \"https://www.zara.com/us/en/product/12345\"\n}"
 						},
+						"description": "Extract images from product URL. Example Zara URL: https://www.zara.com/us/en/product/12345",
 						"url": {
 							"raw": "{{base_url}}/api/garments/extract-images",
 							"host": ["{{base_url}}"],
@@ -363,8 +402,9 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"garment_id\": \"garment123\",\n  \"size\": \"M\",\n  \"size_chart\": {\n    \"S\": {\"chest\": 90, \"waist\": 75, \"hips\": 90},\n    \"M\": {\"chest\": 95, \"waist\": 80, \"hips\": 95},\n    \"L\": {\"chest\": 100, \"waist\": 85, \"hips\": 100}\n  }\n}"
+							"raw": "{\n  \"garment_id\": \"zara-tshirt-12345\",\n  \"size\": \"M\",\n  \"size_chart\": {\n    \"XS\": {\"chest\": 88, \"waist\": 72, \"hips\": 88},\n    \"S\": {\"chest\": 92, \"waist\": 76, \"hips\": 92},\n    \"M\": {\"chest\": 96, \"waist\": 80, \"hips\": 96},\n    \"L\": {\"chest\": 100, \"waist\": 84, \"hips\": 100},\n    \"XL\": {\"chest\": 104, \"waist\": 88, \"hips\": 104}\n  },\n  \"brand\": \"Zara\"\n}"
 						},
+						"description": "Check if a garment size fits based on user measurements. Requires authenticated user with body measurements.",
 						"url": {
 							"raw": "{{base_url}}/api/fitting/check",
 							"host": ["{{base_url}}"],
@@ -377,22 +417,22 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/fitting/size-recommendation?garment_id=garment123&size_chart={\"S\":{\"chest\":90,\"waist\":75,\"hips\":90},\"M\":{\"chest\":95,\"waist\":80,\"hips\":95},\"L\":{\"chest\":100,\"waist\":85,\"hips\":100}}&brand=Nike",
+							"url": {
+								"raw": "{{base_url}}/api/fitting/size-recommendation?garment_id=zara-tshirt-12345&size_chart={\"XS\":{\"chest\":88,\"waist\":72,\"hips\":88},\"S\":{\"chest\":92,\"waist\":76,\"hips\":92},\"M\":{\"chest\":96,\"waist\":80,\"hips\":96},\"L\":{\"chest\":100,\"waist\":84,\"hips\":100},\"XL\":{\"chest\":104,\"waist\":88,\"hips\":104}}&brand=Zara",
 							"host": ["{{base_url}}"],
 							"path": ["api", "fitting", "size-recommendation"],
 							"query": [
 								{
 									"key": "garment_id",
-									"value": "garment123"
+									"value": "zara-tshirt-12345"
 								},
 								{
 									"key": "size_chart",
-									"value": "{\"S\":{\"chest\":90,\"waist\":75,\"hips\":90},\"M\":{\"chest\":95,\"waist\":80,\"hips\":95},\"L\":{\"chest\":100,\"waist\":85,\"hips\":100}}"
+									"value": "{\"XS\":{\"chest\":88,\"waist\":72,\"hips\":88},\"S\":{\"chest\":92,\"waist\":76,\"hips\":92},\"M\":{\"chest\":96,\"waist\":80,\"hips\":96},\"L\":{\"chest\":100,\"waist\":84,\"hips\":100},\"XL\":{\"chest\":104,\"waist\":88,\"hips\":104}}"
 								},
 								{
 									"key": "brand",
-									"value": "Nike"
+									"value": "Zara"
 								}
 							]
 						}
@@ -404,7 +444,7 @@
 			"name": "Try-On",
 			"item": [
 				{
-					"name": "Create Try-On Job",
+					"name": "Create Try-On Job (with item_urls)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -412,7 +452,57 @@
 							"mode": "formdata",
 							"formdata": [
 								{
-									"key": "person_image",
+									"key": "selfie",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "item_urls",
+									"value": "[\"https://www.zara.com/us/en/product/12345\"]",
+									"type": "text",
+									"description": "JSON array of product URLs. Example: [\"https://www.zara.com/us/en/product/12345\"]"
+								},
+								{
+									"key": "options",
+									"value": "{\"garment_index\": 0}",
+									"type": "text",
+									"description": "Optional: JSON object with garment_index"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tryon",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tryon"]
+						},
+						"description": "Create try-on job with product URLs. Backend will scrape product page and extract images automatically."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.job_id) {",
+									"        pm.collectionVariables.set('job_id', jsonData.data.job_id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Try-On Job (with garment_image)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "selfie",
 									"type": "file",
 									"src": []
 								},
@@ -432,8 +522,24 @@
 							"raw": "{{base_url}}/api/tryon",
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
+						},
+						"description": "Create try-on job with direct image upload"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.job_id) {",
+									"        pm.collectionVariables.set('job_id', jsonData.data.job_id);",
+									"    }",
+									"}"
+								]
+							}
 						}
-					}
+					]
 				},
 				{
 					"name": "Get Job Status",
@@ -441,15 +547,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/job/:job_id",
+							"raw": "{{base_url}}/api/job/{{job_id}}",
 							"host": ["{{base_url}}"],
-							"path": ["api", "job", ":job_id"],
-							"variable": [
-								{
-									"key": "job_id",
-									"value": "YOUR_JOB_ID"
-								}
-							]
+							"path": ["api", "job", "{{job_id}}"]
 						}
 					}
 				},
@@ -459,15 +559,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/job/:job_id/result",
+							"raw": "{{base_url}}/api/job/{{job_id}}/result",
 							"host": ["{{base_url}}"],
-							"path": ["api", "job", ":job_id", "result"],
-							"variable": [
-								{
-									"key": "job_id",
-									"value": "YOUR_JOB_ID"
-								}
-							]
+							"path": ["api", "job", "{{job_id}}", "result"]
 						}
 					}
 				},
@@ -480,7 +574,7 @@
 							"mode": "formdata",
 							"formdata": [
 								{
-									"key": "person_image",
+									"key": "selfie",
 									"type": "file",
 									"src": []
 								},
@@ -509,68 +603,339 @@
 			"name": "Wardrobe",
 			"item": [
 				{
-					"name": "Save Garment",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"garment_id\": \"garment123\",\n  \"garment_image\": \"base64_encoded_image\",\n  \"garment_type\": \"upper\",\n  \"category\": \"upper\",\n  \"garment_category_type\": \"shirt\",\n  \"brand\": \"Nike\",\n  \"color\": \"blue\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/wardrobe/save",
-							"host": ["{{base_url}}"],
-							"path": ["api", "wardrobe", "save"]
-						}
-					}
-				},
-				{
-					"name": "Get User Wardrobe",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/wardrobe/user/{{user_id}}?category=upper&search=shirt",
-							"host": ["{{base_url}}"],
-							"path": ["api", "wardrobe", "user", "{{user_id}}"],
-							"query": [
-								{
-									"key": "category",
-									"value": "upper"
-								},
-								{
-									"key": "search",
-									"value": "shirt"
+					"name": "Category Sections",
+					"item": [
+						{
+							"name": "Get All Category Sections",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/category-sections",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "category-sections"]
 								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Remove Garment",
-					"request": {
-						"method": "DELETE",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
 							}
-						],
+						},
+						{
+							"name": "Create User Category Section",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"garment_id\": \"garment123\"\n}"
+							"raw": "{\n  \"name\": \"summer_collection\",\n  \"display_name\": \"Summer Collection\",\n  \"description\": \"My summer wardrobe items\",\n  \"icon_name\": \"summer_icon\",\n  \"icon_url\": \"https://example.com/icons/summer.png\",\n  \"sort_order\": 5\n}"
 						},
-						"url": {
-							"raw": "{{base_url}}/api/wardrobe/remove",
-							"host": ["{{base_url}}"],
-							"path": ["api", "wardrobe", "remove"]
+						"description": "Create a custom category section. Users can create sections beyond the 4 platform sections (upper_body, lower_body, accessoires, wishlist).",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/category-sections",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "category-sections"]
+								}
+							}
 						}
-					}
+					]
+				},
+				{
+					"name": "Categories",
+					"item": [
+						{
+							"name": "Get All Categories",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/categories?search=shirt",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "categories"],
+									"query": [
+										{
+											"key": "search",
+											"value": "shirt",
+											"disabled": true
+										},
+										{
+											"key": "category_section",
+											"value": "upper_body",
+											"disabled": true
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Create Category",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"casual_shirts\",\n  \"description\": \"Casual shirts for everyday wear\",\n  \"category_section\": \"upper_body\"\n}"
+						},
+						"description": "Create a custom category. category_section must be one of: upper_body, lower_body, accessoires, wishlist (or a user-created section name).",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/categories",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "categories"]
+								}
+							}
+						},
+						{
+							"name": "Get Category by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/categories/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "categories", "1"]
+								}
+							}
+						},
+						{
+							"name": "Update Category",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"updated_category_name\",\n  \"description\": \"Updated description\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/categories/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "categories", "1"]
+								}
+							}
+						},
+						{
+							"name": "Delete Category",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/categories/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "categories", "1"]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Items",
+					"item": [
+						{
+							"name": "Add Garment (Image Upload)",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_image",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "category_section",
+											"value": "upper_body",
+											"type": "text"
+										},
+										{
+											"key": "category_id",
+											"value": "",
+											"type": "text",
+											"description": "Optional: ID of custom category (get from GET /api/wardrobe/categories)",
+											"disabled": true
+										},
+										{
+											"key": "title",
+											"value": "Classic Blue Cotton T-Shirt",
+											"type": "text",
+											"description": "Garment title/name"
+										},
+										{
+											"key": "brand",
+											"value": "Zara",
+											"type": "text",
+											"description": "Brand name"
+										},
+										{
+											"key": "color",
+											"value": "Navy Blue",
+											"type": "text",
+											"description": "Color name"
+										},
+										{
+											"key": "size",
+											"value": "M",
+											"type": "text",
+											"description": "Size (e.g., S, M, L, XL, 42, etc.)"
+										},
+										{
+											"key": "description",
+											"value": "Comfortable 100% cotton t-shirt. Perfect for casual wear.",
+											"type": "text",
+											"description": "Short description"
+										},
+										{
+											"key": "fabric",
+											"value": "[{\"name\": \"cotton\", \"percentage\": 100}]",
+											"type": "text",
+											"description": "JSON array: [{\"name\": \"cotton\", \"percentage\": 100}]. Percentages must sum to 100."
+										},
+										{
+											"key": "care_instructions",
+											"value": "Machine wash at 30°C, Do not bleach, Tumble dry low, Do not iron",
+											"type": "text",
+											"description": "Care instructions (text or JSON array)"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items"]
+								}
+							}
+						},
+						{
+							"name": "Add Garment (URL Extraction)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_url\": \"https://www.zara.com/us/en/product/12345\",\n  \"category_section\": \"upper_body\",\n  \"category_id\": 1,\n  \"title\": \"Basic Cotton T-Shirt\",\n  \"brand\": \"Zara\",\n  \"color\": \"Navy Blue\",\n  \"fabric\": [{\"name\": \"cotton\", \"percentage\": 100}],\n  \"care_instructions\": \"Machine wash at 30°C, Do not bleach, Tumble dry low\",\n  \"size\": \"M\",\n  \"description\": \"Comfortable 100% cotton t-shirt from Zara. Perfect for everyday wear.\"\n}"
+								},
+								"description": "Add garment to wardrobe by extracting from Zara URL. Backend will automatically scrape product page and extract images.",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items"]
+								}
+							}
+						},
+						{
+							"name": "Get Wardrobe Items",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items?category=upper&search=shirt",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items"],
+									"query": [
+										{
+											"key": "category",
+											"value": "upper",
+											"disabled": true
+										},
+										{
+											"key": "category_id",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "shirt",
+											"disabled": true
+										}
+									]
+								}
+							}
+						},
+						{
+							"name": "Get Wardrobe Item by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items", "1"]
+								}
+							}
+						},
+						{
+							"name": "Update Wardrobe Item",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Classic Blue Cotton T-Shirt\",\n  \"brand\": \"Zara\",\n  \"color\": \"Navy Blue\",\n  \"size\": \"L\",\n  \"description\": \"Updated: Comfortable 100% cotton t-shirt with updated details\",\n  \"fabric\": [{\"name\": \"cotton\", \"percentage\": 95}, {\"name\": \"elastane\", \"percentage\": 5}],\n  \"care_instructions\": \"Machine wash at 30°C, Do not bleach, Line dry\"\n}"
+						},
+						"description": "Update wardrobe item. All fields are optional - only include fields you want to update.",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items", "1"]
+								}
+							}
+						},
+						{
+							"name": "Delete Wardrobe Item",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/items/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "items", "1"]
+								}
+							}
+						},
+						{
+							"name": "Extract Garment from URL",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://www.zara.com/us/en/product/12345\"\n}"
+								},
+								"description": "Extract garment information and images from URL without adding to wardrobe. Uses brand-specific extractors (Zara, etc.). Returns product info, images, and auto-categorization.",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/extract-from-url",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "extract-from-url"]
+								}
+							}
+						}
+					]
 				}
 			]
 		},
@@ -615,4 +980,3 @@
 		}
 	]
 }
-

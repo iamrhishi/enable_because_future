@@ -36,6 +36,14 @@ def main():
         (3, 'add_tryon_jobs', load_migration(3, 'add_tryon_jobs')),
         (4, 'enhance_wardrobe', load_migration(4, 'enhance_wardrobe')),
         (5, 'add_garment_metadata', load_migration(5, 'add_garment_metadata')),
+        (6, 'extend_user_and_measurements', load_migration(6, 'extend_user_and_measurements')),
+        (7, 'add_categories_and_wardrobe_updates', load_migration(7, 'add_categories_and_wardrobe_updates')),
+        (8, 'add_wardrobe_item_fields', load_migration(8, 'add_wardrobe_item_fields')),
+        (9, 'add_category_section', load_migration(9, 'add_category_section')),
+        (10, 'create_category_sections', load_migration(10, 'create_category_sections')),
+        (11, 'seed_platform_categories', load_migration(11, 'seed_platform_categories')),
+        (12, 'add_user_category_sections', load_migration(12, 'add_user_category_sections')),
+        (13, 'add_hip_circumference', load_migration(13, 'add_hip_circumference')),
     ]
     
     migration_manager.run_migrations(migrations)

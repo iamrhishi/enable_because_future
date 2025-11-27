@@ -1,396 +1,1517 @@
-# Context: Try‑On Mobile App with Nano Banana (Gemini)
+# Context: Because Future Backend - Complete Technical Documentation
 
-Context document generated from **Bianca Fuhrmann (2).xlsx** on **2025-11-16 04:59 IST**.
+**Last Updated:** 2025-11-26  
+**Status:** Backend 100% Complete - Ready for Testing  
+**Version:** 1.0
 
-This document translates spreadsheet inputs into a concrete plan for a **React Native** mobile application that lets users **upload a selfie** and **try on garments from product URLs**, powered by a **cloud image-editing API (“Nano Banana” / Gemini Image)”** behind your backend. It is designed to be immediately useful for engineering kick-off, scoping, and stakeholder alignment.
+This document serves as the **single source of truth** for the Because Future backend codebase. It provides comprehensive technical documentation including architecture, features, file structure, database schema, API endpoints, and implementation details.
 
+---
 
-# Goals & Scope
+# Table of Contents
 
-**Primary Goal**
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Project Structure](#project-structure)
+4. [Features & Implementation](#features--implementation)
+5. [Database Schema](#database-schema)
+6. [API Endpoints](#api-endpoints)
+7. [Services & Utilities](#services--utilities)
+8. [Models](#models)
+9. [Configuration](#configuration)
+10. [Authentication & Security](#authentication--security)
+11. [Deployment & Operations](#deployment--operations)
 
-Enable a user to upload a selfie, paste one or more product URLs (PDP links or direct image links), and receive fast, realistic **try‑on previews** inside the mobile app.
+---
 
-**Non‑Goals (Phase‑1)**
+# Overview
 
-- Production‑grade photoreal e‑commerce rendering for every edge case
-- Full offline image generation on device
-- Marketplace integrations beyond reading public product media
+## Primary Goal
 
+Enable users to upload a selfie, paste product URLs, and receive fast, realistic **try-on previews** powered by **Gemini (Nano Banana) API**. The backend supports both mobile app and Chrome extension clients.
 
-# What the Spreadsheet Tells Us (Auto‑Parsed)
+## Technology Stack
 
-**Candidate Features (from spreadsheet):**
-- View and try on an item from shopping site in the becauseFUTURE app/extension
-- Fitting
-- Avatar Creation
-- Garment recommendations
-- Extract / Scrape sizing data
-- Save User Garment Uploads basic
-- Registration: User body measurements
-- Avatar Styling: Basic
-- Save and reopen finds.
-- Registration: Basic information
-- Sign-in
-- AI Model Fine-tuning
-- Dev Status Prior to Dev Team Hire
-- Satisfactory
-- Update Required
-- Major Changes Required
-- Not Started
-- When I am on a shopping site I want to be able to see this item on myself and get sizing information from becauseFUTURE.
-- I want to know if this garment would fit me and if so what size
-- I want to create my realistic digital twin. It should look like me and have my body proportions.
-- I want to see similar garments as recommendations from the same online shopping site and be able to try them on
-- I want to know if a garment will fit me through becauseFUTURES sizing comparison model.
-- I take a picture of an item by placing it on bed/sofa/lighter background or on the hanger or on the floor and it gets added to my digital wardrobe. It shall be added to the right category of similar items (long trousers, short trousers, skits, leggins, top, shits, jackets...)
-- I want the app to know my body measurements for later purpose so I can use them when I shop something.
-- I want to see how an item looks on me and how it looks together with other items and styles.
-- I want to save garments that I like so that I can come back to them.
-- I want to register with becauseFUTURE and save my information provided so that it shows next time.
-- I want to use the information that I have shared with the app when signing in and using it.
+- **Framework:** Flask (Python 3.9+)
+- **Database:** SQLite (with migration system)
+- **AI Integration:** Google Gemini (Nano Banana) API
+- **Authentication:** JWT (JSON Web Tokens)
+- **Storage:** Local file system (`/images` directory)
+- **Image Processing:** Pillow (PIL)
+- **Web Scraping:** BeautifulSoup4, Requests
 
-**App Modules / Screens (from spreadsheet):**
-- Garment Discovery
-- Fitting using Sizing Data
-- Avatar
-- Sizing Data
-- Wardrobe Management
-- User Management
-- Virtual Try-on
-- AI Model
+## Key Features
 
-**Milestones / Phases (from spreadsheet):** _No items detected in spreadsheet; fill during grooming._
+✅ **Authentication & User Management** - Custom form-based sign-up/sign-in with JWT  
+✅ **Body Measurements** - Comprehensive measurement tracking (20+ fields)  
+✅ **Avatar Management** - Background removal via Gemini API  
+✅ **Try-On Processing** - Async job queue with Gemini API integration  
+✅ **Wardrobe Management** - CRUD operations with categories and sections  
+✅ **Garment Scraping** - Brand-specific extractors (Zara, Default)  
+✅ **Fitting Analysis** - Size recommendations based on measurements  
+✅ **Image Processing** - Validation, resizing, normalization  
 
-**Roles / Owners (from spreadsheet):** _No items detected in spreadsheet; fill during grooming._
+---
 
-**Reference Links (from spreadsheet):** _No items detected in spreadsheet; fill during grooming._
+# Architecture
 
+## System Architecture
 
+```
+┌─────────────────┐
+│  Mobile App /   │
+│ Chrome Extension│
+└────────┬────────┘
+         │
+         │ HTTP/REST API
+         │
+┌────────▼─────────────────────────────────────┐
+│         Flask Backend (app.py)                │
+│  ┌─────────────────────────────────────────┐  │
+│  │  API Blueprints (api/*.py)              │  │
+│  │  - auth, users, body_measurements       │  │
+│  │  - tryon, wardrobe, garments, fitting   │  │
+│  └─────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────┐  │
+│  │  Services (services/*.py)               │  │
+│  │  - ai_integration, job_queue            │  │
+│  │  - image_processing, storage            │  │
+│  │  - brand_extractors, scraper            │  │
+│  └─────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────┐  │
+│  │  Models (models/*.py)                   │  │
+│  │  - User, BodyMeasurements, WardrobeItem │  │
+│  │  - TryOnJob, WardrobeCategory           │  │
+│  └─────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────┐  │
+│  │  Database (SQLite)                      │  │
+│  │  - 10 tables with migrations            │  │
+│  └─────────────────────────────────────────┘  │
+└────────┬─────────────────────────────────────┘
+         │
+         │ API Calls
+         │
+┌────────▼────────┐
+│ Gemini API      │
+│ (Nano Banana)   │
+└─────────────────┘
+```
 
-
-# Architecture & Flow
-
-## System Architecture (High Level)
-
-- **Mobile App (React Native)**  
-  - Screens: **Selfie Upload**, **Add Item URLs**, **Preview & Compare**, **History**  
-  - Image capture from camera or gallery, client-side resize (e.g., 2048px max dimension)
-
-- **Backend API (FastAPI/Node)**  
-  - Endpoint: `POST /tryon` → payload: `selfie` (multipart) + `item_urls[]`  
-  - Endpoint: `GET /job/{id}` → poll for status/result  
-  - Fetches product images **server-side** from URLs → normalizes size → optional segmentation/pose estimation  
-  - Calls **Nano Banana / Gemini image-edit API** with prompt+controls  
-  - Stores results (S3/GCS) and returns signed URLs to app
-
-- **Image Generation (Cloud)**  
-  - Use Gemini/Nano-Banana **image edit** with the person image and the garment image(s)  
-  - Enforce quality guardrails (size, file type, max queue, timeout)  
-  - Expect **SynthID** watermark on outputs (acceptable for preview)
-
-- **Storage & Auth**  
-  - User assets in **S3/GCS** with short-lived signed URLs  
-  - Auth via **Cognito/Firebase Auth/Clerk**; JWT forwarded to backend  
-  - PII-light: Store only what is needed; allow user delete/export
-
-- **Analytics & Observability**  
-  - Event logging (screen views, success/failure, latency)  
-  - Traces for `/tryon` pipeline and vendor API time
-
-
-# Data Flow Diagram
+## Data Flow
 
 ```mermaid
 flowchart LR
-    A[React Native App] -->|Upload selfie| B[(Backend API)]
-    A -->|Submit product URLs| B
-    B -->|Fetch images (server-side)| C[URL Fetcher]
-    C -->|Images| B
-    B -->|Preprocess (resize/segment)| D[Image Preproc]
-    D -->|Person + Garment(s)| E[Gemini/Nano Banana Edit API]
-    E -->|Composited preview| B
-    B -->|Signed URL| A
+    A[Client] -->|POST /api/tryon| B[Flask App]
+    B -->|Validate| C[Image Processing]
+    C -->|Queue Job| D[Job Queue]
+    D -->|Process| E[AI Integration]
+    E -->|Call| F[Gemini API]
+    F -->|Result| E
+    E -->|Save| G[Local Storage]
+    G -->|Return URL| B
+    B -->|202 Accepted| A
+    A -->|GET /api/job/id| B
+    B -->|Status/Result| A
 ```
 
+## Request Flow
 
-# API Contract (Draft)
+1. **Client Request** → Flask app (`app.py`)
+2. **Authentication** → JWT middleware (`utils/middleware.py`)
+3. **Route Handler** → Blueprint (`api/*.py`)
+4. **Business Logic** → Service layer (`services/*.py`)
+5. **Data Access** → Model layer (`models/*.py`)
+6. **Database** → SQLite via `DatabaseManager` (`services/database.py`)
+7. **Response** → Standardized format (`utils/response.py`)
 
-## API Contract (Draft)
+---
 
-### `POST /tryon`
-- **Headers:** `Authorization: Bearer <JWT>`
-- **Body (multipart/form-data):**
-  - `selfie`: binary image (`.jpg`/`.png`, ≤ 6 MB, max 4096x4096)
-  - `item_urls`: JSON array of URLs (PDP or direct image). Backend should fetch images server-side.
-  - `options` (optional): 
-    ```json
-    {
-      "preserve_pose": true,
-      "background": "keep",
-      "garment_index": 0,
-      "safety_mode": "strict",
-      "return_mask": false
-    }
-    ```
-- **Response 202:**
-  ```json
-  {"job_id": "uuid", "status": "queued"}
-  ```
+# Project Structure
 
-### `GET /job/{id}`
-- **Response 200:**
-  ```json
-  {"status": "done", "result_url": "https://.../image.jpg", "latency_ms": 4280}
-  ```
-- **Errors:** `{"status":"failed","error_code":"VENDOR_TIMEOUT"}` etc.
+## Directory Layout
+
+```
+backend/
+├── api/                    # API Blueprints (Route Handlers)
+│   ├── auth.py            # Authentication endpoints
+│   ├── users.py           # User profile endpoints
+│   ├── body_measurements.py  # Body measurements CRUD
+│   ├── tryon.py           # Try-on job endpoints
+│   ├── wardrobe.py        # Wardrobe management
+│   ├── garments.py        # Garment scraping/categorization
+│   └── fitting.py         # Fitting analysis
+│
+├── models/                # Data Models (ORM-like)
+│   ├── user.py            # User model
+│   ├── body_measurements.py  # Body measurements model
+│   ├── wardrobe.py        # Wardrobe item model
+│   ├── category.py        # Category & section models
+│   └── tryon_job.py       # Try-on job model
+│
+├── services/              # Business Logic Services
+│   ├── database.py       # Database abstraction layer
+│   ├── auth.py           # JWT token generation/verification
+│   ├── ai_integration.py  # Gemini API integration
+│   ├── job_queue.py      # Async job processing
+│   ├── image_processing.py  # Image validation/resizing
+│   ├── storage.py        # Local file storage
+│   ├── brand_extractors.py  # Brand-specific scrapers
+│   └── scraper.py        # Generic web scraping utilities
+│
+├── utils/                 # Utility Functions
+│   ├── middleware.py     # JWT authentication decorators
+│   ├── response.py       # Standardized API responses
+│   ├── errors.py         # Custom exception classes
+│   ├── validators.py     # Input validation functions
+│   └── logger.py         # Structured logging
+│
+├── migrations/            # Database Migrations
+│   ├── 001_initial_schema.sql
+│   ├── 002_add_body_measurements.sql
+│   ├── 003_add_tryon_jobs.sql
+│   ├── 004_enhance_wardrobe.sql
+│   ├── 005_add_garment_metadata.sql
+│   ├── 006_extend_user_and_measurements.sql
+│   ├── 007_add_categories_and_wardrobe_updates.sql
+│   ├── 008_add_wardrobe_item_fields.sql
+│   ├── 009_add_category_section.sql
+│   ├── 010_create_category_sections.sql
+│   ├── 011_seed_platform_categories.sql
+│   ├── 012_add_user_category_sections.sql
+│   ├── 013_add_hip_circumference.sql
+│   └── migration_manager.py
+│
+├── scripts/               # Utility Scripts
+│   ├── run_migrations.py  # Run database migrations
+│   └── validate.py       # Code validation script
+│
+├── app.py                 # Flask application entry point
+├── config.py              # Configuration management
+├── requirements.txt       # Python dependencies
+├── env.template           # Environment variables template
+├── postman_collection.json  # Postman API collection
+└── README.md              # Setup and usage documentation
+```
+
+---
+
+# Features & Implementation
+
+## 1. Authentication & User Management
+
+### Files
+- **API:** `api/auth.py`, `api/users.py`
+- **Models:** `models/user.py`
+- **Services:** `services/auth.py`
+- **Utils:** `utils/middleware.py`, `utils/validators.py`
+
+### Features
+- Custom form-based sign-up with personal info + body measurements
+- Custom form-based sign-in (email/password)
+- JWT token generation and verification
+- User profile CRUD operations
+- Password change functionality
+
+### Key Functions
+
+**`api/auth.py`:**
+- `create_account()` - Sign up endpoint
+- `login()` - Sign in endpoint
+
+**`api/users.py`:**
+- `get_profile()` - Get authenticated user's profile
+- `update_profile()` - Update user profile
+- `change_password()` - Change password
+
+**`models/user.py`:**
+- `User` class with methods:
+  - `get_by_id()`, `get_by_email()`
+  - `save()`, `update_from_dict()`
+  - `check_password()`, `to_dict()`
+
+**`services/auth.py`:**
+- `generate_token()` - Create JWT token
+- `verify_token()` - Verify and decode JWT
+- `get_user_from_token()` - Extract user from token
+
+---
+
+## 2. Body Measurements
+
+### Files
+- **API:** `api/body_measurements.py`
+- **Models:** `models/body_measurements.py`
+- **Database:** `migrations/002_add_body_measurements.sql`, `006_extend_user_and_measurements.sql`, `013_add_hip_circumference.sql`
+
+### Features
+- Comprehensive measurement tracking (20+ fields)
+- CRUD operations
+- Metric units (cm) support
+- Validation and range checking
+
+### Measurement Fields
+- **Basic:** `height`, `weight`
+- **Circumferences:** `shoulder_circumference`, `arm_length`, `breast_circumference`, `under_breast_circumference`, `waist_circumference`, `hip_circumference`, `upper_thigh_circumference`, `neck_circumference`, `biceps_circumference`, `upper_hip_circumference`, `wide_hip_circumference`, `calf_circumference`
+- **Lengths:** `waist_to_crotch_front_length`, `waist_to_crotch_back_length`, `inner_leg_length`, `foot_length`, `foot_width`
+- **Legacy:** `chest`, `waist`, `hips`, `inseam`, `shoulder_width`
+
+### Key Functions
+
+**`api/body_measurements.py`:**
+- `create_or_update_measurements()` - POST endpoint
+- `get_measurements()` - GET endpoint (authenticated user)
+- `get_measurements_by_user()` - GET endpoint (by user_id)
+- `update_measurements()` - PUT endpoint
+
+**`models/body_measurements.py`:**
+- `BodyMeasurements` class with methods:
+  - `get_by_user()`, `save()`, `update_from_dict()`, `to_dict()`
+
+---
+
+## 3. Avatar Management
+
+### Files
+- **API:** `app.py` (legacy endpoints)
+- **Services:** `services/ai_integration.py` (background removal)
+- **Services:** `services/image_processing.py` (image validation)
+
+### Features
+- Upload avatar image
+- Automatic background removal via Gemini API
+- Get/update avatar endpoints
+- Image validation and preprocessing
+
+### Key Functions
+
+**`app.py`:**
+- `save_avatar()` - POST `/api/save-avatar`
+- `get_avatar()` - GET `/api/get-avatar`
+- `update_avatar()` - PUT `/api/update-avatar`
+
+**`services/ai_integration.py`:**
+- `remove_background()` - Calls Gemini API for background removal
+
+---
+
+## 4. Try-On Processing
+
+### Files
+- **API:** `api/tryon.py`
+- **Services:** `services/ai_integration.py`, `services/job_queue.py`
+- **Models:** `models/tryon_job.py`
+- **Database:** `migrations/003_add_tryon_jobs.sql`
+
+### Features
+- Async job queue system
+- Support for `item_urls[]` array (multiple garments)
+- Support for direct image upload
+- Multi-garment try-on (top + bottom)
+- Job status polling
+- Result retrieval
+
+### Key Functions
+
+**`api/tryon.py`:**
+- `create_tryon_job()` - POST `/api/tryon`
+- `get_job_status()` - GET `/api/job/<job_id>`
+- `get_job_result()` - GET `/api/job/<job_id>/result`
+- `create_multi_tryon_job()` - POST `/api/tryon/multi`
+
+**`services/job_queue.py`:**
+- `JobQueue` class:
+  - `create_job()` - Create async job
+  - `get_job_status()` - Get job status
+  - `_process_job()` - Process job in background thread
+  - `_worker_loop()` - Worker thread loop
+
+**`services/ai_integration.py`:**
+- `process_tryon()` - Calls Gemini API for try-on processing
+
+**`models/tryon_job.py`:**
+- `TryOnJob` class with methods:
+  - `get_by_id()`, `get_by_user()`, `save()`, `to_dict()`
+
+---
+
+## 5. Wardrobe Management
+
+### Files
+- **API:** `api/wardrobe.py`
+- **Models:** `models/wardrobe.py`, `models/category.py`
+- **Database:** `migrations/004_enhance_wardrobe.sql`, `007_add_categories_and_wardrobe_updates.sql`, `008_add_wardrobe_item_fields.sql`, `009_add_category_section.sql`, `010_create_category_sections.sql`, `011_seed_platform_categories.sql`, `012_add_user_category_sections.sql`
+
+### Features
+- CRUD operations on wardrobe items
+- Category management (platform + user-created)
+- Category sections (platform + user-created)
+- Search and filtering
+- Image upload or URL extraction
+- New fields: `fabric`, `care_instructions`, `size`, `description`
+
+### Platform Sections
+- `upper_body` - Upper body garments
+- `lower_body` - Lower body garments
+- `accessoires` - Accessories
+- `wishlist` - Wishlist items
+
+### Key Functions
+
+**`api/wardrobe.py`:**
+- `add_garment()` - POST `/api/wardrobe/items`
+- `get_wardrobe_items()` - GET `/api/wardrobe/items`
+- `get_wardrobe_item()` - GET `/api/wardrobe/items/<id>`
+- `update_wardrobe_item()` - PUT `/api/wardrobe/items/<id>`
+- `delete_wardrobe_item()` - DELETE `/api/wardrobe/items/<id>`
+- `create_category()` - POST `/api/wardrobe/categories`
+- `get_categories()` - GET `/api/wardrobe/categories`
+- `get_category_sections()` - GET `/api/wardrobe/category-sections`
+- `create_category_section()` - POST `/api/wardrobe/category-sections`
+- `extract_garment_from_url()` - POST `/api/wardrobe/extract-from-url`
+
+**`models/wardrobe.py`:**
+- `WardrobeItem` class with methods:
+  - `get_by_id()`, `get_by_user()`, `save()`, `delete()`, `to_dict()`
+
+**`models/category.py`:**
+- `WardrobeCategory` class with methods:
+  - `get_by_id()`, `get_by_name()`, `get_all_by_user()`
+  - `get_platform_sections()`, `get_user_sections()`, `get_all_sections()`
+  - `create_user_section()`, `get_platform_categories()`
+
+---
+
+## 6. Garment Scraping
+
+### Files
+- **API:** `api/garments.py`
+- **Services:** `services/brand_extractors.py`, `services/scraper.py`
+- **Database:** `migrations/005_add_garment_metadata.sql`
+
+### Features
+- Brand-specific extractors (Abstract Factory pattern)
+- Zara extractor with JSON-LD and script tag parsing
+- Default extractor for generic sites
+- Image extraction from product pages
+- Product metadata caching
+- Garment categorization
+
+### Key Functions
+
+**`api/garments.py`:**
+- `scrape_product()` - POST `/api/garments/scrape`
+- `categorize_garment()` - POST `/api/garments/categorize`
+- `extract_images()` - POST `/api/garments/extract-images`
+
+**`services/brand_extractors.py`:**
+- `BrandExtractor` (abstract base class)
+- `ZaraExtractor` - Zara-specific extraction
+- `DefaultExtractor` - Generic extraction
+- `BrandExtractorFactory` - Factory pattern for extractor selection
+
+**`services/scraper.py`:**
+- `fetch_html()` - Fetch HTML from URL
+- `extract_images_from_html()` - Extract image URLs
+- `extract_title_from_html()` - Extract product title
+- `is_image_url()` - Validate image URL
+
+---
+
+## 7. Fitting Analysis
+
+### Files
+- **API:** `api/fitting.py`
+- **Models:** `models/body_measurements.py` (for user measurements)
+
+### Features
+- Fit checking based on user measurements
+- Size recommendations
+- Size chart comparison
+
+### Key Functions
+
+**`api/fitting.py`:**
+- `check_fit()` - POST `/api/fitting/check`
+- `get_size_recommendation()` - GET `/api/fitting/size-recommendation`
+
+---
+
+## 8. Image Processing
+
+### Files
+- **Services:** `services/image_processing.py`
+
+### Features
+- Image validation (size, format, dimensions)
+- Image resizing (max 4096x4096)
+- Image normalization (format conversion)
+- URL-based image fetching
+
+### Key Functions
+
+**`services/image_processing.py`:**
+- `validate_image()` - Validate image data
+- `resize_image()` - Resize image to max dimensions
+- `normalize_image()` - Convert to target format
+- `preprocess_image()` - Full preprocessing pipeline
+- `fetch_image_from_url()` - Fetch image from URL
+
+---
+
+# Database Schema
+
+## Tables
+
+### 1. `users`
+**Purpose:** User accounts and profiles  
+**Migration:** `001_initial_schema.sql`, `006_extend_user_and_measurements.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `userid` (VARCHAR(255) UNIQUE) - 8-character unique ID
+- `email` (VARCHAR(255) UNIQUE)
+- `password` (VARCHAR(255)) - Hashed password
+- `first_name`, `last_name` (VARCHAR(255))
+- `gender` (VARCHAR(50)) - 'male', 'female', 'other', 'prefer-not-to-say'
+- `birthday` (DATE) - YYYY-MM-DD format
+- `street`, `city` (TEXT)
+- `avatar` (BLOB) - Binary image data
+- `is_active` (BOOLEAN)
+- `created_at`, `updated_at` (DATETIME)
+
+### 2. `body_measurements`
+**Purpose:** User body measurements  
+**Migration:** `002_add_body_measurements.sql`, `006_extend_user_and_measurements.sql`, `013_add_hip_circumference.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `user_id` (VARCHAR(255) UNIQUE) - Foreign key to users.userid
+- `height`, `weight` (REAL) - Basic measurements
+- `shoulder_circumference`, `arm_length`, `breast_circumference`, `under_breast_circumference`, `waist_circumference`, `hip_circumference`, `upper_thigh_circumference`, `neck_circumference`, `biceps_circumference`, `upper_hip_circumference`, `wide_hip_circumference`, `calf_circumference` (REAL) - Circumference measurements
+- `waist_to_crotch_front_length`, `waist_to_crotch_back_length`, `inner_leg_length`, `foot_length`, `foot_width` (REAL) - Length measurements
+- `chest`, `waist`, `hips`, `inseam`, `shoulder_width` (REAL) - Legacy fields
+- `unit` (TEXT) - 'metric' or 'imperial' (default: 'metric')
+- `created_at`, `updated_at` (DATETIME)
+
+### 3. `tryon_jobs`
+**Purpose:** Try-on job queue and status  
+**Migration:** `003_add_tryon_jobs.sql`
+
+**Columns:**
+- `job_id` (VARCHAR(255) PRIMARY KEY) - UUID
+- `user_id` (VARCHAR(255)) - Foreign key to users.userid
+- `status` (VARCHAR(50)) - 'queued', 'processing', 'done', 'failed'
+- `progress` (INTEGER) - 0-100
+- `person_image_path` (TEXT)
+- `garment_image_path` (TEXT)
+- `result_image_path` (TEXT)
+- `error_message` (TEXT)
+- `created_at`, `updated_at` (DATETIME)
+
+### 4. `wardrobe`
+**Purpose:** User wardrobe items  
+**Migration:** `001_initial_schema.sql`, `004_enhance_wardrobe.sql`, `007_add_categories_and_wardrobe_updates.sql`, `008_add_wardrobe_item_fields.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `user_id` (VARCHAR(255)) - Foreign key to users.userid
+- `garment_id` (VARCHAR(255)) - Legacy field
+- `garment_image` (BLOB) - Legacy field
+- `garment_type` (VARCHAR(50)) - Legacy field
+- `garment_url` (TEXT) - Legacy field
+- `category` (VARCHAR(100)) - Legacy category field
+- `garment_category_type` (VARCHAR(50)) - Legacy field
+- `brand` (VARCHAR(255))
+- `color` (VARCHAR(100))
+- `is_external` (BOOLEAN)
+- `title` (TEXT)
+- `price` (REAL)
+- `category_id` (INTEGER) - Foreign key to wardrobe_categories.id
+- `custom_category_name` (VARCHAR(255))
+- `category_section` (VARCHAR(100)) - 'upper_body', 'lower_body', 'accessoires', 'wishlist', or user-created
+- `fabric` (TEXT) - JSON array: `[{"name": "cotton", "percentage": 100}]`
+- `care_instructions` (TEXT)
+- `size` (TEXT)
+- `description` (TEXT)
+- `image_path` (TEXT) - Path to image file in local storage
+- `date_added`, `created_at`, `updated_at` (DATETIME)
+
+### 5. `wardrobe_categories`
+**Purpose:** User-created categories  
+**Migration:** `007_add_categories_and_wardrobe_updates.sql`, `009_add_category_section.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `user_id` (VARCHAR(255)) - Foreign key to users.userid
+- `name` (VARCHAR(255)) - Category name
+- `description` (TEXT)
+- `category_section` (VARCHAR(100)) - Section this category belongs to
+- `created_at`, `updated_at` (DATETIME)
+
+### 6. `category_sections`
+**Purpose:** Platform and user-created category sections  
+**Migration:** `010_create_category_sections.sql`, `012_add_user_category_sections.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `name` (VARCHAR(100) UNIQUE) - Section identifier
+- `display_name` (VARCHAR(255)) - Human-readable name
+- `description` (TEXT)
+- `sort_order` (INTEGER)
+- `icon_name` (VARCHAR(100)) - Icon identifier (not stored in DB, returned via API)
+- `icon_url` (TEXT) - Icon URL (not stored in DB, returned via API)
+- `user_id` (VARCHAR(255)) - NULL for platform sections, user_id for user-created sections
+- `created_at`, `updated_at` (DATETIME)
+
+**Platform Sections (seeded):**
+- `upper_body` - Upper Body
+- `lower_body` - Lower Body
+- `accessoires` - Accessories
+- `wishlist` - Wishlist
+
+### 7. `platform_categories`
+**Purpose:** Platform-defined categories  
+**Migration:** `011_seed_platform_categories.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `section_name` (VARCHAR(100)) - Foreign key to category_sections.name
+- `name` (VARCHAR(255)) - Category identifier
+- `display_name` (VARCHAR(255)) - Human-readable name
+- `description` (TEXT)
+- `sort_order` (INTEGER)
+- `created_at` (DATETIME)
+
+**Platform Categories (seeded):**
+- **Upper Body:** T-shirts, Shirts, Sweaters, Jackets, Dresses
+- **Lower Body:** Pants, Jeans, Shorts, Skirts, Leggings
+- **Accessories:** Bags, Shoes, Hats, Jewelry, Belts
+
+### 8. `garment_metadata`
+**Purpose:** Cached scraped product metadata  
+**Migration:** `005_add_garment_metadata.sql`
+
+**Columns:**
+- `id` (INTEGER PRIMARY KEY)
+- `url` (TEXT UNIQUE) - Product URL
+- `title` (TEXT)
+- `images` (TEXT) - JSON array of image URLs
+- `price` (REAL)
+- `sizes` (TEXT) - JSON array of available sizes
+- `colors` (TEXT) - JSON array of available colors
+- `brand` (VARCHAR(255))
+- `metadata` (TEXT) - JSON object with additional data
+- `created_at`, `updated_at` (DATETIME)
+
+### 9. `schema_migrations`
+**Purpose:** Track applied migrations  
+**Migration:** `001_initial_schema.sql`
+
+**Columns:**
+- `version` (INTEGER PRIMARY KEY)
+- `name` (VARCHAR(255))
+- `applied_at` (DATETIME)
+
+### 10. `hello`
+**Purpose:** Test table (legacy)  
+**Migration:** `001_initial_schema.sql`
+
+---
+
+# API Endpoints
+
+## Authentication
+
+### `POST /api/create-account`
+**File:** `api/auth.py`  
+**Auth:** Not required  
+**Description:** Create new user account with personal info and body measurements
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "confirm_password": "password123",
+  "first_name": "John",
+  "last_name": "Doe",
+  "gender": "male",
+  "birthday": "1990-01-15",
+  "street": "123 Main St",
+  "city": "New York",
+  "height": 175,
+  "weight": 70,
+  ...
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "token": "jwt_token_here",
+    "user": {...}
+  }
+}
+```
+
+### `POST /api/login`
+**File:** `api/auth.py`  
+**Auth:** Not required  
+**Description:** Sign in with email and password
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "token": "jwt_token_here",
+    "user": {...}
+  }
+}
+```
+
+## User Profile
+
+### `GET /api/users/profile`
+**File:** `api/users.py`  
+**Auth:** Required  
+**Description:** Get authenticated user's profile
+
+### `PUT /api/users/profile`
+**File:** `api/users.py`  
+**Auth:** Required  
+**Description:** Update authenticated user's profile
+
+### `POST /api/users/profile/change-password`
+**File:** `api/users.py`  
+**Auth:** Required  
+**Description:** Change user password
 
 
-# Image Edit Prompt Template
+## Body Measurements
 
-## Prompt Template (Vendor Image Edit)
+### `POST /api/body-measurements`
+**File:** `api/body_measurements.py`  
+**Auth:** Required  
+**Description:** Create or update body measurements for authenticated user
 
-**System / Instruction:**
-> You are a professional fashion try-on compositor. Maintain the subject’s identity (face, hair, skin tone) and pose. Align garment scale and perspective naturally. Avoid artifacts on hands/necklines. Keep background intact.
-
-**Inputs:**
-- `PERSON_IMAGE`: the user selfie (frontal or 3/4th)
-- `GARMENT_IMAGE`: primary product image with clear front view
-- **Parameters:**
-  - `keep_pose=true`
-  - `lighting_match=medium`
-  - `skin_tone_preserve=high`
-  - `seam_blend=high`
-
-**User Prompt (constructed by backend):**
-“Place the garment from GARMENT_IMAGE onto the person in PERSON_IMAGE. Keep the person’s pose and hair visible, adjust garment drape naturally. Do not modify facial features. Output a single composited image suitable for app preview.”
+### `GET /api/body-measurements`
+**File:** `api/body_measurements.py`  
+**Auth:** Required  
+**Description:** Get authenticated user's body measurements
 
 
-# Security & Compliance
+### `PUT /api/body-measurements`
+**File:** `api/body_measurements.py`  
+**Auth:** Required  
+**Description:** Update authenticated user's body measurements
 
-## Security, Privacy, and Compliance
+## Avatar
 
-- **User Consent:** Explicit consent for selfie processing and 3rd‑party AI calls.
-- **PII Minimization:** Store only signed URLs and minimal metadata; allow deletion.
-- **Content Policy:** Disallow nudity/CSAM/adversarial content; enforce **safe mode** with vendor.
-- **Watermark Disclosure:** Generated images may include an **invisible watermark**; label UI as “AI Preview”.
-- **Rate Limits:** Per-user throttle to prevent abuse; CAPTCHA on anonymous flows.
+### `POST /api/save-avatar`
+**File:** `app.py`  
+**Auth:** Required  
+**Description:** Save avatar image with background removal
 
+**Request:** `multipart/form-data`
+- `avatar` (file)
+- `user_id` (text)
 
-# SLOs & Operational Readiness
+### `GET /api/get-avatar`
+**File:** `app.py`  
+**Auth:** Required  
+**Description:** Get authenticated user's avatar image
 
-## Quality of Service & SLAs
+### `PUT /api/update-avatar`
+**File:** `app.py`  
+**Auth:** Required  
+**Description:** Update avatar with base64 encoded image
 
-- **Latency Targets:** p50 ≤ 5s, p95 ≤ 15s per try‑on.
-- **Throughput:** Burst up to 50 concurrent jobs (queue + async workers).
-- **Fallbacks:** If vendor fails, return last cached result or a friendly retry UI.
+## Try-On
 
+### `POST /api/tryon`
+**File:** `api/tryon.py`  
+**Auth:** Required  
+**Description:** Create try-on job (async)
 
-# Phased Roadmap
+**Request:** `multipart/form-data`
+- `selfie` (file) OR `avatar_id` (text)
+- `item_urls` (text) - JSON array: `["https://..."]`
+- `garment_image` (file) - Alternative to item_urls
+- `garment_url` (text) - Single URL (backward compatibility)
+- `options` (text) - JSON object with garment_index, etc.
 
-## Phased Roadmap
+**Response:** `202 Accepted`
+```json
+{
+  "success": true,
+  "data": {
+    "job_id": "uuid",
+    "status": "queued"
+  }
+}
+```
 
-- **Phase 1 (MVP, 3–4 weeks)**
-  - RN app with Selfie → URLs → Preview
-  - Backend `/tryon` + vendor integration
-  - Basic segmentation + caching + analytics
+### `GET /api/job/<job_id>`
+**File:** `api/tryon.py`  
+**Auth:** Required  
+**Description:** Get job status
 
-- **Phase 2 (Polish, 4–6 weeks)**
-  - Multi-garment carousel, side-by-side compare
-  - Pose guidance on capture, background cleanup
-  - Share, delete, history; simple A/B quality tweaks
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "status": "done",
+    "progress": 100,
+    "result_url": "/images/tryon-results/..."
+  }
+}
+```
 
-- **Phase 3 (Advanced, 6–8 weeks)**
-  - Body/size estimation hints, fit feedback (heuristic)
-  - Batch try-on for wishlists; vendor failover
-  - Optional web companion
+### `GET /api/job/<job_id>/result`
+**File:** `api/tryon.py`  
+**Auth:** Required  
+**Description:** Get result image (returns image file or URL)
 
+### `POST /api/tryon/multi`
+**File:** `api/tryon.py`  
+**Auth:** Required  
+**Description:** Multi-garment try-on (top + bottom)
 
-# Traceability
+## Wardrobe Management
 
-## Spreadsheet Highlights (auto‑extracted)
+### `POST /api/wardrobe/items`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Add garment to wardrobe
 
-**Detected Features:**
-- View and try on an item from shopping site in the becauseFUTURE app/extension
-- Fitting
-- Avatar Creation
-- Garment recommendations
-- Extract / Scrape sizing data
-- Save User Garment Uploads basic
-- Registration: User body measurements
-- Avatar Styling: Basic
-- Save and reopen finds.
-- Registration: Basic information
-- Sign-in
-- AI Model Fine-tuning
-- Dev Status Prior to Dev Team Hire
-- Satisfactory
-- Update Required
-- Major Changes Required
-- Not Started
-- When I am on a shopping site I want to be able to see this item on myself and get sizing information from becauseFUTURE.
-- I want to know if this garment would fit me and if so what size
-- I want to create my realistic digital twin. It should look like me and have my body proportions.
-- I want to see similar garments as recommendations from the same online shopping site and be able to try them on
-- I want to know if a garment will fit me through becauseFUTURES sizing comparison model.
-- I take a picture of an item by placing it on bed/sofa/lighter background or on the hanger or on the floor and it gets added to my digital wardrobe. It shall be added to the right category of similar items (long trousers, short trousers, skits, leggins, top, shits, jackets...)
-- I want the app to know my body measurements for later purpose so I can use them when I shop something.
-- I want to see how an item looks on me and how it looks together with other items and styles.
-- I want to save garments that I like so that I can come back to them.
-- I want to register with becauseFUTURE and save my information provided so that it shows next time.
-- I want to use the information that I have shared with the app when signing in and using it.
+**Request:** `multipart/form-data` OR `application/json`
+- `garment_image` (file) OR `garment_url` (text)
+- `category_section` (text) - Required
+- `category_id` (text) - Optional
+- `title`, `brand`, `color`, `size`, `description` (text)
+- `fabric` (text) - JSON array: `[{"name": "cotton", "percentage": 100}]`
+- `care_instructions` (text)
 
-**Detected Modules:**
-- Garment Discovery
-- Fitting using Sizing Data
-- Avatar
-- Sizing Data
-- Wardrobe Management
-- User Management
-- Virtual Try-on
-- AI Model
+### `GET /api/wardrobe/items`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Get wardrobe items with search and filtering
 
-**Detected Milestones:** _No items detected in spreadsheet; fill during grooming._
+**Query Params:**
+- `category` (string) - Filter by category
+- `category_id` (integer) - Filter by category ID
+- `search` (string) - Search in title/brand/description
 
-**Detected Roles/Owners:** _No items detected in spreadsheet; fill during grooming._
+### `GET /api/wardrobe/items/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Get specific wardrobe item
 
-**Notes:**
-- - Issue is breach of policy - for development purposes we may be able to build such extension, let's say, but we won't be able to publish them as we are scraping/using someone elses data on our server without their concent
-- - How do you bring in previous selections i.e. before user started using the extension?
-- - Breach of policy issue - FYI
-- - So click photo and gather data manually? If yes, image quality will be a big fuss here 
+### `PUT /api/wardrobe/items/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Update wardrobe item
 
-[RD - 30th Oct]: Virtual image is second step, I'm saying the first image clicked by the person who wants to move their physical wardobe to digital - they need to click better image - that will be a huge problem if they don't click correct photo
-- - Basic: possible
-- - Need to read more about 2D/3D models and their rendering - this could be a high memory affair
+### `DELETE /api/wardrobe/items/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Delete wardrobe item
 
+### `POST /api/wardrobe/categories`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Create user category
 
+**Request Body:**
+```json
+{
+  "name": "casual_shirts",
+  "description": "Casual shirts for everyday wear",
+  "category_section": "upper_body"
+}
+```
 
+### `GET /api/wardrobe/categories`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Get all categories (platform + user-created, grouped by section)
 
-# Spreadsheet Preview (first 20 rows per sheet)
+**Query Params:**
+- `search` (string) - Search categories
+- `category_section` (string) - Filter by section
 
-### Sheet: Mobile App Functional Flow
+### `GET /api/wardrobe/category-sections`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Get all category sections (platform + user-created)
 
-| Mobile App — High-Level Workflow   | Unnamed: 1                                                           | Unnamed: 2                                                   |
-|:-----------------------------------|:---------------------------------------------------------------------|:-------------------------------------------------------------|
-| nan                                | nan                                                                  | nan                                                          |
-| First-time setup                   | nan                                                                  | nan                                                          |
-| nan                                | Open app → tap Get Started                                           | nan                                                          |
-| nan                                | Register / Sign in → create account or OAuth                         | nan                                                          |
-| nan                                | Enter body measurements (manual or guided capture) → save to profile | nan                                                          |
-| nan                                | Create avatar (auto from photos or presets) → confirm look & pose    | nan                                                          |
-| nan                                | Land on Home (Try-On, My Closet, Recommendations)                    | nan                                                          |
-| nan                                | nan                                                                  | nan                                                          |
-| Try-on from mobile                 | nan                                                                  | nan                                                          |
-| nan                                | Choose garment source                                                | nan                                                          |
-| nan                                | nan                                                                  | a) Upload photos (front/flat)                                |
-| nan                                | nan                                                                  | b) Paste product URL                                         |
-| nan                                | nan                                                                  | c) Pick from partner catalog (in-app)                        |
-| nan                                | Normalize garment                                                    | nan                                                          |
-| nan                                | nan                                                                  | Background removal → segmentation → category & color tagging |
-| nan                                | nan                                                                  | (If URL) fetch product images + size chart                   |
-| nan                                | Fit preview                                                          | nan                                                          |
-| nan                                | nan                                                                  | Select size → app computes overlay/warp on avatar            |
-| nan                                | nan                                                                  | User can rotate avatar / change pose                         |
-| nan                                | nan                                                                  | Adjust fit tightness/length (sliders) → re-render            |
+### `POST /api/wardrobe/category-sections`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Create user-specific category section
 
+**Request Body:**
+```json
+{
+  "name": "summer_collection",
+  "display_name": "Summer Collection",
+  "description": "My summer wardrobe items",
+  "icon_name": "summer_icon",
+  "icon_url": "https://example.com/icons/summer.png",
+  "sort_order": 5
+}
+```
 
-### Sheet: Extension Functioanl Flow
+### `GET /api/wardrobe/categories/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Get category by ID
 
-| Chrome Extension — High-Level Workflow   | Unnamed: 1                                                              | Unnamed: 2                                                  |
-|:-----------------------------------------|:------------------------------------------------------------------------|:------------------------------------------------------------|
-| nan                                      | nan                                                                     | nan                                                         |
-| First-time setup                         | nan                                                                     | nan                                                         |
-| nan                                      | Install extension → grant permissions (activeTab, storage)              | nan                                                         |
-| nan                                      | Sign in via extension popup → token stored securely                     | nan                                                         |
-| nan                                      | (Optional) Sync avatar/profile from backend                             | nan                                                         |
-| Try-on on a product page (PDP)           | nan                                                                     | nan                                                         |
-| nan                                      | User opens PDP (e.g., Myntra/Zara)                                      | nan                                                         |
-| nan                                      | Content script detects PDP (selectors/domain map)                       | nan                                                         |
-| nan                                      | Show “Try on me” button on the page                                     | nan                                                         |
-| nan                                      | On click, extension extracts product data                               | nan                                                         |
-| nan                                      | nan                                                                     | Title, images, color, size options, size chart (if present) |
-| nan                                      | Send try-on request to backend                                          | nan                                                         |
-| nan                                      | nan                                                                     | Include user token, product images/URL, selected size       |
-| nan                                      | Backend runs segmentation + fitting → returns preview                   | nan                                                         |
-| nan                                      | Inline preview modal appears over PDP (or popup window)                 | nan                                                         |
-| nan                                      | nan                                                                     | Rotate avatar, change size/color, like/save                 |
-| nan                                      | Save (favorites/closet) or Continue to store (normal checkout on site)  | nan                                                         |
-| Revisit & continuity                     | nan                                                                     | nan                                                         |
-| nan                                      | On any PDP, the button shows prior status (Saved ✓ / Tried)             | nan                                                         |
-| nan                                      | User can open My Closet from extension popup to re-open previews in app | nan                                                         |
+### `PUT /api/wardrobe/categories/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Update category
 
+### `DELETE /api/wardrobe/categories/<id>`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Delete category
 
-### Sheet: Effort Estimation
+### `POST /api/wardrobe/extract-from-url`
+**File:** `api/wardrobe.py`  
+**Auth:** Required  
+**Description:** Extract garment information from URL without adding to wardrobe
 
-| Feature Name                                                                  | Features / User Stories                                                                                                                                                                                                                                                              | In Scope for 4 weeks of outsourced development                                                                                                                                                                                                  | What we have today                                                                                                                                                                                                                                  | Current Status: Frontend   | Current Status: Backend   | Estimation (Days = 8 hours)   |   Effort Estimation: Hours | In-house (Rhishi)   | Outcome                                                                                                                                                              | Module                    |   Unnamed: 11 | Description / Info                                                                                                                                                                                                | Questions / Comments / Concerns                                                                                                                                                                                                                       | Answers: RT                                                                                                                                                     |   Estimation (Days = 8 hours).1 | Technical Background                                                                                                                                                                          | Business Background                                                                                                   | Platform                                       | Concerns                                                                                                                             |
-|:------------------------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------|:--------------------------|:------------------------------|---------------------------:|:--------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------------------------|--------------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------|:-----------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------|
-| View and try on an item from shopping site in the becauseFUTURE app/extension | When I am on a shopping site I want to be able to see this item on myself and get sizing information from becauseFUTURE.                                                                                                                                                             | Yes: But only for 3 selected websites from which I should be able to scrape the garment image and try it on my avatar in the app or extension                                                                                                   | Basic content script on browser extension that scrapes images off the web page and shows it in the grid. We also have a model that renders these images on the photo of the user. We should finetune it or make improvements                        | Major Changes Required     | Major Changes Required    | 18                            |                        144 | No                  | Path to bcF when shopping on external sites and try on item                                                                                                          | Garment Discovery         |           nan | App: from website/app through share button open and switch to bcF.                                                                                                                                                | - Issue is breach of policy - for development purposes we may be able to build such extension, let's say, but we won't be able to publish them as we are scraping/using someone elses data on our server without their concent                        | Noted. Please provide effort estimation                                                                                                                         |                              18 | Content script to extract PDP assets; backend segmentation, mask extraction, fit/warp rendering; overlay preview modal in extension; in-app URL import + webview.                             | Direct conversion funnel from discovery to try-on increases conversion and affiliate/referral revenue potential.      | Extension (primary), Mobile (via URL import)   | Selector brittleness across sites; TOS/legal issues scraping; CORS and cross-origin image fetching; latency for on-demand rendering. |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |  Extension: Open extension and immediately get item shown for try on in the extension.                                                                                                                            |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-| Fitting                                                                       | I want to know if this garment would fit me and if so what size                                                                                                                                                                                                                      | Yes: Only check the fitting information from an existing fitting database and match it with the user measurements and tells whether the garment size fits the user measurement and which areas it does not fit and give a sizing recommendation | nan                                                                                                                                                                                                                                                 | Not Started                | Not Started               | 14                            |                        112 | No                  | Prediction if and what size of the garment fits the user                                                                                                             | Fitting using Sizing Data |           nan | Compare measurements of the user witht the measurements of the data on the item following a pre-set comparison structure.                                                                                         | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                              14 | Pose estimation, garment alignment, 2D TPS warping or lightweight 3D draping; caching, latency optimization, progressive rendering.                                                           | Core conversion driver — accuracy directly affects user trust and ROI.                                                | Backend (serves both mobile & extension)       | Latency, edge cases with complex garments, failure modes and user trust when results are approximate.                                |
-| Avatar Creation                                                               | I want to create my realistic digital twin. It should look like me and have my body proportions.                                                                                                                                                                                     | Yes: Low priority because we already remove the background from the user uploaded full-body image but if its easily possible in the sprint, then we do it                                                                                       | We can remove background of the full-body image of user and show it as avatar. Better solutions than this that is possible in the next 4 weeks is appreciated. The current background removal outputs a BloB on which the garment rendering happens | Satisfactory               | Satisfactory              | 12                            |                         96 | No                  | Realistic virtual image of the user to visualize clothes on                                                                                                          | Avatar                    |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                              12 | Generate photoreal avatar using SMPL/Ready Player Me pipeline or 2D->3D mesh reconstruction; store mesh, texture, and basic morph targets. Provide small in-app editor for appearance tweaks. | Core differentiator — users want accurate representation; enables personalization, higher engagement and conversions. | Mobile, Extension (preview)                    | Privacy of biometric/body data; avatar generation compute cost; storage and sync between devices.                                    |
-| Garment recommendations                                                       | I want to see similar garments as recommendations from the same online shopping site and be able to try them on                                                                                                                                                                      | No                                                                                                                                                                                                                                              | nan                                                                                                                                                                                                                                                 | Not Started                | Not Started               | 7                             |                         56 | No                  | Find items on the same shopping site that the user might like based on their previous or current selection                                                           | Garment Discovery         |           nan | Basic: Just show the search results and additional random items from the website.                                                                                                                                 | - How do you bring in previous selections i.e. before user started using the extension?                                                                                                                                                               | No previous as in historic searches but only after they have started using the extension.                                                                       |                               7 | Rule-based + embedding similarity (CLIP) pipeline; metadata enrichment; simple ranking and UI components.                                                                                     | Increases basket size; cross-sell and up-sell; partner monetization possibilities.                                    | Mobile, Extension                              | Cold-start for new users; quality of product metadata from scraped sites.                                                            |
-| Extract / Scrape sizing data                                                  | I want to know if a garment will fit me through becauseFUTURES sizing comparison model.                                                                                                                                                                                              | No                                                                                                                                                                                                                                              | nan                                                                                                                                                                                                                                                 | Update Required            | Update Required           | 6                             |                         48 | No                  | Retrieve the right info from the website on a garment for the respective size                                                                                        | Sizing Data               |           nan | Best available data on a specific item needs to be retrieved from any website if possible: Data on the garment and the specific sizes from the website or retrieved from infromation that a brand shared with us. | - Breach of policy issue - FYI                                                                                                                                                                                                                        | Noted. Please provide effort estimation                                                                                                                         |                               6 | Site-specific DOM parsers, normalized size schema, fallback manual entry UI, parsing pipelines with selector maps.                                                                            | Key for size suggestions and reducing returns; enables mapping brand sizes to internal sizes.                         | Extension (primary), Backend                   | Fragile parsers; legal/TOS risks for scraping; maintenance overhead per site.                                                        |
-| Save User Garment Uploads basic                                               | I take a picture of an item by placing it on bed/sofa/lighter background or on the hanger or on the floor and it gets added to my digital wardrobe. It shall be added to the right category of similar items (long trousers, short trousers, skits, leggins, top, shits, jackets...) | Yes: Garment saving in the wardrobe is essential. This garment saving is from photos of garments taken by the user                                                                                                                              | nan                                                                                                                                                                                                                                                 | Major Changes Required     | Major Changes Required    | 5                             |                         40 | No                  | Add offline / physical garments that the user owns to his/her digital wardrobe.                                                                                      | Wardrobe Management       |           nan | Basic: Just the photo and short description gets added.                                                                                                                                                           | - So click photo and gather data manually? If yes, image quality will be a big fuss here                                                                                                                                                              | Yes but the virtual image creation model output quality is not Enable's problem as we are not building the model ourselves                                      |                               5 | Image upload, background removal (U2Net or remove.bg API), store derivative assets, metadata capture.                                                                                         | Empowers users to try non-partner items; increases catalog breadth.                                                   | Mobile (primary), Extension (upload via popup) | Rights to user-uploaded images; storage and processing costs; content moderation.                                                    |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |                                                                                                                                                                                                                   |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |                                                                                                                                                                                                                   | [RD - 30th Oct]: Virtual image is second step, I'm saying the first image clicked by the person who wants to move their physical wardobe to digital - they need to click better image - that will be a huge problem if they don't click correct photo |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-| Registration: User body measurements                                          | I want the app to know my body measurements for later purpose so I can use them when I shop something.                                                                                                                                                                               | Yes                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | Update Required            | Update Required           | 4                             |                         32 | No                  | Upload and save user body measurements to use them for fitting purpose                                                                                               | User Management           |           nan | Basic: Manual sharing of body measurements in a form.                                                                                                                                                             | - Basic: possible                                                                                                                                                                                                                                     | Ok.mention some effort estimate for experimentation                                                                                                             |                               4 | Capture manual and image-based measurement flow; validation, unit normalization, secure storage in user profile; optional pose-guided capture.                                                | Improves fit accuracy and returns reduction; critical for trust and recommending sizes.                               | Mobile, Extension (via backend)                | Accuracy of automated measurements; user willingness to provide measurements; legal/privacy.                                         |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               | Advanced: Measureing through phone/laptop camera. Third party tool?                                                                                                                                               |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-| Avatar Styling: Basic                                                         | I want to see how an item looks on me and how it looks together with other items and styles.                                                                                                                                                                                         | Yes: Low priroity is to try two garments at a time - top and bottom garment.                                                                                                                                                                    | We can render one garment at a time right now                                                                                                                                                                                                       | Major Changes Required     | Major Changes Required    | 4                             |                         32 | No                  | See how a garment realistically looks on oneself. Preview full styles                                                                                                | Virtual Try-on            |           nan | Same functionality from picture(s) independently if taken by user or if from a shopping site.                                                                                                                     | - Need to read more about 2D/3D models and their rendering - this could be a high memory affair                                                                                                                                                       | Model related experiments / features can have variable effort estimation and that needs to be mentioned. But some initial effort estimate needs to be mentioned |                               4 | Preset styles, asset library integration, client-side preview, store style config.                                                                                                            | Adds personalization and upsell opportunities (paid skins/assets).                                                    | Mobile (editor), Extension (preview)           | Asset licensing; UX complexity for styling.                                                                                          |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |  - One garment item at a time.                                                                                                                                                                                    |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |  - Top and bottom together.                                                                                                                                                                                       |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |  - Multiple combinations with styling: Layer and style (e.g. shirt tuck in, trouser length shortened) items.                                                                                                      |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-| Save and reopen finds.                                                        | I want to save garments that I like so that I can come back to them.                                                                                                                                                                                                                 | Yes. This is the wardrobe management functionality                                                                                                                                                                                              | Wardrobe management API available right now                                                                                                                                                                                                         | Update Required            | Satisfactory              | 3                             |                         24 | No                  | Save items that I like and reopen them in the web/app.                                                                                                               | Garment Discovery         |           nan | Button to like an item and a list where these garments are saved and can be re-visited.                                                                                                                           | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                               3 | Wishlist/favorites CRUD, session persistence, thumbnail caching, sync across devices, basic pagination.                                                                                       | Retention hook; builds user data to personalize recommendations; potential for marketing re-engagement.               | Mobile, Extension                              | Data consistency, storage costs for many images/previews.                                                                            |
-| Registration: Basic information                                               | I want to register with becauseFUTURE and save my information provided so that it shows next time.                                                                                                                                                                                   | Yes                                                                                                                                                                                                                                             | User Signup API is available                                                                                                                                                                                                                        | Satisfactory               | Satisfactory              | 2                             |                         16 | No                  | Profile Set-up                                                                                                                                                       | User Management           |           nan | Combine with process of Avatar upload and body measuring (voluntarity).                                                                                                                                           | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                               2 | Email/password or OAuth sign-up flows, profile schema, basic validation.                                                                                                                      | Low friction onboarding increases activation; required for personalization.                                           | Mobile, Extension                              | Spam accounts — need verification; GDPR/CCPA compliance for regions.                                                                 |
-|                                                                               |                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                                     |                            |                           |                               |                            |                     |                                                                                                                                                                      |                           |               |  No prerequisite to use the app, but (just) Name and E-Mail required to save the Avatar/process. Pop-up to register or info gets lost before extension is being closed.                                           |                                                                                                                                                                                                                                                       |                                                                                                                                                                 |                                 |                                                                                                                                                                                               |                                                                                                                       |                                                |                                                                                                                                      |
-| Sign-in                                                                       | I want to use the information that I have shared with the app when signing in and using it.                                                                                                                                                                                          | Yes - sign-on with google would be prefered but a simple user name password login is also ok                                                                                                                                                    | Basic login page available                                                                                                                                                                                                                          | Satisfactory               | Satisfactory              | 2                             |                         16 | No                  | Profile Loading                                                                                                                                                      | User Management           |           nan | Through name and e-Mail with e-Mail code or through password.                                                                                                                                                     | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                               2 | JWT/session auth, refresh tokens, password reset, secure storage of tokens in extension (chrome.storage) and mobile secure storage.                                                           | Security and smooth re-entry are essential for retention.                                                             | Mobile, Extension                              | Token storage security in extension; account takeover protections.                                                                   |
-| AI Model Fine-tuning                                                          | nan                                                                                                                                                                                                                                                                                  | No. Rhishi will work on this                                                                                                                                                                                                                    | nan                                                                                                                                                                                                                                                 | Major Changes Required     | Major Changes Required    | 20                            |                        160 | Yes                 | The current open-source model has limitations and quality of try on needs to be improved. Experiments need to be run and more options are required for styling, etc. | AI Model                  |           nan | Try different experiments using the existing model to check how much the quality can improve. Also try alternative models to check if some other models are better suited for the use case.                       | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                              20 | Fine-tune segmentation/warping models or LoRA on proprietary dataset; experiment infra, model registry and artifact storage.                                                                  | Improves fit realism and accuracy, reduces false negatives in try-on; competitive advantage.                          | Backend/ML infra (serves both)                 | Labelled data requirement; compute cost; model drift and monitoring.                                                                 |
-| nan                                                                           | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | nan                           |                        nan | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
-| Dev Status Prior to Dev Team Hire                                             | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | Action Required               |                       6400 | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
-| Satisfactory                                                                  | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | Test Properly                 |                        nan | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
-| Update Required                                                               | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | Test & Estimate Effort        |                        nan | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
-| Major Changes Required                                                        | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | Prioritise Development        |                        nan | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
-| Not Started                                                                   | nan                                                                                                                                                                                                                                                                                  | nan                                                                                                                                                                                                                                             | nan                                                                                                                                                                                                                                                 | nan                        | nan                       | Last to develop               |                        nan | nan                 | nan                                                                                                                                                                  | nan                       |           nan | nan                                                                                                                                                                                                               | nan                                                                                                                                                                                                                                                   | nan                                                                                                                                                             |                             nan | nan                                                                                                                                                                                           | nan                                                                                                                   | nan                                            | nan                                                                                                                                  |
+## Garments
 
+### `POST /api/garments/scrape`
+**File:** `api/garments.py`  
+**Auth:** Not required  
+**Description:** Scrape product page
 
-### Sheet: Sheet5
+### `POST /api/garments/categorize`
+**File:** `api/garments.py`  
+**Auth:** Not required  
+**Description:** Categorize garment from image
 
-| Feature Name                                                                  | Features / User Stories                                                                                                                                                                                                                                                              | In Scope for 4 weeks of outsourced development                                                                                                                                                                                                  |
-|:------------------------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| View and try on an item from shopping site in the becauseFUTURE app/extension | When I am on a shopping site I want to be able to see this item on myself and get sizing information from becauseFUTURE.                                                                                                                                                             | Yes: But only for 3 selected websites from which I should be able to scrape the garment image and try it on my avatar in the app or extension                                                                                                   |
-| Fitting                                                                       | I want to know if this garment would fit me and if so what size                                                                                                                                                                                                                      | Yes: Only check the fitting information from an existing fitting database and match it with the user measurements and tells whether the garment size fits the user measurement and which areas it does not fit and give a sizing recommendation |
-| Avatar Creation                                                               | I want to create my realistic digital twin. It should look like me and have my body proportions.                                                                                                                                                                                     | Yes: Low priority because we already remove the background from the user uploaded full-body image but if its easily possible in the sprint, then we do it                                                                                       |
-| Save User Garment Uploads basic                                               | I take a picture of an item by placing it on bed/sofa/lighter background or on the hanger or on the floor and it gets added to my digital wardrobe. It shall be added to the right category of similar items (long trousers, short trousers, skits, leggins, top, shits, jackets...) | Yes: Garment saving in the wardrobe is essential. This garment saving is from photos of garments taken by the user                                                                                                                              |
-| Registration: User body measurements                                          | I want the app to know my body measurements for later purpose so I can use them when I shop something.                                                                                                                                                                               | Yes                                                                                                                                                                                                                                             |
-| Avatar Styling: Basic                                                         | I want to see how an item looks on me and how it looks together with other items and styles.                                                                                                                                                                                         | Yes: Low priroity is to try two garments at a time - top and bottom garment.                                                                                                                                                                    |
-| Save and reopen finds.                                                        | I want to save garments that I like so that I can come back to them.                                                                                                                                                                                                                 | Yes. This is the wardrobe management functionality                                                                                                                                                                                              |
-| Registration: Basic information                                               | I want to register with becauseFUTURE and save my information provided so that it shows next time.                                                                                                                                                                                   | Yes                                                                                                                                                                                                                                             |
-| Sign-in                                                                       | I want to use the information that I have shared with the app when signing in and using it.                                                                                                                                                                                          | Yes - sign-on with google would be prefered but a simple user name password login is also ok                                                                                                                                                    |
+### `POST /api/garments/extract-images`
+**File:** `api/garments.py`  
+**Auth:** Optional  
+**Description:** Extract only images from product URL. Uses the same brand-specific extractors as `/scrape` but returns only images. Returns a `reason` field if no images are found explaining possible causes (JavaScript-rendered pages, dynamic loading, etc.). **Note:** For comprehensive product data (title, price, sizes, colors, category), use `/api/garments/scrape` instead.
 
+## Fitting
 
-### Sheet: Concerns
+### `POST /api/fitting/check`
+**File:** `api/fitting.py`  
+**Auth:** Required  
+**Description:** Check if garment fits based on user measurements
 
-| Gotcha                                      | What it means in practice                                                                   | Who controls it                 | Workaround / Mitigation                                                                                                                                                                                                         |
-|:--------------------------------------------|:--------------------------------------------------------------------------------------------|:--------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Third-party website access (extension)      | Extensions can’t override or alter Myntra, Zara, etc., DOMs in violation of CSP or TOS.     | Third-party site (host)         | Use content scripts to read only public PDP data (title, images, price). Inject a self-contained overlay (shadow-DOM) for “Try on Me”. Avoid touching site scripts. If CSP blocks image access, fetch images via backend proxy. |
-| DOM or UI changes (A/B testing, redesign)   | Page layout or class names change, breaking selectors.                                      | Third-party site                | Maintain per-domain selector map and re-run detection via MutationObserver on DOM/URL changes. Add user fallback (“pick correct image”) and store rule per domain.                                                              |
-| CORS / cross-origin images                  | Direct fetch of product images from extension may be blocked.                               | Browser & site                  | Fetch via backend proxy API or convert image to base64 before upload.                                                                                                                                                           |
-| Cross-origin iframes (buy boxes, galleries) | Extension can’t read DOM of embedded frames (different origins).                            | Third-party site                | Add frame origins to host_permissions. If blocked by Same-Origin Policy, use backend proxy to retrieve needed assets instead of reading iframe DOM.                                                                             |
-| CSP (Content Security Policy)               | Inline JS/CSS injection restricted.                                                         | Browser & site                  | Use Shadow DOM with inlined <style>; no eval; no inline <script>. Use chrome.scripting.executeScript() for isolated scripts.                                                                                                    |
-| Host permissions / user consent             | User must grant permission to run extension on each site.                                   | User                            | Ask for host_permissions (e.g., *://www.myntra.com/*). Onboarding prompt if denied; can’t auto-bypass.                                                                                                                          |
-| Legal / policy restrictions                 | Scraping private data or mimicking partner APIs violates TOS.                               | Third-party site & Product Team | Keep demo labeled POC/research. For production, shift to affiliate or partner APIs (Shopify, Zalando, etc.).                                                                                                                    |
-| 3-D realism limits                          | True 3-D simulation is compute-heavy for browsers.                                          | Product Team                    | Use 2-D warping or depth-guided overlays (MediaPipe, OpenPose) for POC. Upgrade later with proper 3-D pipeline.                                                                                                                 |
-| Latency                                     | Long rendering times degrade UX.                                                            | Product Team                    | Use async inference jobs, progressive low→high res previews, CDN caching, and lightweight models.                                                                                                                               |
-| Privacy / security                          | Body/measurement data are sensitive.                                                        | Product Team & user             | Encrypt data at rest, anonymize IDs, allow easy deletion. Keep rendering isolated within overlay, not page DOM.                                                                                                                 |
-| Legal blocking by hosts                     | Sites can’t directly block injection, but can redesign architecture (iframes, obfuscation). | Third-party site                | Treat as technical debt; maintain selective domain list and version control. For production, rely on partnerships.                                                                                                              |
-| Performance / service-worker limits         | MV3 disallows persistent background pages.                                                  | Browser                         | Use event-driven service worker model, cache locally, push heavy compute to backend.                                                                                                                                            |
-| International / layout variations           | DOM structure differs by region/locale.                                                     | Third-party site                | Maintain per-locale selector map; fallback to JSON-LD @type: Product detection.                                                                                                                                                 |
-| User measurement accuracy                   | Manual inputs may be wrong → inaccurate fit.                                                | User                            | Add guided photo capture, validation, and adjustable measurement sliders.                                                                                                                                                       |
-| Avatar realism expectations                 | Overly stylized avatar may lower trust.                                                     | Product Team                    | Offer “Realistic / Stylized” options with disclaimer (“Preview approximation”).                                                                                                                                                 |
-| Failure handling (image fetch, ML fail)     | Preview might fail due to missing assets or ML errors.                                      | Product Team                    | Provide graceful fallback message and retry. Log errors for model retraining.                                                                                                                                                   |
-| Token / data storage security               | Tokens in Chrome storage are exposed if mishandled.                                         | Product Team                    | Encrypt tokens, use short-lived JWTs with refresh logic, validate backend.                                                                                                                                                      |
-| Third-party CSP blocking assets             | Page may forbid inline resources or external script calls.                                  | Third-party site                | Keep UI isolated inside Shadow DOM; avoid external fetches. Proxy data through backend if needed.                                                                                                                               |
-| User didn’t grant permission                | Extension inactive on site.                                                                 | User                            | Educate during onboarding; show “Enable on site” banner and re-request permission.                                                                                                                                              |
-| 3-D rendering fallback                      | Not all browsers support WebGL-heavy previews.                                              | Browser                         | Detect capability; downgrade to static overlay or low-poly rendering.                                                                                                                                                           |
+### `GET /api/fitting/size-recommendation`
+**File:** `api/fitting.py`  
+**Auth:** Required  
+**Description:** Get size recommendation based on size chart
 
+## Utilities
 
+### `GET /health`
+**File:** `app.py`  
+**Auth:** Not required  
+**Description:** Health check endpoint
+
+### `POST /api/remove-bg`
+**File:** `app.py`  
+**Auth:** Not required  
+**Description:** Remove background from image (uses Gemini API)
+
+### `GET /images/<path:filename>`
+**File:** `app.py`  
+**Auth:** Not required  
+**Description:** Serve images from local storage
+
+---
+
+# Services & Utilities
+
+## Database Service
+
+**File:** `services/database.py`
+
+**Class:** `DatabaseManager`
+
+**Purpose:** Database abstraction layer for SQLite operations
+
+**Key Methods:**
+- `execute_query()` - Execute SQL query
+- `execute_many()` - Execute multiple queries
+- `execute_script()` - Execute SQL script
+- `get_lastrowid()` - Get last inserted row ID
+- `table_exists()` - Check if table exists
+- `get_tables()` - Get all table names
+
+**Usage:**
+```python
+from services.database import db_manager
+
+result = db_manager.execute_query(
+    "SELECT * FROM users WHERE email = ?",
+    (email,),
+    fetch_one=True
+)
+```
+
+## Authentication Service
+
+**File:** `services/auth.py`
+
+**Functions:**
+- `generate_token(user_id, email, additional_claims=None)` - Generate JWT token
+- `verify_token(token)` - Verify and decode JWT token
+- `get_user_from_token(token)` - Extract user_id from token
+
+## AI Integration Service
+
+**File:** `services/ai_integration.py`
+
+**Functions:**
+- `process_tryon(person_image, garment_image, garment_type, garment_details)` - Process try-on with Gemini API
+- `remove_background(image_data)` - Remove background using Gemini API
+
+**Gemini API Integration:**
+- Uses `google.generativeai` library
+- Model: `gemini-1.5-pro` or `gemini-1.5-flash` (configurable)
+- API key from environment variable `GEMINI_API_KEY`
+
+## Job Queue Service
+
+**File:** `services/job_queue.py`
+
+**Class:** `JobQueue`
+
+**Purpose:** Async job processing for try-on operations
+
+**Features:**
+- In-memory queue (`queue.Queue`)
+- Background worker thread
+- Job status tracking
+- Timeout handling (120 seconds default)
+- Max queue size (50 jobs default)
+
+**Key Methods:**
+- `create_job()` - Create new try-on job
+- `get_job_status()` - Get job status
+- `stop()` - Stop worker thread
+
+## Image Processing Service
+
+**File:** `services/image_processing.py`
+
+**Functions:**
+- `validate_image(image_data, filename)` - Validate image (size, format, dimensions)
+- `resize_image(image_data, max_dimension)` - Resize image to max dimensions
+- `normalize_image(image_data, target_format)` - Convert image format
+- `preprocess_image(image_data, filename, max_dimension)` - Full preprocessing pipeline
+- `fetch_image_from_url(url, timeout)` - Fetch image from URL
+
+**Constraints:**
+- Max file size: 6MB
+- Max dimensions: 4096x4096
+- Supported formats: PNG, JPEG, WebP
+
+## Storage Service
+
+**File:** `services/storage.py`
+
+**Class:** `StorageService`
+
+**Purpose:** Local file storage management
+
+**Storage Structure:**
+```
+images/
+├── tryon-results/    # Try-on result images
+├── avatars/          # User avatar images
+└── wardrobe/         # Wardrobe item images
+```
+
+**Key Methods:**
+- `upload_image(image_data, file_path, subdirectory)` - Upload image to local storage
+- `delete_image(file_path)` - Delete image from storage
+- `get_image_path(file_path)` - Get full path to image
+
+## Brand Extractors Service
+
+**File:** `services/brand_extractors.py`
+
+**Classes:**
+- `BrandExtractor` (abstract base class)
+- `ZaraExtractor` - Zara-specific product extraction
+- `DefaultExtractor` - Generic product extraction
+- `BrandExtractorFactory` - Factory for extractor selection
+
+**Zara Extractor Features:**
+- JSON-LD structured data extraction
+- Script tag data extraction
+- Multiple image extraction strategies
+- Size and color extraction
+
+## Scraper Service
+
+**File:** `services/scraper.py`
+
+**Functions:**
+- `fetch_html(url, timeout)` - Fetch HTML from URL
+- `extract_images_from_html(html_content, base_url)` - Extract image URLs
+- `extract_title_from_html(html_content)` - Extract product title
+- `is_image_url(url)` - Validate image URL
+
+## Middleware
+
+**File:** `utils/middleware.py`
+
+**Decorators:**
+- `@require_auth` - Require JWT authentication
+- `@optional_auth` - Optional JWT authentication
+
+**Usage:**
+```python
+from utils.middleware import require_auth
+
+@require_auth
+def my_endpoint():
+    user_id = request.user_id  # Available after authentication
+    ...
+```
+
+## Response Utilities
+
+**File:** `utils/response.py`
+
+**Functions:**
+- `success_response(data, message, status_code)` - Standardized success response
+- `error_response(error, status_code)` - Standardized error response
+- `error_response_from_string(message, status_code, error_code)` - Error response from string
+
+## Error Handling
+
+**File:** `utils/errors.py`
+
+**Custom Exceptions:**
+- `ValidationError` - Input validation errors
+- `AuthenticationError` - Authentication failures
+- `DatabaseError` - Database operation errors
+- `NotFoundError` - Resource not found errors
+
+## Validators
+
+**File:** `utils/validators.py`
+
+**Functions:**
+- `validate_email(email)` - Validate email format
+- `validate_password(password, min_length)` - Validate password strength
+- `validate_numeric(value, field_name, min_value, max_value)` - Validate numeric values
+- `validate_url(url)` - Validate URL format
+- `validate_required(data, fields)` - Validate required fields
+
+## Logging
+
+**File:** `utils/logger.py`
+
+**Features:**
+- Structured JSON logging
+- Daily log file rotation
+- Separate error logs
+- Function entry/exit tracking
+- Exception logging
+
+**Log Files:**
+- `logs/app.log` - Application logs
+- `logs/errors.log` - Error logs
+
+---
+
+# Models
+
+## User Model
+
+**File:** `models/user.py`
+
+**Class:** `User`
+
+**Methods:**
+- `get_by_id(userid)` - Get user by ID
+- `get_by_email(email)` - Get user by email
+- `save()` - Save user (create or update)
+- `update_from_dict(data)` - Update from dictionary
+- `check_password(password)` - Verify password
+- `to_dict(include_avatar, include_password)` - Convert to dictionary
+
+## Body Measurements Model
+
+**File:** `models/body_measurements.py`
+
+**Class:** `BodyMeasurements`
+
+**Methods:**
+- `get_by_user(user_id)` - Get measurements for user
+- `save()` - Save measurements (create or update)
+- `update_from_dict(data)` - Update from dictionary
+- `to_dict()` - Convert to dictionary
+
+## Wardrobe Item Model
+
+**File:** `models/wardrobe.py`
+
+**Class:** `WardrobeItem`
+
+**Methods:**
+- `get_by_id(item_id, user_id)` - Get item by ID
+- `get_by_user(user_id, category, category_id, search)` - Get items for user
+- `save()` - Save item (create or update)
+- `delete()` - Delete item
+- `to_dict()` - Convert to dictionary
+
+## Category Model
+
+**File:** `models/category.py`
+
+**Class:** `WardrobeCategory`
+
+**Methods:**
+- `get_by_id(category_id, user_id)` - Get category by ID
+- `get_by_name(name, user_id)` - Get category by name
+- `get_all_by_user(user_id, search, category_section)` - Get all user categories
+- `get_platform_sections()` - Get platform-defined sections
+- `get_user_sections(user_id)` - Get user-created sections
+- `get_all_sections(user_id)` - Get all sections (platform + user)
+- `create_user_section(user_id, name, display_name, ...)` - Create user section
+- `get_platform_categories(category_section)` - Get platform categories
+- `save()` - Save category
+- `delete()` - Delete category
+- `to_dict()` - Convert to dictionary
+
+## Try-On Job Model
+
+**File:** `models/tryon_job.py`
+
+**Class:** `TryOnJob`
+
+**Methods:**
+- `get_by_id(job_id, user_id)` - Get job by ID
+- `get_by_user(user_id, status, limit)` - Get jobs for user
+- `save()` - Save job
+- `to_dict()` - Convert to dictionary
+
+---
+
+# Configuration
+
+## Configuration File
+
+**File:** `config.py`
+
+**Class:** `Config`
+
+**Configuration Variables:**
+- `FLASK_ENV` - Flask environment (development/production)
+- `FLASK_DEBUG` - Debug mode
+- `SECRET_KEY` - Flask secret key
+- `DATABASE_PATH` - SQLite database path
+- `GEMINI_API_KEY` - Gemini API key
+- `GEMINI_MODEL_NAME` - Gemini model name (default: 'gemini-1.5-pro')
+- `JWT_SECRET_KEY` - JWT secret key
+- `JWT_ALGORITHM` - JWT algorithm (default: 'HS256')
+- `JWT_EXPIRATION_HOURS` - JWT expiration (default: 24)
+- `MAX_UPLOAD_SIZE` - Max upload size in bytes (default: 6MB)
+- `ALLOWED_EXTENSIONS` - Allowed image extensions
+- `CORS_ORIGINS` - CORS allowed origins
+- `IMAGES_DIR` - Local images directory (default: 'images')
+- `IMAGES_BASE_URL` - Base URL for images (default: '/images')
+
+**Environment Variables:**
+All configuration loaded from `.env` file (see `env.template`)
+
+## Environment Template
+
+**File:** `env.template`
+
+**Required Variables:**
+- `GEMINI_API_KEY` - Google Gemini API key
+- `SECRET_KEY` - Flask secret key
+- `JWT_SECRET_KEY` - JWT secret key
+
+**Optional Variables:**
+- `FLASK_ENV` - Environment (default: 'development')
+- `DATABASE_PATH` - Database path (default: 'database.db')
+- `GEMINI_MODEL_NAME` - Model name (default: 'gemini-1.5-pro')
+- `IMAGES_DIR` - Images directory (default: 'images')
+
+---
+
+# Authentication & Security
+
+## JWT Authentication
+
+**Implementation:** `services/auth.py`, `utils/middleware.py`
+
+**Token Structure:**
+```json
+{
+  "user_id": "userid",
+  "email": "user@example.com",
+  "iat": 1234567890,
+  "exp": 1234654290
+}
+```
+
+**Token Generation:**
+- Algorithm: HS256
+- Expiration: 24 hours (configurable)
+- Secret: From `JWT_SECRET_KEY` environment variable
+
+**Usage:**
+```python
+# Generate token
+token = generate_token(user_id, email)
+
+# Verify token
+payload = verify_token(token)
+user_id = payload['user_id']
+```
+
+## Password Hashing
+
+**Implementation:** `models/user.py`
+
+**Method:** `pbkdf2:sha256` (Python 3.9 compatible)
+
+**Usage:**
+```python
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Hash password
+hashed = generate_password_hash(password, method='pbkdf2:sha256')
+
+# Verify password
+is_valid = check_password_hash(hashed, password)
+```
+
+## Security Features
+
+- ✅ Password hashing (pbkdf2:sha256)
+- ✅ JWT token authentication
+- ✅ CORS configuration
+- ✅ Input validation
+- ✅ SQL injection prevention (parameterized queries)
+- ✅ File upload validation
+- ✅ Path traversal prevention (image serving)
+
+---
+
+# Deployment & Operations
+
+## Setup
+
+1. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Configure Environment:**
+   ```bash
+   cp env.template .env
+   # Edit .env with your configuration
+   ```
+
+3. **Run Migrations:**
+   ```bash
+   python scripts/run_migrations.py
+   ```
+
+4. **Start Server:**
+   ```bash
+   python app.py
+   ```
+
+## Server Configuration
+
+**Default Port:** 8000  
+**Host:** 0.0.0.0 (all interfaces)  
+**Debug Mode:** Enabled in development
+
+**Start Command:**
+```bash
+python app.py
+```
+
+## Database Migrations
+
+**Migration Script:** `scripts/run_migrations.py`
+
+**Migrations:**
+1. `001_initial_schema.sql` - Initial database schema
+2. `002_add_body_measurements.sql` - Body measurements table
+3. `003_add_tryon_jobs.sql` - Try-on jobs table
+4. `004_enhance_wardrobe.sql` - Wardrobe enhancements
+5. `005_add_garment_metadata.sql` - Garment metadata caching
+6. `006_extend_user_and_measurements.sql` - Extended fields
+7. `007_add_categories_and_wardrobe_updates.sql` - Categories
+8. `008_add_wardrobe_item_fields.sql` - New wardrobe fields
+9. `009_add_category_section.sql` - Category sections
+10. `010_create_category_sections.sql` - Category sections table
+11. `011_seed_platform_categories.sql` - Platform categories
+12. `012_add_user_category_sections.sql` - User sections
+13. `013_add_hip_circumference.sql` - Hip circumference field
+
+**Migration Tracking:**
+- Migrations tracked in `schema_migrations` table
+- Automatic detection of applied migrations
+- Safe to run multiple times
+
+## Logging
+
+**Log Files:**
+- `logs/app.log` - Application logs (daily rotation)
+- `logs/errors.log` - Error logs (daily rotation)
+
+**Log Format:** JSON structured logging
+
+**Log Levels:**
+- INFO - General information
+- WARNING - Warnings
+- ERROR - Errors
+- EXCEPTION - Exceptions with stack traces
+
+## Testing
+
+**Postman Collection:** `postman_collection.json`
+
+**Base URL:** `http://localhost:8000`
+
+**Testing Workflow:**
+1. Import Postman collection
+2. Run "Create Account" to get JWT token
+3. Token auto-saved to collection variable `{{jwt_token}}`
+4. Test endpoints in order
+
+## Health Check
+
+**Endpoint:** `GET /health`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "database": "connected"
+  }
+}
+```
+
+---
+
+# Future Requirements & Extensibility
+
+## Adding New Features
+
+### Adding a New API Endpoint
+
+1. **Create Blueprint** (if new module):
+   ```python
+   # api/new_feature.py
+   from flask import Blueprint
+   new_feature_bp = Blueprint('new_feature', __name__, url_prefix='/api/new-feature')
+   ```
+
+2. **Register Blueprint** in `app.py`:
+   ```python
+   from api.new_feature import new_feature_bp
+   app.register_blueprint(new_feature_bp)
+   ```
+
+3. **Add Route:**
+   ```python
+   @new_feature_bp.route('/endpoint', methods=['POST'])
+   @require_auth
+   def my_endpoint():
+       # Implementation
+   ```
+
+### Adding a New Model
+
+1. **Create Model File:** `models/new_model.py`
+2. **Inherit from base pattern:**
+   ```python
+   class NewModel:
+       def __init__(self, ...):
+           ...
+       
+       @classmethod
+       def get_by_id(cls, id):
+           ...
+       
+       def save(self):
+           ...
+   ```
+
+3. **Create Migration:** `migrations/XXX_add_new_model.sql`
+
+### Adding a New Service
+
+1. **Create Service File:** `services/new_service.py`
+2. **Implement service functions/classes**
+3. **Import and use in API endpoints**
+
+## Extensibility Points
+
+- **Brand Extractors:** Add new extractor class to `services/brand_extractors.py`
+- **Image Processing:** Extend `services/image_processing.py`
+- **Storage:** Extend `services/storage.py` for cloud storage
+- **Authentication:** Extend `services/auth.py` for OAuth
+- **Job Queue:** Extend `services/job_queue.py` for distributed queues
+
+---
+
+# Notes & Considerations
+
+## Current Limitations
+
+- **Storage:** Local file system (not cloud storage)
+- **Queue:** In-memory queue (not distributed)
+- **Database:** SQLite (not production-grade for high concurrency)
+- **AI Model:** Gemini API only (no fallback)
+
+## Production Readiness
+
+**For Production:**
+- Replace SQLite with PostgreSQL/MySQL
+- Implement distributed job queue (Redis/RabbitMQ)
+- Add cloud storage (S3/GCS)
+- Implement rate limiting
+- Add monitoring and alerting
+- Implement caching layer
+- Add API versioning
+- Implement request/response logging
+
+## Performance Targets
+
+- **Latency:** p50 ≤ 5s, p95 ≤ 15s for try-on results
+- **Throughput:** Up to 50 concurrent jobs
+- **Queue Size:** Max 50 jobs
+- **Job Timeout:** 120 seconds
+
+---
+
+**End of Documentation**

@@ -5,7 +5,7 @@ Handles version tracking and applying migrations
 
 import os
 from typing import List, Tuple
-from services.database import db_manager
+from shared.database import db_manager
 
 
 class MigrationManager:
