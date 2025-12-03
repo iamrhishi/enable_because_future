@@ -1,4 +1,187 @@
+// Global garment item counter for unique IDs
+let garmentItemCounter = 0;
+
+// Unified garment item structure generator
+function createGarmentItemHTML(options = {}) {
+  const {
+    src,
+    alt = 'Garment',
+    title = 'Fashion Item',
+    price = null,
+    store = null,
+    type = null,
+    url = null, // Product or source URL for premium try-on
+    isFavorited = false,
+    source = 'unknown', // 'explorer', 'wardrobe', 'uploaded', 'placeholder'
+    index = null,
+    garmentId = null,
+    extraData = {},
+    showRemoveButton = false,
+    additionalClasses = '',
+    itemNumber = null,
+    wardrobeId = null
+  } = options;
+  
+  garmentItemCounter++;
+  const uniqueId = `garment-item-${garmentItemCounter}`;
+  
+  // Common CSS classes for all garment items
+  const commonClasses = 'garment-item-tryon';
+  const sourceClass = `${source}-item`;
+  const favoriteClass = isFavorited ? 'favorited' : '';
+  
+  // Build data attributes
+  const dataAttributes = [
+    src ? `data-src="${src}"` : '',
+    title ? `data-title="${title}"` : '',
+    price ? `data-price="${price}"` : '',
+    store ? `data-store="${store}"` : '',
+    type ? `data-type="${type}"` : '',
+    url ? `data-url="${url}"` : '',
+    index !== null ? `data-index="${index}"` : '',
+    garmentId ? `data-garment-id="${garmentId}"` : '',
+    wardrobeId ? `data-wardrobe-item="${wardrobeId}"` : '',
+    `data-source="${source}"`
+  ].filter(Boolean).join(' ');
+  
+  // Additional data attributes from extraData
+  const extraDataAttrs = Object.entries(extraData)
+    .map(([key, value]) => `data-${key}="${value}"`)
+    .join(' ');
+  
+  return `
+    <div class="${commonClasses} ${sourceClass} ${favoriteClass} ${additionalClasses}" 
+         id="${uniqueId}"
+         ${dataAttributes}
+         ${extraDataAttrs}>
+      
+      <!-- Image Container -->
+      <div class="garment-item-image-container">
+        ${src ? `
+          <img src="${src}" 
+               alt="${alt}" 
+               class="garment-item-image"
+               onload="console.log('✅ Image loaded:', '${title}', '${src}');"
+               onerror="console.error('❌ Image failed:', '${title}', '${src}'); this.style.display='none'; this.parentElement.innerHTML += '<div class=\\'garment-image-unavailable\\'>Image<br/>Unavailable</div>';" />
+        ` : `
+          <div class="garment-placeholder-content">
+            <span class="upload-text">${title}</span>
+          </div>
+        `}
+        
+        <!-- Favorite Button -->
+        <button class="favorite-btn ${favoriteClass}" type="button">
+          <span class="heart-icon">${isFavorited ? '♥' : '♡'}</span>
+        </button>
+        
+        ${showRemoveButton ? `
+          <!-- Remove Button -->
+          <button class="garment-remove-btn" data-remove-index="${index}" title="Remove garment">
+            ×
+          </button>
+        ` : ''}
+        
+        ${source === 'wardrobe' ? `
+          <!-- Wardrobe Badge -->
+          <div class="garment-source-badge wardrobe-badge">
+            Wardrobe
+          </div>
+        ` : ''}
+        
+        ${itemNumber ? `
+          <!-- Item Number Badge -->
+          <div class="garment-number-badge">
+            ${itemNumber}
+          </div>
+        ` : ''}
+      </div>
+      
+      <!-- Item Info -->
+      ${src ? `
+        <div class="garment-item-info">
+          <div class="garment-item-title" title="${title}">
+            ${title}
+          </div>
+          ${price ? `<div class="garment-item-price">${price}</div>` : ''}
+          ${store ? `<div class="garment-item-store">${store}</div>` : ''}
+          ${type ? `<div class="garment-type-badge">${type.toUpperCase()}</div>` : ''}
+          
+          ${url && source === 'explorer' ? `
+            <!-- Premium Try-On Button -->
+            <button class="premium-tryon-btn" data-url="${url}" title="View on ${store || 'Store'}">
+              <span class="premium-text">Premium Try-On</span>
+            </button>
+          ` : ''}
+        </div>
+      ` : ''}
+      
+      <!-- Try-on Hover Badge -->
+      <div class="tryon-hover-badge">
+        Try On
+      </div>
+    </div>
+  `;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+
+  // ===== MEMORY MANAGEMENT =====
+  // Track blob URLs for cleanup
+  const blobUrls = new Set();
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
+  // Override URL.createObjectURL to track all blob URLs
+  URL.createObjectURL = function(blob) {
+    const url = originalCreateObjectURL(blob);
+    blobUrls.add(url);
+    return url;
+  };
+
+  // Override URL.revokeObjectURL to remove from tracking
+  URL.revokeObjectURL = function(url) {
+    blobUrls.delete(url);
+    originalRevokeObjectURL(url);
+  };
+
+  // Function to cleanup all tracked blob URLs
+  function cleanupAllBlobUrls() {
+    for (const url of blobUrls) {
+      originalRevokeObjectURL(url);
+    }
+    blobUrls.clear();
+    console.log('🧹 Cleaned up all blob URLs');
+  }
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', cleanupAllBlobUrls);
+
+  // Function to ensure proper grid layout for empty states
+  function ensureGridLayout() {
+    const garmentPreview = document.getElementById('garment-preview');
+    if (garmentPreview) {
+      garmentPreview.style.display = 'grid';
+      
+      // If the container is empty or has less than 2 items, show placeholders
+      const children = garmentPreview.children;
+      if (children.length < 2) {
+        garmentPreview.innerHTML = `
+          <div class="upload-placeholder">
+            <span class="upload-text">Upload or find garments</span>
+          </div>
+          <div class="upload-placeholder">
+            <span class="upload-text">Upload or find garments</span>
+          </div>
+          <div class="upload-placeholder">
+            <span class="upload-text">Upload or find garments</span>
+          </div>
+          <div class="upload-placeholder">
+            <span class="upload-text">Upload or find garments</span>
+          </div>
+        `;
+      }
+    }
+  }
 
   // ===== GLOBAL VARIABLES =====
   // Wardrobe functionality
@@ -6,8 +189,25 @@ document.addEventListener('DOMContentLoaded', function() {
   let wardrobeItems = []; // Cache for wardrobe items
 
   // Garment source toggle
-  let currentGarmentSource = 'online'; // 'online' or 'wardrobe'
+  let currentGarmentSource = 'page'; // 'page' or 'wardrobe'
   let isShowingWardrobe = false;
+
+  // Garment preview display flag
+  let currentDisplayMode = 'online'; // 'online' for page images, 'wardrobe' for wardrobe images
+
+  // AI Model selection
+  let selectedAIModel = 'garmash'; // Default to Garmash
+
+  // Multi-garment try-on selection
+  let selectedGarments = []; // Array to track selected garment images for multi-try-on
+
+  // ===== CLEAR CACHED IMAGES ON POPUP LOAD =====
+  // Force fresh extraction every time the popup is opened
+  console.log('🧹 Clearing image cache on popup load for fresh extraction');
+  
+  // Initialize display mode flag
+  console.log('🔄 Initializing display mode to: online');
+  // Note: currentDisplayMode is already initialized to 'online' in global variables
 
   // ===== FIRST PRIORITY: BRAND DOMAIN CHECK =====
   // This MUST run first when extension opens/reopens
@@ -22,15 +222,43 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // If it's a brand page, trigger garment extraction IMMEDIATELY
       if (isBrandPage) {
-        console.log('🎯 Brand page detected - triggering garment extraction NOW');
+        console.log('🎯 Brand page detected - triggering fresh garment extraction NOW');
+        currentGarmentSource = 'page'; // Set to show page garments initially
+        
+        // Clear any cached images first
+        allExtractedImages = [];
+        currentImagePage = 0;
+        
         // Wait a brief moment for DOM to be ready, then extract garments
         setTimeout(() => {
           extractGarmentsFromPage();
+          // Update toggle button state after extraction
+          setTimeout(() => {
+            console.log('🔄 Updating toggle button state after brand page detection');
+            updateToggleButtonState();
+          }, 200);
         }, 100);
+      } else {
+        console.log('ℹ️ Not a brand page - toggle button will be hidden');
+        currentGarmentSource = 'page'; // Default state
+        
+        // ✨ NEW: Load wardrobe items as default for non-brand pages
+        console.log('📦 Non-brand page detected - loading wardrobe items after initialization');
+        setTimeout(() => {
+          console.log('🔄 Triggering wardrobe fallback for non-brand page');
+          loadWardrobeAsFallback();
+        }, 500); // Wait for user data to be loaded
       }
     } catch (error) {
       console.error('❌ Initial brand domain check failed:', error);
       useGarmentCheckbox = false;
+      currentGarmentSource = 'page';
+      
+      // ✨ NEW: Load wardrobe on error too
+      console.log('📦 Brand check failed - loading wardrobe items as fallback');
+      setTimeout(() => {
+        loadWardrobeAsFallback();
+      }, 500);
     }
   }
   
@@ -92,7 +320,7 @@ document.addEventListener('DOMContentLoaded', function() {
           'shirt', 'hemd', 't-shirt', 'tshirt', 
           'top', 'oberteil', 'blouse', 'bluse', 'jacket', 'jacke',
           'sweater', 'pullover', 'hoodie', 'kapuzenpullover', 'cardigan', 'strickjacke',
-          'polo', 'poloshirt', 'tank', 'tanktop', 'vest', 'weste',
+          'polo', 'poloshirt', 'dress', 'tank', 'tanktop', 'vest', 'weste',
           'blazer', 'sakko', 'coat', 'mantel', 'sweatshirt', 'sweatshirt'
         ],
         lower: [
@@ -172,117 +400,244 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    console.log('🔍 Extracting garments from page...');
+    console.log('🔍 Extracting fresh garments from page...');
+    
+    // Clear previously extracted images to ensure fresh extraction
+    allExtractedImages = [];
+    currentImagePage = 0;
     
     try {
       // Get the current active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('Active tab:', tab.url, 'ID:', tab.id);
       
-      // Send message to content script
-      chrome.tabs.sendMessage(tab.id, { type: 'GET_IMAGES_ON_PAGE' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error('Content script error:', chrome.runtime.lastError.message || chrome.runtime.lastError);
-          console.log('Attempting to inject content script...');
-          
-          // Try to inject content script manually
-          chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ['content-script.js']
-          }, () => {
-            if (chrome.runtime.lastError) {
-              console.error('Failed to inject content script:', chrome.runtime.lastError.message);
-              console.log('Trying direct image search as final fallback...');
-              executeDirectImageSearch(tab.id);
-              return;
-            }
-            
-            // Try sending message again after injection
-            setTimeout(() => {
-              chrome.tabs.sendMessage(tab.id, { type: 'GET_IMAGES_ON_PAGE' }, (response) => {
-                if (chrome.runtime.lastError) {
-                  console.error('Still no response after injection:', chrome.runtime.lastError.message);
-                  console.log('Falling back to direct image search...');
-                  executeDirectImageSearch(tab.id);
-                  return;
-                }
-                console.log('📨 Got images after injection - Raw response:', response);
-                
-                // Handle different response formats
-                let images = [];
-                if (Array.isArray(response)) {
-                  images = response;
-                } else if (response?.images && Array.isArray(response.images)) {
-                  images = response.images;
-                } else if (response && typeof response === 'object') {
-                  images = Object.values(response).filter(item => item && item.src);
-                }
-                
-                console.log('🎯 Final images after injection:', images);
-                displayImagesInPlaceholders(images);
-              });
-            }, 100);
-          });
-          return;
-        }
-        
-        console.log('📨 Raw response:', response);
-        console.log('📨 Response.images:', response?.images);
-        console.log('📨 Response type:', typeof response);
-        
-        // Handle different response formats
-        let images = [];
-        if (Array.isArray(response)) {
-          images = response;
-        } else if (response?.images && Array.isArray(response.images)) {
-          images = response.images;
-        } else if (response && typeof response === 'object') {
-          images = Object.values(response).filter(item => item && item.src);
-        }
-        
-        console.log('🎯 Final images to display:', images);
-        displayImagesInPlaceholders(images);
+      // Always inject content script fresh to ensure it's up to date
+      console.log('🔄 Injecting fresh content script...');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content-script.js']
       });
       
+      // Wait a moment for content script to load, then send message
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tab.id, { type: 'GET_IMAGES_ON_PAGE' }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Content script error:', chrome.runtime.lastError.message || chrome.runtime.lastError);
+            console.log('Trying direct image search as fallback...');
+            executeDirectImageSearch(tab.id);
+            return;
+          }
+          
+          console.log('📨 Raw response:', response);
+          console.log('📨 Response.images:', response?.images);
+          console.log('📨 Response type:', typeof response);
+          
+          // Handle different response formats
+          let images = [];
+          if (Array.isArray(response)) {
+            images = response;
+          } else if (response?.images && Array.isArray(response.images)) {
+            images = response.images;
+          } else if (response && typeof response === 'object') {
+            images = Object.values(response).filter(item => item && item.src);
+          }
+          
+          console.log('🎯 Final extracted images:', images.length, 'found');
+          if (images.length === 0) {
+            console.log('⚠️ No images found, trying direct extraction...');
+            executeDirectImageSearch(tab.id);
+          } else {
+            displayImagesInPlaceholders(images);
+          }
+        });
+      }, 300); // Give content script time to initialize
+      
     } catch (error) {
-      console.error('Error extracting garments from page:', error.message || error);
+      console.error('Error injecting content script or extracting garments:', error.message || error);
+      console.log('Falling back to direct image search...');
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
+        executeDirectImageSearch(tab.id);
+      } else {
+        console.log('❌ No active tab found - loading wardrobe as fallback');
+        loadWardrobeAsFallback();
+      }
     }
   }
 
   // Fallback function to search for images directly via script injection
   function executeDirectImageSearch(tabId) {
+    console.log('🔄 Executing direct image search as fallback...');
+    
+    // Clear cache before direct search
+    allExtractedImages = [];
+    currentImagePage = 0;
+    
     chrome.scripting.executeScript({
       target: { tabId: tabId },
       func: function() {
+        console.log('🔍 Direct image search: scanning page for images...');
+        
+        // Enhanced image collection with garment filtering
         const images = Array.from(document.images)
-          .filter(img => img.src && img.naturalWidth > 100 && img.naturalHeight > 100)
-          .slice(0, 4)
+          .filter(img => {
+            // Basic size filter
+            if (!img.src || img.naturalWidth < 100 || img.naturalHeight < 100) return false;
+            
+            // Check for garment-related keywords in src or alt
+            const src = img.src.toLowerCase();
+            const alt = (img.alt || '').toLowerCase();
+            const garmentKeywords = ['shirt', 'dress', 'pants', 'jeans', 'jacket', 'coat', 'sweater', 'clothing', 'apparel', 'fashion', 'product', 'item'];
+            
+            const hasGarmentKeyword = garmentKeywords.some(keyword => 
+              src.includes(keyword) || alt.includes(keyword)
+            );
+            
+            // Exclude obvious non-garment images
+            const excludeKeywords = ['logo', 'icon', 'banner', 'header', 'footer', 'nav', 'menu'];
+            const hasExcludeKeyword = excludeKeywords.some(keyword => 
+              src.includes(keyword) || alt.includes(keyword)
+            );
+            
+            // Return images that have garment keywords or are reasonably sized, but not excluded
+            return !hasExcludeKeyword && (hasGarmentKeyword || (img.naturalWidth >= 200 && img.naturalHeight >= 200));
+          })
+          .slice(0, 12) // Get up to 12 images
           .map(img => ({
             src: img.src,
             width: img.naturalWidth,
             height: img.naturalHeight,
             alt: img.alt || '',
-            type: 'img'
+            type: 'img-direct'
           }));
+          
+        console.log('🔍 Direct search found', images.length, 'images');
         return images;
       }
     }, (results) => {
       if (chrome.runtime.lastError) {
         console.error('Direct script execution failed:', chrome.runtime.lastError.message);
-        displayImagesInPlaceholders([]);
+        // Load wardrobe as final fallback
+        console.log('📦 All extraction methods failed - loading wardrobe as final fallback');
+        loadWardrobeAsFallback();
         return;
       }
       
       const images = results?.[0]?.result || [];
-      console.log('Got images via direct execution:', images);
-      displayImagesInPlaceholders(images);
+      console.log('✅ Direct search completed - found', images.length, 'images');
+      
+      // If no images found, load wardrobe items as fallback
+      if (images.length === 0) {
+        console.log('📦 No images on page - loading wardrobe items as fallback...');
+        loadWardrobeAsFallback();
+      } else {
+        displayImagesInPlaceholders(images);
+      }
     });
+  }
+
+  // Function to load wardrobe items when no images are found on page
+  async function loadWardrobeAsFallback() {
+    console.log('📦 Loading wardrobe items as fallback...');
+    
+    try {
+      // Get userId from chrome storage
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get(['userId'], (result) => resolve(result));
+      });
+      
+      const userId = storageResult.userId || (currentUser && currentUser.userID);
+      
+      if (!userId) {
+        console.log('⚠️ No user logged in - showing empty placeholders');
+        showEmptyPlaceholders('Sign in to see your wardrobe items');
+        return;
+      }
+      
+      console.log('🔍 Loading wardrobe for user:', userId);
+      
+      // Fetch wardrobe items from API
+      const response = await fetch(`http://localhost:5000/api/wardrobe/user/${userId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch wardrobe: ${response.status}`);
+      }
+      
+      const wardrobeItems = await response.json();
+      console.log(`📦 Loaded ${wardrobeItems.length} wardrobe items from database`);
+      
+      if (wardrobeItems.length === 0) {
+        console.log('⚠️ Wardrobe is empty - showing empty placeholders');
+        showEmptyPlaceholders('Your wardrobe is empty. Add items to get started!');
+        return;
+      }
+      
+      // Convert wardrobe items to the format expected by displayImagesInPlaceholders
+      // Add width/height to ensure they pass the validation filter
+      const formattedImages = wardrobeItems.map((item, index) => ({
+        src: item.garment_image, // Base64 image
+        type: 'wardrobe',
+        garment_id: item.garment_id,
+        garment_type: item.garment_type,
+        garment_url: item.garment_url,
+        id: `wardrobe-${index}`,
+        width: 500, // Set sufficient dimensions to pass validation
+        height: 500,
+        isWardrobeFallback: true // Flag to prevent infinite loop
+      }));
+      
+      console.log('✅ Displaying wardrobe items in garment-preview');
+      
+      // Directly set the images without calling displayImagesInPlaceholders 
+      // to avoid infinite loop if wardrobe images also fail validation
+      allExtractedImages = formattedImages;
+      currentImagePage = 0;
+      currentDisplayMode = 'wardrobe';
+      
+      renderImagePage();
+      
+      // Update the page indicator to show it's from wardrobe
+      const pageIndicator = document.getElementById('page-indicator');
+      if (pageIndicator && formattedImages.length > 0) {
+        pageIndicator.textContent = `Showing wardrobe (${formattedImages.length} items)`;
+      }
+      
+      console.log('✅ Wardrobe fallback complete - displayed', formattedImages.length, 'items');
+      
+    } catch (error) {
+      console.error('❌ Error loading wardrobe fallback:', error);
+      showEmptyPlaceholders('Unable to load wardrobe items');
+    }
+  }
+
+  // Helper function to show empty placeholders with custom message
+  function showEmptyPlaceholders(message = 'No images found on page') {
+    const garmentPreview = document.getElementById('garment-preview');
+    if (garmentPreview) {
+      garmentPreview.style.display = 'grid';
+      garmentPreview.innerHTML = `
+        <div class="upload-placeholder" style="grid-column: span 2; text-align: center;">
+          <span class="upload-text">${message}</span>
+        </div>
+        <div class="upload-placeholder">
+          <span class="upload-text">Upload a garment to try on</span>
+        </div>
+        <div class="upload-placeholder">
+          <span class="upload-text">Upload a garment to try on</span>
+        </div>
+      `;
+    }
   }
 
   // Global variables for pagination
   let allExtractedImages = [];
   let currentImagePage = 0;
   const imagesPerPage = 4;
+
+  // Global variables for wardrobe pagination
+  let allWardrobeItems = [];
+  let currentWardrobePage = 0;
+  const wardrobeItemsPerPage = 4;
 
   // Function to handle try-on click from extracted images
   async function handleImageTryOn(imageSrc) {
@@ -298,6 +653,201 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (error) {
       console.error('❌ Try-on failed from extracted image:', error);
     }
+  }
+
+  // Handle checkbox change for garment selection
+  function handleGarmentCheckboxChange(isChecked, imageSrc) {
+    console.log(`📦 Checkbox ${isChecked ? 'checked' : 'unchecked'} for:`, imageSrc);
+    
+    if (isChecked) {
+      // Add to selected garments if not already there
+      if (!selectedGarments.some(g => g.src === imageSrc)) {
+        selectedGarments.push({ src: imageSrc });
+        console.log('✅ Added to selection. Total selected:', selectedGarments.length);
+      }
+    } else {
+      // Remove from selected garments
+      selectedGarments = selectedGarments.filter(g => g.src !== imageSrc);
+      console.log('➖ Removed from selection. Total selected:', selectedGarments.length);
+    }
+    
+    // Update the visual state of the garment item
+    const garmentItems = document.querySelectorAll('.garment-item-tryon');
+    garmentItems.forEach(item => {
+      if (item.getAttribute('data-image-src') === imageSrc) {
+        if (isChecked) {
+          item.classList.add('selected');
+        } else {
+          item.classList.remove('selected');
+        }
+      }
+    });
+    
+    // Update multi-try-on button
+    updateMultiTryOnButton();
+  }
+
+  // Update the visibility and text of the multi-garment try-on button
+  function updateMultiTryOnButton() {
+    let multiTryOnBtn = document.getElementById('multi-tryon-btn');
+    
+    if (selectedGarments.length >= 2) {
+      // Show button if 2+ garments selected
+      if (!multiTryOnBtn) {
+        // Create the button if it doesn't exist
+        const garmentPreview = document.getElementById('garment-preview');
+        if (garmentPreview && garmentPreview.parentElement) {
+          multiTryOnBtn = document.createElement('button');
+          multiTryOnBtn.id = 'multi-tryon-btn';
+          multiTryOnBtn.className = 'multi-tryon-btn';
+          garmentPreview.parentElement.insertBefore(multiTryOnBtn, garmentPreview.nextSibling);
+          
+          // Add click listener
+          multiTryOnBtn.addEventListener('click', handleMultiGarmentTryOn);
+        }
+      }
+      
+      if (multiTryOnBtn) {
+        multiTryOnBtn.textContent = `Try On ${selectedGarments.length} Garments Together`;
+        multiTryOnBtn.style.display = 'block';
+      }
+    } else {
+      // Hide button if less than 2 garments selected
+      if (multiTryOnBtn) {
+        multiTryOnBtn.style.display = 'none';
+      }
+    }
+  }
+
+  // Handle multi-garment try-on
+  async function handleMultiGarmentTryOn() {
+    console.log('👔 Multi-garment try-on initiated with', selectedGarments.length, 'garments');
+    
+    if (selectedGarments.length < 2) {
+      alert('Please select at least 2 garments for multi-garment try-on');
+      return;
+    }
+    
+    // Debug: Check all storage keys before avatar check
+    chrome.storage.local.get(null, (allData) => {
+      console.log('🗄️ ALL Chrome storage data:', Object.keys(allData));
+      console.log('🗄️ Avatar-related keys:', {
+        hasAvatarBgRemovedImg: 'avatarBgRemovedImg' in allData,
+        hasAvatarImg: 'avatarImg' in allData,
+        hasAvatarDataUrl: 'avatarDataUrl' in allData,
+        avatarBgRemovedImgLength: allData.avatarBgRemovedImg ? allData.avatarBgRemovedImg.length : 0,
+        avatarImgLength: allData.avatarImg ? allData.avatarImg.length : 0,
+        avatarDataUrlLength: allData.avatarDataUrl ? allData.avatarDataUrl.length : 0
+      });
+    });
+    
+    // Check if avatar is available
+    chrome.storage.local.get(['avatarBgRemovedImg', 'avatarImg', 'avatarDataUrl'], async (result) => {
+      console.log('🔍 Avatar check - raw result:', result);
+      
+      const avatarData = result.avatarBgRemovedImg || result.avatarDataUrl || result.avatarImg;
+      
+      console.log('🔍 Avatar check:', {
+        hasAvatarBgRemoved: !!result.avatarBgRemovedImg,
+        hasAvatar: !!result.avatarImg,
+        hasAvatarDataUrl: !!result.avatarDataUrl,
+        avatarDataExists: !!avatarData,
+        avatarDataType: typeof avatarData,
+        avatarDataLength: avatarData ? avatarData.length : 0,
+        avatarDataPreview: avatarData ? avatarData.substring(0, 100) : 'null'
+      });
+      
+      if (!avatarData) {
+        console.error('❌ No avatar data found in storage');
+        console.error('❌ Storage result was:', result);
+        console.error('❌ Checked keys: avatarBgRemovedImg, avatarDataUrl, avatarImg - all empty');
+        alert('Please upload an avatar first!');
+        return;
+      }
+      
+      console.log('✅ Avatar found in storage, proceeding with multi-garment try-on');
+      
+      try {
+        // Show loading state
+        const multiTryOnBtn = document.getElementById('multi-tryon-btn');
+        if (multiTryOnBtn) {
+          multiTryOnBtn.disabled = true;
+          multiTryOnBtn.textContent = 'Processing...';
+        }
+        
+        console.log('🚀 Starting multi-garment try-on with', selectedGarments.length, 'garments');
+        console.log('📦 Avatar data type:', typeof avatarData, 'starts with:', avatarData.substring(0, 50));
+        
+        // Convert avatar data to blob
+        const avatarBlob = await safeImageToBlob(avatarData);
+        console.log('✅ Avatar blob created:', avatarBlob.size, 'bytes');
+        
+        // Prepare FormData
+        const formData = new FormData();
+        formData.append('avatar_image', avatarBlob, 'avatar.png');
+        
+        // Add each selected garment
+        for (let i = 0; i < selectedGarments.length; i++) {
+          const garment = selectedGarments[i];
+          console.log(`🔄 Processing garment ${i + 1}:`, garment.src);
+          
+          const garmentBlob = await safeImageToBlob(garment.src);
+          console.log(`✅ Garment ${i + 1} blob created:`, garmentBlob.size, 'bytes');
+          formData.append(`garment_image_${i + 1}`, garmentBlob, `garment_${i + 1}.png`);
+          
+          // Detect garment type for each garment (pass the URL)
+          const garmentType = await detectGarmentTypeFromURL(garment.src);
+          console.log(`🏷️ Garment ${i + 1} type detected:`, garmentType);
+          formData.append(`garment_type_${i + 1}`, garmentType);
+        }
+        
+        // Call the multi-garment try-on API
+        console.log('📤 Sending request to /api/tryon-gemini-multi');
+        const response = await fetch('http://localhost:5000/api/tryon-gemini-multi', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `API error: ${response.status}`);
+        }
+        
+        // Get the result image
+        const resultBlob = await response.blob();
+        const resultUrl = URL.createObjectURL(resultBlob);
+        
+        console.log('✅ Multi-garment try-on successful!');
+        
+        // Display the result
+        const tryonResult = document.getElementById('tryon-result');
+        if (tryonResult) {
+          tryonResult.innerHTML = `
+            <img src="${resultUrl}" alt="Multi-Garment Try-On Result" 
+                 style="width: 100%; height: 100%; object-fit: contain; border-radius: 10px;" />
+          `;
+          tryonResult.style.display = 'block';
+        }
+        
+        // Clear selection after successful try-on
+        selectedGarments = [];
+        updateMultiTryOnButton();
+        
+        // Re-render to update checkboxes
+        renderImagePage();
+        
+      } catch (error) {
+        console.error('❌ Multi-garment try-on failed:', error);
+        alert(`Multi-garment try-on failed: ${error.message}`);
+      } finally {
+        // Restore button state
+        const multiTryOnBtn = document.getElementById('multi-tryon-btn');
+        if (multiTryOnBtn) {
+          multiTryOnBtn.disabled = false;
+          updateMultiTryOnButton();
+        }
+      }
+    });
   }
 
   // Function to detect garment type from current URL
@@ -366,12 +916,49 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Helper function to safely convert image data to blob
   async function safeImageToBlob(imageData) {
+    console.log('🔄 Converting image to blob:', imageData ? imageData.substring(0, 100) + '...' : 'null');
+    
+    // Validate imageData
+    if (!imageData) {
+      throw new Error('Image data is null or undefined');
+    }
+    
+    if (typeof imageData !== 'string') {
+      throw new Error(`Image data must be a string, got ${typeof imageData}`);
+    }
+    
     if (imageData.startsWith('data:')) {
       // It's a data URL, convert directly to blob
+      console.log('✅ Converting data URL to blob');
       return dataURLToBlob(imageData);
     } else {
-      // It's a regular URL, fetch it
-      return await fetch(imageData).then(res => res.blob());
+      // It's a regular URL, we need to proxy it through our backend to avoid CORS
+      console.log('🌐 Fetching external image through backend proxy...');
+      try {
+        // Use backend proxy to fetch external images and avoid CORS issues
+        const proxyUrl = `http://localhost:5000/api/proxy-image?url=${encodeURIComponent(imageData)}`;
+        const response = await fetch(proxyUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Proxy fetch failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        console.log('✅ Successfully fetched image through proxy, blob size:', blob.size);
+        return blob;
+      } catch (error) {
+        console.error('❌ Failed to fetch image through proxy:', error);
+        
+        // Fallback: try direct fetch (will likely fail due to CORS)
+        try {
+          console.log('⚠️ Attempting direct fetch as fallback...');
+          const response = await fetch(imageData);
+          return await response.blob();
+        } catch (corsError) {
+          console.error('❌ Direct fetch also failed (CORS):', corsError);
+          throw new Error(`Cannot load external image: ${imageData}. CORS policy prevents direct access.`);
+        }
+      }
     }
   }
 
@@ -418,6 +1005,8 @@ document.addEventListener('DOMContentLoaded', function() {
         date_added: new Date().toISOString()
       };
 
+      console.log(wardrobeData);
+
       // Save to backend database
       const response = await fetch('http://localhost:5000/api/wardrobe/save', {
         method: 'POST',
@@ -433,6 +1022,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Add to local cache
         wardrobeItems.push(wardrobeData);
+        console.log('✅ Item added to wardrobeItems cache. New count:', wardrobeItems.length);
+        console.log('✅ Added item details:', {
+          garment_id: wardrobeData.garment_id,
+          user_id: wardrobeData.user_id,
+          garment_image_preview: wardrobeData.garment_image.substring(0, 50) + '...'
+        });
         
         return { success: true, garmentId: garmentId };
       } else {
@@ -448,28 +1043,143 @@ document.addEventListener('DOMContentLoaded', function() {
   // Function to check if garment is already in wardrobe
   function isGarmentInWardrobe(garmentImageData) {
     // Simple check - in a real app, you might want to use image hashing
-    return wardrobeItems.some(item => item.garment_image === garmentImageData);
+    const isInWardrobe = wardrobeItems.some(item => item.garment_image === garmentImageData);
+    console.log('🔍 isGarmentInWardrobe check:', isInWardrobe, 'for', garmentImageData.substring(0, 50) + '...');
+    console.log('🔍 Wardrobe items count:', wardrobeItems.length);
+    return isInWardrobe;
+  }
+
+  // Function to get current display mode
+  function getCurrentDisplayMode() {
+    console.log('🔍 Current display mode:', currentDisplayMode);
+    return currentDisplayMode;
+  }
+
+  // Function to check if currently showing wardrobe images
+  function isShowingWardrobeImages() {
+    return currentDisplayMode === 'wardrobe';
+  }
+
+  // Function to check if currently showing online images (page extracted or uploaded)
+  function isShowingOnlineImages() {
+    return currentDisplayMode === 'online';
+  }
+
+  // Function to remove garment from wardrobe
+  async function removeFromWardrobe(garmentImageData) {
+    try {
+      console.log('🗑️ removeFromWardrobe called with:', garmentImageData.substring(0, 50) + '...');
+      console.log('🔍 Current user:', currentUser);
+      console.log('🔍 Wardrobe items count:', wardrobeItems.length);
+      
+      if (!currentUser || !currentUser.userID) {
+        console.error('❌ No user logged in');
+        return { success: false, message: 'Please sign in to remove garments' };
+      }
+
+      // Find the garment in local cache
+      console.log('🔍 Searching for garment in wardrobe items...');
+      const garmentIndex = wardrobeItems.findIndex(item => {
+        console.log('🔍 Comparing:', item.garment_image.substring(0, 50) + '... vs', garmentImageData.substring(0, 50) + '...');
+        return item.garment_image === garmentImageData;
+      });
+      
+      console.log('🔍 Garment index found:', garmentIndex);
+      
+      if (garmentIndex === -1) {
+        console.error('❌ Garment not found in wardrobe cache');
+        console.log('🔍 Available wardrobe items:');
+        wardrobeItems.forEach((item, index) => {
+          console.log(`  ${index}: ${item.garment_id} - ${item.garment_image.substring(0, 50)}...`);
+        });
+        return { success: false, message: 'Garment not found in wardrobe' };
+      }
+
+      const garmentToRemove = wardrobeItems[garmentIndex];
+      console.log('🗑️ Removing garment from wardrobe:', garmentToRemove.garment_id);
+
+      // Remove from backend database
+      const response = await fetch('http://localhost:5000/api/wardrobe/remove', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: currentUser.userID,
+          garment_id: garmentToRemove.garment_id
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Garment removed from wardrobe database:', garmentToRemove.garment_id);
+        
+        // Remove from local cache
+        wardrobeItems.splice(garmentIndex, 1);
+        
+        return { success: true, garmentId: garmentToRemove.garment_id };
+      } else {
+        const errorData = await response.json();
+        throw new Error(`Failed to remove: ${response.status} - ${errorData.error || 'Unknown error'}`);
+      }
+
+    } catch (error) {
+      console.error('❌ Error removing from wardrobe:', error);
+      return { success: false, message: error.message };
+    }
   }
 
   // Function to handle favorite button click
   async function handleFavoriteClick(event, garmentImageData, garmentType, garmentUrl = null) {
     event.stopPropagation(); // Prevent triggering try-on
     
-    const favoriteBtn = event.currentTarget;
+    // Get the favorite button - use currentTarget first, then target as fallback
+    const favoriteBtn = event.currentTarget || event.target.closest('.favorite-btn');
+    
+    if (!favoriteBtn) {
+      console.error('❌ Could not find favorite button element');
+      return;
+    }
+    
     const heartIcon = favoriteBtn.querySelector('.heart-icon');
     const garmentItem = favoriteBtn.closest('.garment-item-tryon');
+    
+    if (!heartIcon) {
+      console.error('❌ Could not find heart icon element');
+      return;
+    }
     
     // Show loading state
     heartIcon.textContent = '⏳';
     favoriteBtn.disabled = true;
 
     try {
+      console.log('🎯 handleFavoriteClick - Button state check:', {
+        hasFavoritedClass: favoriteBtn.classList.contains('favorited'),
+        buttonClasses: favoriteBtn.className,
+        heartIconText: heartIcon.textContent,
+        isInWardrobe: isGarmentInWardrobe(garmentImageData)
+      });
+      
       if (favoriteBtn.classList.contains('favorited')) {
-        // Remove from wardrobe (implement removeFromWardrobe function if needed)
-        favoriteBtn.classList.remove('favorited');
-        garmentItem.classList.remove('favorited');
-        heartIcon.textContent = '🤍';
-        console.log('💔 Removed from wardrobe');
+        console.log('💔 Attempting to remove from wardrobe...');
+        // Remove from wardrobe
+        const result = await removeFromWardrobe(garmentImageData);
+        
+        if (result.success) {
+          favoriteBtn.classList.remove('favorited');
+          garmentItem.classList.remove('favorited');
+          heartIcon.textContent = '♡';
+          console.log('💔 Removed from wardrobe successfully');
+          
+          // Show success feedback
+          showFavoriteRemoveSuccess();
+        } else {
+          heartIcon.textContent = '♥'; // Keep as favorited if removal failed
+          console.error('Failed to remove:', result.message);
+          // Show error message to user
+          showFavoriteError(result.message);
+        }
       } else {
         // Add to wardrobe
         const result = await saveToWardrobe(garmentImageData, garmentType, garmentUrl);
@@ -477,20 +1187,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (result.success) {
           favoriteBtn.classList.add('favorited');
           garmentItem.classList.add('favorited');
-          heartIcon.textContent = '❤️';
+          heartIcon.textContent = '♥';
           console.log('💖 Added to wardrobe');
           
           // Show success feedback
           showFavoriteSuccess();
         } else {
-          heartIcon.textContent = '🤍';
+          heartIcon.textContent = '♡';
           console.error('Failed to save:', result.message);
           // Show error message to user
           showFavoriteError(result.message);
         }
       }
     } catch (error) {
-      heartIcon.textContent = '🤍';
+      heartIcon.textContent = '♡';
       console.error('❌ Favorite action failed:', error);
       showFavoriteError('Failed to save garment');
     } finally {
@@ -501,6 +1211,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Feedback functions
   function showFavoriteSuccess() {
     console.log('✅ Garment saved to your wardrobe!');
+    // You can implement a toast notification here
+  }
+
+  function showFavoriteRemoveSuccess() {
+    console.log('✅ Garment removed from your wardrobe!');
     // You can implement a toast notification here
   }
 
@@ -518,6 +1233,16 @@ document.addEventListener('DOMContentLoaded', function() {
       if (response.ok) {
         wardrobeItems = await response.json();
         console.log('👗 Loaded wardrobe items:', wardrobeItems.length);
+        
+        // ✨ NEW: Auto-display wardrobe if on non-brand page
+        // Check if this is NOT a brand page after wardrobe loads
+        if (!useGarmentCheckbox && wardrobeItems.length > 0) {
+          console.log('📦 Non-brand page + wardrobe loaded → Auto-displaying wardrobe items');
+          // Small delay to ensure UI is ready
+          setTimeout(() => {
+            loadWardrobeAsFallback();
+          }, 100);
+        }
       }
     } catch (error) {
       console.error('❌ Error loading wardrobe:', error);
@@ -531,112 +1256,64 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (!garmentPreview) return;
     
+    // Set display mode flag to wardrobe
+    currentDisplayMode = 'wardrobe';
+    console.log('🔄 Display mode set to:', currentDisplayMode);
+    
     console.log('👗 Displaying wardrobe items:', wardrobeItems.length);
     
-    // Hide navigation for wardrobe view
-    if (garmentNavigation) {
-      garmentNavigation.style.display = 'none';
-    }
+    // Store all wardrobe items for pagination
+    allWardrobeItems = [...wardrobeItems];
+    currentWardrobePage = 0;
     
-    // Make sure garment preview is visible
-    garmentPreview.style.display = 'grid';
+    // Render the first page of wardrobe items
+    renderWardrobePage();
     
-    let html = '';
-    
-    // Display wardrobe items in a 2x2 grid
-    for (let i = 0; i < 4; i++) {
-      if (i < wardrobeItems.length) {
-        const item = wardrobeItems[i];
-        html += `
-          <div class="upload-placeholder garment-item-tryon favorited" style="position: relative; background: #f0f0f0; cursor: pointer;" data-wardrobe-item="${item.id}">
-            <img src="${item.garment_image}" 
-                 alt="Wardrobe ${item.garment_type}" 
-                 style="width: 100%; height: 100%; object-fit: cover; border-radius: 15px;" />
-            
-            <!-- Favorite Button (already favorited) -->
-            <button class="favorite-btn favorited" type="button" disabled>
-              <span class="heart-icon">❤️</span>
-            </button>
-            
-            <!-- Garment Type Badge -->
-            <div class="garment-type-badge">
-              ${item.garment_type.toUpperCase()}
-            </div>
-            
-            <!-- Wardrobe Item Number -->
-            <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; padding: 2px 4px; border-radius: 2px; font-size: 10px;">
-              ${i + 1}
-            </div>
-            
-            <!-- Try-on Hover Badge -->
-            <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
-            </div>
-            
-            <!-- Wardrobe Badge -->
-            <div style="position: absolute; top: 2px; left: 2px; background: rgba(231, 76, 60, 0.9); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: 600;">
-              Wardrobe
-            </div>
-          </div>
-        `;
-      } else {
-        html += `
-          <div class="upload-placeholder">
-            <span class="upload-text">No more wardrobe items</span>
-          </div>
-        `;
-      }
-    }
-    
-    garmentPreview.innerHTML = html;
-    
-    // Add event listeners for wardrobe items
-    const wardrobeItemsElements = garmentPreview.querySelectorAll('[data-wardrobe-item]');
-    wardrobeItemsElements.forEach(element => {
-      const itemId = element.dataset.wardrobeItem;
-      const wardrobeItem = wardrobeItems.find(item => item.id.toString() === itemId);
-      
-      if (wardrobeItem) {
-        element.addEventListener('click', async () => {
-          console.log('🎯 Try-on clicked for wardrobe item:', wardrobeItem.garment_id);
-          await performTryOn(wardrobeItem.garment_image, wardrobeItem.garment_type);
-        });
-      }
-    });
-    
-    console.log('✅ Wardrobe items displayed successfully');
+    console.log('✅ Wardrobe items display initialized with pagination');
   }
 
-  // Function to toggle between wardrobe and online garments
+  // Function to toggle between wardrobe and page garments
   function toggleGarmentSource() {
     const toggleBtn = document.getElementById('garment-source-toggle');
     const toggleText = document.getElementById('toggle-text');
-    const toggleIcon = document.getElementById('toggle-icon');
     
-    if (!toggleBtn || !toggleText || !toggleIcon) return;
+    console.log('🔄 toggleGarmentSource elements found:', {
+      toggleBtn: !!toggleBtn,
+      toggleText: !!toggleText
+    });
     
-    if (currentGarmentSource === 'online') {
+    if (!toggleBtn || !toggleText) {
+      console.error('❌ Required toggle elements not found');
+      return;
+    }
+    
+    console.log('🔄 toggleGarmentSource called - current source:', currentGarmentSource);
+    
+    if (currentGarmentSource === 'page') {
       // Switch to wardrobe
+      console.log('🌐➡️👗 Switching from page to wardrobe');
       currentGarmentSource = 'wardrobe';
       isShowingWardrobe = true;
-      toggleText.textContent = 'Switch to Online';
-      toggleIcon.textContent = '🌐';
+      toggleText.textContent = 'Show Garments on Page';
       displayWardrobeItems();
       console.log('👗 Switched to wardrobe view');
     } else {
-      // Switch to online
-      currentGarmentSource = 'online';
+      // Switch to page garments
+      console.log('👗➡️🌐 Switching from wardrobe to page');
+      currentGarmentSource = 'page';
       isShowingWardrobe = false;
-      toggleText.textContent = 'Switch to Wardrobe';
-      toggleIcon.textContent = '👗';
+      toggleText.textContent = 'Show Garments in Wardrobe';
       
-      // Show either uploaded garments or extracted images based on what's available
-      if (uploadedGarments && uploadedGarments.length > 0) {
-        displayUploadedGarments();
-      } else if (allExtractedImages && allExtractedImages.length > 0) {
-        renderImagePage();
+      // ALWAYS force fresh extraction when switching back to page view
+      console.log('� Forcing fresh extraction when switching to page view');
+      if (useGarmentCheckbox) {
+        // Clear cache and extract fresh images
+        allExtractedImages = [];
+        currentImagePage = 0;
+        extractGarmentsFromPage();
       } else {
-        // Show empty upload placeholders
+        // Show empty upload placeholders for non-brand pages
+        console.log('⚠️ Not a brand page, showing upload placeholders');
         const garmentPreview = document.getElementById('garment-preview');
         if (garmentPreview) {
           garmentPreview.innerHTML = `
@@ -655,37 +1332,53 @@ document.addEventListener('DOMContentLoaded', function() {
           `;
         }
       }
-      console.log('🌐 Switched to online view');
+      console.log('🌐 Switched to page view');
     }
   }
 
-  // Function to update toggle button state based on user and wardrobe status
+  // Function to update toggle button state based on user and brand page status
   function updateToggleButtonState() {
     const toggleBtn = document.getElementById('garment-source-toggle');
     const toggleText = document.getElementById('toggle-text');
-    const toggleIcon = document.getElementById('toggle-icon');
     
-    if (!toggleBtn || !toggleText || !toggleIcon) return;
+    console.log('🔄 updateToggleButtonState called - useGarmentCheckbox:', useGarmentCheckbox, 'currentUser:', !!currentUser, 'currentGarmentSource:', currentGarmentSource);
+    
+    if (!toggleBtn || !toggleText) {
+      console.log('⚠️ Toggle button elements not found');
+      return;
+    }
+    
+    // Only show toggle button if on a brand page with garments
+    if (!useGarmentCheckbox) {
+      // Not a brand page - hide toggle button
+      console.log('🙈 Hiding toggle button - not a brand page');
+      toggleBtn.style.display = 'none';
+      return;
+    } else {
+      console.log('👁️ Showing toggle button - brand page detected');
+      toggleBtn.style.display = 'inline-flex';
+    }
     
     if (!currentUser || !currentUser.userID) {
       // Guest user or not signed in - disable wardrobe functionality
+      console.log('🚫 Disabling wardrobe functionality - no signed in user');
       toggleBtn.disabled = true;
       toggleBtn.style.opacity = '0.5';
       toggleText.textContent = 'Sign in for Wardrobe';
-      toggleIcon.textContent = '🔒';
       toggleBtn.title = 'Sign in to access your wardrobe';
     } else {
       // Signed in user - enable wardrobe functionality
+      console.log('✅ Enabling wardrobe functionality - user signed in');
       toggleBtn.disabled = false;
       toggleBtn.style.opacity = '1';
-      toggleBtn.title = 'Switch between online garments and your wardrobe';
+      toggleBtn.title = 'Switch between page garments and your wardrobe';
       
       if (currentGarmentSource === 'wardrobe') {
-        toggleText.textContent = 'Switch to Online';
-        toggleIcon.textContent = '🌐';
+        console.log('👗➡️🌐 Setting toggle to show page garments');
+        toggleText.textContent = 'Show Garments on Page';
       } else {
-        toggleText.textContent = 'Switch to Wardrobe';
-        toggleIcon.textContent = '👗';
+        console.log('🌐➡️👗 Setting toggle to show wardrobe garments');
+        toggleText.textContent = 'Show Garments in Wardrobe';  
       }
     }
   }
@@ -693,6 +1386,7 @@ document.addEventListener('DOMContentLoaded', function() {
   async function performTryOn(garmentImageData, garmentType) {
     console.log(`🎯 performTryOn function called globally!`);
     console.log(`🎯 Starting try-on with ${garmentType} garment`);
+    console.log('🤖 Selected AI Model at start of performTryOn:', selectedAIModel);
     console.log('📸 Garment image data:', garmentImageData ? 'Present' : 'Missing');
     
     const tryonResult = document.getElementById('tryon-result');
@@ -705,22 +1399,43 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Get processed avatar from storage
     return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['avatarBgRemovedImg', 'avatarImg'], async function(result) {
-        const avatarData = result.avatarBgRemovedImg || result.avatarImg;
+      console.log('🔍 Fetching avatar from Chrome storage...');
+      
+      chrome.storage.local.get(['avatarBgRemovedImg', 'avatarImg', 'avatarDataUrl'], async function(result) {
+        console.log('🔍 Storage fetch result:', {
+          hasAvatarBgRemovedImg: !!result.avatarBgRemovedImg,
+          hasAvatarImg: !!result.avatarImg,
+          hasAvatarDataUrl: !!result.avatarDataUrl,
+          avatarBgRemovedImgLength: result.avatarBgRemovedImg ? result.avatarBgRemovedImg.length : 0,
+          avatarImgLength: result.avatarImg ? result.avatarImg.length : 0,
+          avatarDataUrlLength: result.avatarDataUrl ? result.avatarDataUrl.length : 0
+        });
+        
+        const avatarData = result.avatarBgRemovedImg || result.avatarDataUrl || result.avatarImg;
+        
+        console.log('🔍 Final avatarData selected:', avatarData ? `${avatarData.length} chars` : 'NULL');
         
         if (!avatarData) {
+          console.error('❌ No avatar found in storage!');
+          console.error('❌ Checked keys: avatarBgRemovedImg, avatarDataUrl, avatarImg');
+          console.error('❌ All were empty or undefined');
           tryonResult.innerHTML = '📷 Please upload your photo first';
           showTryonResult();
           reject('No avatar uploaded');
           return;
         }
         
+        console.log('✅ Avatar data found in storage, proceeding with try-on');
+        
         if (!garmentImageData) {
+          console.error('❌ No garment image data provided');
           tryonResult.innerHTML = '👕 Please select a garment';
           showTryonResult();
           reject('No garment selected');
           return;
         }
+        
+        console.log('✅ Both avatar and garment present, starting try-on process');
         
         // Create close button element instead of inline onclick
         const processingCloseBtn = document.createElement('button');
@@ -729,8 +1444,8 @@ document.addEventListener('DOMContentLoaded', function() {
         processingCloseBtn.addEventListener('click', hideTryonResult);
         
         const processingText = document.createElement('span');
-        processingText.textContent = ' Processing your try-on...';
-        processingText.style.cssText = 'background: #666; color: white; padding: 8px 12px; border-radius: 6px; font-size: 14px; font-weight: 500;';
+        processingText.className = 'tryon-processing-text';
+        processingText.textContent = 'Creating Your Perfect Look...';
         
         tryonResult.innerHTML = '';
         tryonResult.appendChild(processingCloseBtn);
@@ -744,7 +1459,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const garmentBlob = await safeImageToBlob(garmentImageData);
             const garmentForm = new FormData();
             garmentForm.append('file', garmentBlob, 'garment.png');
-            const garmentBgResp = await fetch('http://192.168.178.48:5000/api/remove-bg', {
+            const garmentBgResp = await fetch('http://localhost:5000/api/remove-bg', {
               method: 'POST',
               body: garmentForm,
             });
@@ -760,18 +1475,24 @@ document.addEventListener('DOMContentLoaded', function() {
             garmentBgRemovedBlob = await safeImageToBlob(garmentImageData);
           }
           
-          // Call try-on API
+          // Always use Gemini API for try-ons (regardless of background removal model)
           const formData = new FormData();
+          
           // Use processed avatar image  
           const avatarBlob = await safeImageToBlob(avatarData);
-          formData.append('person_image', avatarBlob, 'avatar.png');
-          formData.append('cloth_image', garmentBgRemovedBlob, 'garment.png');
-          formData.append('cloth_type', garmentType); // Use the garment type (upper/lower)
-          formData.append('num_inference_steps',50);
           
-          console.log('Sending try-on request with garment type:', garmentType);
+          // Use Gemini API for virtual try-on
+          const apiUrl = 'http://localhost:5000/api/tryon-gemini';
+          formData.append('avatar_image', avatarBlob, 'avatar.png');
+          formData.append('garment_image', garmentBgRemovedBlob, 'garment.png');
+          formData.append('garment_type', garmentType === 'upper' ? 'top' : garmentType === 'lower' ? 'bottom' : 'top');
+          formData.append('style_prompt', 'realistic virtual try-on with natural lighting');
           
-          const response = await fetch('http://localhost:5000/api/tryon', {
+          console.log('Sending try-on request to Gemini API (background removal model:', selectedAIModel + '), garment type:', garmentType);
+          console.log('🔗 API URL being used:', apiUrl);
+          console.log('📋 FormData contents:', [...formData.entries()].map(([key, value]) => [key, value instanceof Blob ? `${value.type} blob (${value.size} bytes)` : value]));
+          
+          const response = await fetch(apiUrl, {
             method: 'POST',
             body: formData,
           });
@@ -839,13 +1560,35 @@ document.addEventListener('DOMContentLoaded', function() {
           
         } catch (error) {
           console.error('Try-on error:', error.message || error);
-          if (error.message && error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-            tryonResult.innerHTML = '🔌 Server connection timed out. Please check if the backend server at localhost:5000 is running and accessible.';
+          
+          // Better error handling with specific messages
+          let errorMessage = '❌ Try-on failed';
+          
+          if (error.message && error.message.includes('CORS policy')) {
+            errorMessage = '🚫 Cannot access external image due to browser security policy. Please try uploading the image directly.';
+          } else if (error.message && error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
+            errorMessage = '🔌 Server connection timed out. Please check if the backend server at localhost:5000 is running and accessible.';
           } else if (error.message && error.message.includes('Failed to fetch')) {
-            tryonResult.innerHTML = '🔌 Cannot connect to try-on server. Please verify the server is running at localhost:5000.';
-          } else {
-            tryonResult.innerHTML = `❌ Try-on failed: ${error.message || 'Unknown error'}`;
+            errorMessage = '🔌 Cannot connect to try-on server. Please verify the server is running at localhost:5000.';
+          } else if (error.message && error.message.includes('Proxy fetch failed')) {
+            errorMessage = '🌐 Failed to load external image. The image source may not be accessible.';
+          } else if (error.message) {
+            errorMessage = `❌ Try-on failed: ${error.message}`;
           }
+          
+          const errorCloseBtn = document.createElement('button');
+          errorCloseBtn.className = 'tryon-close-btn';
+          errorCloseBtn.innerHTML = '&times;';
+          errorCloseBtn.addEventListener('click', hideTryonResult);
+          
+          const errorText = document.createElement('div');
+          errorText.innerHTML = errorMessage;
+          errorText.style.cssText = 'color: white; padding: 16px; text-align: center; background: rgba(0,0,0,0.8); border-radius: 8px; margin: 20px; font-size: 14px; line-height: 1.4;';
+          
+          tryonResult.innerHTML = '';
+          tryonResult.appendChild(errorCloseBtn);
+          tryonResult.appendChild(errorText);
+          
           reject(error);
         }
       });
@@ -867,7 +1610,15 @@ document.addEventListener('DOMContentLoaded', function() {
   function hideTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
     const tryonBody = document.querySelector('.tryon-body');
+    
+    // Clean up any blob URLs in the try-on result
     if (tryonResult) {
+      const images = tryonResult.querySelectorAll('img');
+      images.forEach(img => {
+        if (img.src && img.src.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+      });
       tryonResult.style.display = 'none';
     }
     if (tryonBody) {
@@ -879,6 +1630,10 @@ document.addEventListener('DOMContentLoaded', function() {
   function displayImagesInPlaceholders(images) {
     console.log('🖼️ displayImagesInPlaceholders called with:', images.length, 'images');
     
+    // Set display mode flag to online
+    currentDisplayMode = 'online';
+    console.log('🔄 Display mode set to:', currentDisplayMode);
+    
     const garmentPreview = document.getElementById('garment-preview');
     console.log('🎯 garmentPreview element:', garmentPreview);
     
@@ -887,15 +1642,30 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
+    // Check if this is a wardrobe fallback call to prevent infinite loop
+    const isWardrobeFallback = images.some(img => img.isWardrobeFallback);
+    
     // Filter out transparent/placeholder images and take valid ones
     const validImages = images.filter(img => 
       img && img.src && 
       !img.src.includes('transparent-background.png') &&
       !img.src.includes('placeholder') &&
-      img.width > 50 && img.height > 50
+      (img.isWardrobeFallback || (img.width > 50 && img.height > 50)) // Allow wardrobe items through even without size check
     );
     
     console.log('🔍 Filtered valid images:', validImages.length, 'from', images.length, 'total');
+    
+    // ✨ ENHANCED: If no valid images found from URL or page, fallback to database wardrobe
+    // But only if this isn't already a wardrobe fallback call
+    if (validImages.length === 0 && !isWardrobeFallback) {
+      console.log('📦 No valid images from URL/page - loading wardrobe items as fallback...');
+      loadWardrobeAsFallback();
+      return;
+    } else if (validImages.length === 0 && isWardrobeFallback) {
+      console.log('⚠️ Wardrobe fallback also returned no items - showing empty state');
+      showEmptyPlaceholders('No items available. Upload garments or add to wardrobe!');
+      return;
+    }
     
     // Store all images for pagination
     allExtractedImages = validImages;
@@ -903,6 +1673,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Render the current page
     renderImagePage();
+    
+    // Update toggle button state now that we have extracted garments
+    if (validImages.length > 0) {
+      setTimeout(() => {
+        updateToggleButtonState();
+      }, 100);
+    }
   }
 
   // Function to render a specific page of images
@@ -916,22 +1693,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!garmentPreview) return;
     
     // Make sure garment preview is visible
-    garmentPreview.style.display = 'block';
+    garmentPreview.style.display = 'grid';
     
-    const totalPages = Math.ceil(allExtractedImages.length / imagesPerPage);
+    const totalPages = Math.max(1, Math.ceil(allExtractedImages.length / imagesPerPage));
     const startIndex = currentImagePage * imagesPerPage;
     const endIndex = Math.min(startIndex + imagesPerPage, allExtractedImages.length);
     const currentImages = allExtractedImages.slice(startIndex, endIndex);
     
-    console.log(`📋 Rendering page ${currentImagePage + 1}/${totalPages}, showing images ${startIndex + 1}-${endIndex}`);
+    console.log(`📋 Rendering page ${currentImagePage + 1}/${totalPages}, showing images ${startIndex + 1}-${Math.max(1, endIndex)}`);
     
     // Update navigation visibility and state
-    if (garmentNavigation && totalPages > 1) {
+    if (garmentNavigation && totalPages > 1 && allExtractedImages.length > 0) {
       garmentNavigation.style.display = 'flex';
       
       // Update page indicator
       if (pageIndicator) {
-        pageIndicator.textContent = `${currentImagePage + 1} / ${totalPages} (${allExtractedImages.length} total)`;
+        if (allExtractedImages.length > 0) {
+          pageIndicator.textContent = `${currentImagePage + 1} / ${totalPages} (${allExtractedImages.length} total)`;
+        } else {
+          pageIndicator.textContent = 'No images found';
+        }
       }
       
       // Update button states
@@ -947,7 +1728,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Build image grid
-    let gridHtml = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">';
+    let gridHtml = '';
     for (let i = 0; i < imagesPerPage; i++) {
       if (i < currentImages.length) {
         const imgSrc = currentImages[i].src;
@@ -955,8 +1736,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const isInWardrobe = isGarmentInWardrobe(imgSrc);
         console.log(`🖼️ Adding image ${imageNumber}:`, imgSrc);
         
+        const isSelected = selectedGarments.some(g => g.src === imgSrc);
+        
         gridHtml += `
-          <div class="upload-placeholder garment-item-tryon ${isInWardrobe ? 'favorited' : ''}" style="position: relative; background: #f0f0f0; cursor: pointer;" data-image-src="${imgSrc}">
+          <div class="upload-placeholder garment-item-tryon ${isInWardrobe ? 'favorited' : ''} ${isSelected ? 'selected' : ''}" style="position: relative; background: #f0f0f0; cursor: pointer;" data-image-src="${imgSrc}">
             <img src="${imgSrc}" 
                  alt="Garment ${imageNumber}" 
                  style="width: 100%; height: 100%; object-fit: cover; border-radius: 15px;" 
@@ -964,9 +1747,16 @@ document.addEventListener('DOMContentLoaded', function() {
                  onload="console.log('✅ Image loaded successfully:', this.src);" />
             <span class="upload-text" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,0,0,0.8); color: white; padding: 4px; border-radius: 4px; font-size: 10px;">Failed</span>
             
+            <!-- Checkbox for Multi-Selection -->
+            <div class="garment-checkbox-container" style="position: absolute; top: 8px; left: 8px; z-index: 10;">
+              <input type="checkbox" class="garment-checkbox" ${isSelected ? 'checked' : ''} 
+                     style="width: 20px; height: 20px; cursor: pointer; accent-color: #4CAF50;" 
+                     data-garment-src="${imgSrc}" />
+            </div>
+            
             <!-- Favorite Button -->
             <button class="favorite-btn ${isInWardrobe ? 'favorited' : ''}" type="button">
-              <span class="heart-icon">${isInWardrobe ? '❤️' : '🤍'}</span>
+              <span class="heart-icon">${isInWardrobe ? '♥' : '♡'}</span>
             </button>
             
             <!-- Image Number Badge -->
@@ -976,11 +1766,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Try-on Hover Badge -->
             <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
+              Try On
             </div>
             
-            <!-- Favorite Status -->
-            <div class="favorite-status">In Wardrobe</div>
           </div>
         `;
       } else {
@@ -991,12 +1779,11 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
       }
     }
-    gridHtml += '</div>';
     
     // Set only the grid content
     garmentPreview.innerHTML = gridHtml;
     
-    // Add event listeners for try-on functionality and favorite buttons
+    // Add event listeners for try-on functionality, checkboxes, and favorite buttons
     const tryonItems = garmentPreview.querySelectorAll('.garment-item-tryon');
     tryonItems.forEach((item, index) => {
       const actualIndex = startIndex + index;
@@ -1012,20 +1799,132 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         }
         
-        // Add favorite button listener
-        const favoriteBtn = item.querySelector('.favorite-btn');
-        if (favoriteBtn) {
-          favoriteBtn.addEventListener('click', async (event) => {
-            const garmentType = await detectGarmentTypeFromURL();
-            await handleFavoriteClick(event, imgSrc, garmentType, window.location.href);
+        // Add checkbox change listener
+        const checkbox = item.querySelector('.garment-checkbox');
+        if (checkbox) {
+          checkbox.addEventListener('change', (e) => {
+            e.stopPropagation(); // Prevent triggering try-on
+            handleGarmentCheckboxChange(e.target.checked, imgSrc);
           });
         }
+        
+        // Favorite button handling is now done via delegated event listener
+        // No need for direct event listeners here
       }
     });
+    
+    // Update multi-garment try-on button visibility
+    updateMultiTryOnButton();
     
     console.log('✅ Image page rendered successfully with', tryonItems.length, 'try-on items');
     
     // Force a reflow to ensure images are displayed
+    garmentPreview.offsetHeight;
+    console.log('🔄 Forced reflow completed');
+  }
+
+  // Function to render a specific page of wardrobe items
+  function renderWardrobePage() {
+    const garmentPreview = document.getElementById('garment-preview');
+    const garmentNavigation = document.getElementById('garment-navigation');
+    const pageIndicator = document.getElementById('page-indicator');
+    const prevBtn = document.getElementById('prev-images-btn');
+    const nextBtn = document.getElementById('next-images-btn');
+    
+    if (!garmentPreview) return;
+    
+    // Make sure garment preview is visible
+    garmentPreview.style.display = 'grid';
+    
+    const totalPages = Math.ceil(allWardrobeItems.length / wardrobeItemsPerPage);
+    const startIndex = currentWardrobePage * wardrobeItemsPerPage;
+    const endIndex = Math.min(startIndex + wardrobeItemsPerPage, allWardrobeItems.length);
+    const currentItems = allWardrobeItems.slice(startIndex, endIndex);
+    
+    console.log(`👗 Rendering wardrobe page ${currentWardrobePage + 1}/${totalPages}, showing items ${startIndex + 1}-${endIndex}`);
+    
+    // Update navigation visibility and state
+    if (garmentNavigation && totalPages > 1) {
+      garmentNavigation.style.display = 'flex';
+      
+      // Update page indicator
+      if (pageIndicator) {
+        pageIndicator.textContent = `${currentWardrobePage + 1} / ${totalPages} (${allWardrobeItems.length} wardrobe items)`;
+      }
+      
+      // Update button states
+      if (prevBtn) {
+        prevBtn.disabled = currentWardrobePage === 0;
+      }
+      
+      if (nextBtn) {
+        nextBtn.disabled = currentWardrobePage >= totalPages - 1;
+      }
+    } else if (garmentNavigation) {
+      garmentNavigation.style.display = 'none';
+    }
+    
+    // Build wardrobe item grid using unified garment item structure
+    let gridHtml = '';
+    for (let i = 0; i < wardrobeItemsPerPage; i++) {
+      if (i < currentItems.length) {
+        const item = currentItems[i];
+        const itemNumber = startIndex + i + 1;
+        
+        // Use the unified garment item HTML generator for wardrobe items
+        gridHtml += createGarmentItemHTML({
+          src: item.garment_image,
+          title: item.garment_type.toUpperCase(),
+          price: '', // Wardrobe items don't have price
+          store: 'Wardrobe',
+          isFavorited: true, // All wardrobe items are favorited by definition
+          additionalClasses: 'wardrobe-item',
+          source: 'wardrobe',
+          itemNumber: itemNumber,
+          wardrobeId: item.id
+        });
+      } else {
+        gridHtml += `
+          <div class="upload-placeholder">
+            <span class="upload-text">No more wardrobe items</span>
+          </div>
+        `;
+      }
+    }
+    
+    // Set the grid content
+    garmentPreview.innerHTML = gridHtml;
+    
+    // Add event listeners for wardrobe items
+    const wardrobeItemsElements = garmentPreview.querySelectorAll('[data-wardrobe-item]');
+    wardrobeItemsElements.forEach(element => {
+      const itemId = element.dataset.wardrobeItem;
+      const wardrobeItem = allWardrobeItems.find(item => item.id.toString() === itemId);
+      
+      if (wardrobeItem) {
+        // Add try-on click listener to the image
+        const img = element.querySelector('img');
+        if (img) {
+          img.addEventListener('click', async (e) => {
+            // Don't trigger if clicking on favorite button
+            if (e.target.classList.contains('favorite-btn') || 
+                e.target.classList.contains('heart-icon')) {
+              return;
+            }
+            
+            console.log('🎯 Try-on clicked for wardrobe item:', wardrobeItem.garment_id);
+            await performTryOn(wardrobeItem.garment_image, wardrobeItem.garment_type);
+          });
+        }
+        
+        // Favorite button handling is now done via delegated event listener
+        // No need for direct event listeners here
+      }
+    });
+    
+    console.log('✅ Wardrobe page rendered successfully with', wardrobeItemsElements.length, 'wardrobe items');
+    
+    // Force a reflow to ensure items are displayed
     garmentPreview.offsetHeight;
     console.log('🔄 Forced reflow completed');
   }
@@ -1165,33 +2064,80 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Garment Source Toggle Button Handler
   const garmentSourceToggle = document.getElementById('garment-source-toggle');
+  console.log('🔍 Toggle button found:', !!garmentSourceToggle);
+  
   if (garmentSourceToggle) {
     garmentSourceToggle.addEventListener('click', function() {
-      // Only allow toggle if user is signed in and has wardrobe items
-      if (!currentUser || !currentUser.userID) {
-        console.log('⚠️ Please sign in to access wardrobe');
-        // You could show a notification here
+      console.log('🎯 Toggle button clicked! Current state:', {
+        useGarmentCheckbox,
+        currentUser: !!currentUser,
+        currentUserID: currentUser?.userID,
+        currentGarmentSource,
+        wardrobeItemsLength: wardrobeItems.length
+      });
+      
+      // Only show toggle on brand pages
+      if (!useGarmentCheckbox) {
+        console.log('⚠️ Toggle only available on brand pages - useGarmentCheckbox is false');
+        alert('Toggle only available on brand pages with garments');
         return;
       }
       
-      if (currentGarmentSource === 'wardrobe' || wardrobeItems.length === 0) {
-        // Load wardrobe if switching to wardrobe mode and items not loaded
-        if (currentGarmentSource === 'online' && wardrobeItems.length === 0) {
+      // Only allow wardrobe toggle if user is signed in
+      if (!currentUser || !currentUser.userID) {
+        console.log('⚠️ Please sign in to access wardrobe - currentUser:', currentUser);
+        alert('Please sign in to access your wardrobe');
+        return;
+      }
+      
+      console.log('✅ All checks passed, proceeding with toggle');
+      
+      if (currentGarmentSource === 'page') {
+        // Switch to wardrobe - load wardrobe items if not loaded
+        console.log('🌐➡️👗 Switching to wardrobe, wardrobeItems.length:', wardrobeItems.length);
+        if (wardrobeItems.length === 0) {
+          console.log('📥 Loading wardrobe items first...');
           loadUserWardrobe().then(() => {
-            if (wardrobeItems.length > 0) {
-              toggleGarmentSource();
-            } else {
-              console.log('ℹ️ No wardrobe items found');
-              // You could show a notification here
-            }
+            console.log('✅ Wardrobe loaded, calling toggleGarmentSource');
+            toggleGarmentSource();
           });
         } else {
+          console.log('✅ Wardrobe already loaded, calling toggleGarmentSource');
           toggleGarmentSource();
         }
       } else {
+        // Switch back to page garments
+        console.log('👗➡️🌐 Switching to page garments');
         toggleGarmentSource();
       }
     });
+  } else {
+    console.error('❌ Toggle button not found in DOM!');
+  }
+
+  // AI Model Selection Dropdown Handler
+  const aiModelSelect = document.getElementById('ai-model-select');
+  console.log('🤖 AI Model selector found:', !!aiModelSelect);
+  
+  if (aiModelSelect) {
+    aiModelSelect.addEventListener('change', function() {
+      selectedAIModel = this.value;
+      console.log('🤖 AI Model selected:', selectedAIModel);
+      
+      // Visual feedback for model selection
+      if (selectedAIModel === 'gemini') {
+        this.style.borderColor = '#4285F4'; // Google blue
+        this.style.backgroundColor = 'rgba(66, 133, 244, 0.1)';
+      } else {
+        this.style.borderColor = '#003500';
+        this.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+      }
+    });
+    
+    // Set initial value
+    selectedAIModel = aiModelSelect.value;
+  } else {
+    console.error('❌ AI Model selector not found in DOM!');
   }
 
   // Enter key handler for sign-in
@@ -1497,27 +2443,57 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   async function processAvatarUpload(imgData) {
-    console.log('processAvatarUpload called');
-    chrome.storage.local.set({ avatarImg: imgData });
+    console.log('🔄 processAvatarUpload called');
+    
+    // Store avatar with callback to ensure it's saved before proceeding
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ avatarImg: imgData }, () => {
+        console.log('✅ Initial avatar saved to storage');
+        resolve();
+      });
+    });
+    
     avatarFile = imgData;
     
     try {
       // Remove background from avatar
       const avatarBlob = await fetch(imgData).then(res => res.blob());
       const avatarForm = new FormData();
-      avatarForm.append('file', avatarBlob, 'avatar.png');
       
-      const avatarBgResp = await fetch('http://localhost:5000/api/remove-bg', {
+      // Choose API endpoint based on selected AI model
+      let bgRemovalEndpoint;
+      let formFieldName;
+      
+      if (selectedAIModel === 'rembg') {
+        bgRemovalEndpoint = 'http://localhost:5000/api/remove-bg-rembg';
+        formFieldName = 'image';
+        avatarForm.append('image', avatarBlob, 'avatar.png');
+        console.log('🤖 Using Rembg model for background removal');
+      } else if (selectedAIModel === 'gemini') {
+        bgRemovalEndpoint = 'http://localhost:5000/api/remove-person-bg';
+        formFieldName = 'image';
+        avatarForm.append('image', avatarBlob, 'avatar.png');
+        console.log('🤖 Using Gemini model for background removal');
+      } else {
+        bgRemovalEndpoint = 'http://localhost:5000/api/remove-bg';
+        formFieldName = 'file';
+        avatarForm.append('file', avatarBlob, 'avatar.png');
+        console.log('🤖 Using Garmash model for background removal');
+      }
+      
+      const avatarBgResp = await fetch(bgRemovalEndpoint, {
         method: 'POST',
         body: avatarForm,
       });
       
       if (!avatarBgResp.ok) {
+        const errorText = await avatarBgResp.text();
+        console.error(`❌ Background removal failed (${selectedAIModel}):`, errorText);
         renderAvatarPreview();
         if (avatarPreview) {
           const cameraOverlay = avatarPreview.querySelector('.avatar-upload-camera-overlay');
           if (cameraOverlay) {
-            cameraOverlay.insertAdjacentHTML('beforebegin', '❌ Failed to process avatar');
+            cameraOverlay.insertAdjacentHTML('beforebegin', `❌ Failed to process avatar with ${selectedAIModel}`);
           }
         }
         return;
@@ -1527,30 +2503,63 @@ document.addEventListener('DOMContentLoaded', function() {
       const bgReader = new FileReader();
       
       bgReader.onloadend = async function() {
-        renderAvatarPreview(bgReader.result);
-        chrome.storage.local.set({ avatarBgRemovedImg: bgReader.result });
-        avatarFile = bgReader.result;
+        const processedAvatarData = bgReader.result;
+        renderAvatarPreview(processedAvatarData);
+        
+        // Update ALL avatar storage keys to ensure consistency with async/await
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ 
+            avatarBgRemovedImg: processedAvatarData,
+            avatarDataUrl: processedAvatarData,
+            avatarImg: processedAvatarData
+          }, () => {
+            console.log('✅ Avatar stored in ALL storage keys:', {
+              avatarBgRemovedImg: processedAvatarData.length,
+              avatarDataUrl: processedAvatarData.length,
+              avatarImg: processedAvatarData.length
+            });
+            resolve();
+          });
+        });
+        
+        avatarFile = processedAvatarData;
+        
+        console.log(`✅ Avatar background removed successfully using ${selectedAIModel}`);
+        console.log('✅ avatarFile variable set, length:', processedAvatarData.length);
+        
+        // Verify storage immediately after setting
+        chrome.storage.local.get(['avatarBgRemovedImg', 'avatarDataUrl', 'avatarImg'], (verifyResult) => {
+          console.log('🔍 Verification - Avatar in storage:', {
+            avatarBgRemovedImg: verifyResult.avatarBgRemovedImg ? verifyResult.avatarBgRemovedImg.length : 'NOT SET',
+            avatarDataUrl: verifyResult.avatarDataUrl ? verifyResult.avatarDataUrl.length : 'NOT SET',
+            avatarImg: verifyResult.avatarImg ? verifyResult.avatarImg.length : 'NOT SET'
+          });
+        });
         
         // Save processed avatar to database
         chrome.storage.local.get(['userId'], async function(result) {
           if (result.userId) {
             console.log('💾 Saving processed avatar to database');
-            const saved = await saveAvatarToDatabase(bgReader.result, result.userId);
+            const saved = await saveAvatarToDatabase(processedAvatarData, result.userId);
             if (saved) {
-              console.log('✅ Processed avatar saved to database');
+              console.log('✅ Processed avatar saved to database and local storage updated');
+            } else {
+              console.error('❌ Failed to save avatar to database');
             }
+          } else {
+            console.log('ℹ️ No user logged in - avatar saved to local storage only');
           }
         });
       };
       
       bgReader.readAsDataURL(avatarBgRemovedBlob);
     } catch (error) {
-      console.error('Error processing avatar:', error.message || error);
+      console.error(`Error processing avatar with ${selectedAIModel}:`, error.message || error);
       renderAvatarPreview();
       if (avatarPreview) {
         const cameraOverlay = avatarPreview.querySelector('.avatar-upload-camera-overlay');
         if (cameraOverlay) {
-          cameraOverlay.insertAdjacentHTML('beforebegin', '❌ Failed to process avatar');
+          cameraOverlay.insertAdjacentHTML('beforebegin', `❌ Failed to process avatar with ${selectedAIModel}`);
         }
       }
     }
@@ -1600,19 +2609,61 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== NAVIGATION EVENT LISTENERS =====
     if (prevImagesBtn) {
       prevImagesBtn.addEventListener('click', () => {
-        if (currentImagePage > 0) {
-          currentImagePage--;
-          renderImagePage();
+        console.log('🔙 Previous button clicked - currentDisplayMode:', getCurrentDisplayMode());
+        
+        if (getCurrentDisplayMode() === 'wardrobe') {
+          // Handle wardrobe pagination
+          if (currentWardrobePage > 0) {
+            currentWardrobePage--;
+            console.log('📖 Going to wardrobe page:', currentWardrobePage + 1);
+            renderWardrobePage();
+          }
+        } else if (getCurrentDisplayMode() === 'explorer') {
+          // Handle explorer results pagination
+          if (currentImagePage > 0) {
+            currentImagePage--;
+            console.log('📖 Going to explorer results page:', currentImagePage + 1);
+            renderExplorerResults();
+          }
+        } else {
+          // Handle online images pagination
+          if (currentImagePage > 0) {
+            currentImagePage--;
+            console.log('📖 Going to image page:', currentImagePage + 1);
+            renderImagePage();
+          }
         }
       });
     }
 
     if (nextImagesBtn) {
       nextImagesBtn.addEventListener('click', () => {
-        const totalPages = Math.ceil(allExtractedImages.length / imagesPerPage);
-        if (currentImagePage < totalPages - 1) {
-          currentImagePage++;
-          renderImagePage();
+        console.log('▶️ Next button clicked - currentDisplayMode:', getCurrentDisplayMode());
+        
+        if (getCurrentDisplayMode() === 'wardrobe') {
+          // Handle wardrobe pagination
+          const totalPages = Math.ceil(allWardrobeItems.length / wardrobeItemsPerPage);
+          if (currentWardrobePage < totalPages - 1) {
+            currentWardrobePage++;
+            console.log('📖 Going to wardrobe page:', currentWardrobePage + 1);
+            renderWardrobePage();
+          }
+        } else if (getCurrentDisplayMode() === 'explorer') {
+          // Handle explorer results pagination
+          const totalPages = Math.ceil(allExtractedImages.length / imagesPerPage);
+          if (currentImagePage < totalPages - 1) {
+            currentImagePage++;
+            console.log('📖 Going to explorer results page:', currentImagePage + 1);
+            renderExplorerResults();
+          }
+        } else {
+          // Handle online images pagination
+          const totalPages = Math.ceil(allExtractedImages.length / imagesPerPage);
+          if (currentImagePage < totalPages - 1) {
+            currentImagePage++;
+            console.log('📖 Going to image page:', currentImagePage + 1);
+            renderImagePage();
+          }
         }
       });
     }
@@ -1714,50 +2765,82 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
   // ===== INITIALIZATION - LOAD STORED DATA =====
-  // Load avatar from database if user is logged in, otherwise load from local storage
+  // Always load avatar from database if user is logged in to ensure we have the latest version
   chrome.storage.local.get(['userId', 'avatarBgRemovedImg', 'avatarImg', 'avatarDataUrl'], async function(result) {
-    // Check if we have avatar data from sign-in first
-    if (result.avatarDataUrl) {
-      console.log('🖼️ Loading avatar from sign-in data');
-      renderAvatarPreview(result.avatarDataUrl);
-      // Also store it in the legacy key for consistency
-      chrome.storage.local.set({ avatarBgRemovedImg: result.avatarDataUrl });
-    } else if (result.userId && !result.avatarBgRemovedImg && !result.avatarImg) {
-      console.log('🔄 No local avatar found, trying to load from database for user:', result.userId);
-      // Try to load avatar from database
-      const databaseAvatar = await loadAvatarFromDatabase(result.userId);
-      if (databaseAvatar) {
-        console.log('✅ Avatar loaded from database, converting to data URL');
-        // Convert blob URL to data URL for consistency
-        try {
+    console.log('🚀 INITIALIZATION: Loading avatar data');
+    console.log('🔍 Initial storage state:', {
+      userId: result.userId,
+      hasAvatarBgRemovedImg: !!result.avatarBgRemovedImg,
+      hasAvatarImg: !!result.avatarImg,
+      hasAvatarDataUrl: !!result.avatarDataUrl
+    });
+    
+    // If user is logged in, ALWAYS fetch the latest avatar from database
+    if (result.userId) {
+      console.log('🔄 User logged in - fetching latest avatar from database for user:', result.userId);
+      try {
+        const databaseAvatar = await loadAvatarFromDatabase(result.userId);
+        if (databaseAvatar) {
+          console.log('✅ Latest avatar loaded from database, converting to data URL');
+          // Convert blob URL to data URL for consistency
           const response = await fetch(databaseAvatar);
           const blob = await response.blob();
           const reader = new FileReader();
           reader.onload = function(e) {
             const imageData = e.target.result;
+            
+            console.log('📦 Storing database avatar to local storage, length:', imageData.length);
+            
+            // Update ALL avatar storage keys to ensure consistency
             chrome.storage.local.set({ 
               avatarBgRemovedImg: imageData,
-              avatarDataUrl: imageData 
+              avatarDataUrl: imageData,
+              avatarImg: imageData
+            }, () => {
+              renderAvatarPreview(imageData);
+              console.log('✅ Latest database avatar synchronized to local storage and displayed');
+              
+              // Verify it was stored
+              chrome.storage.local.get(['avatarBgRemovedImg', 'avatarDataUrl', 'avatarImg'], (verifyResult) => {
+                console.log('🔍 VERIFICATION after database load:', {
+                  avatarBgRemovedImg: verifyResult.avatarBgRemovedImg ? verifyResult.avatarBgRemovedImg.length : 'NOT SET',
+                  avatarDataUrl: verifyResult.avatarDataUrl ? verifyResult.avatarDataUrl.length : 'NOT SET',
+                  avatarImg: verifyResult.avatarImg ? verifyResult.avatarImg.length : 'NOT SET'
+                });
+              });
             });
-            renderAvatarPreview(imageData);
-            console.log('✅ Database avatar synchronized to local storage');
           };
           reader.readAsDataURL(blob);
-        } catch (error) {
-          console.error('❌ Error converting database avatar:', error);
-          renderAvatarPreview();
+        } else {
+          console.log('ℹ️ No avatar found in database for this user');
+          // If no database avatar, check local storage as fallback
+          const avatarData = result.avatarDataUrl || result.avatarBgRemovedImg || result.avatarImg;
+          if (avatarData) {
+            console.log('✅ Using local storage avatar as fallback, length:', avatarData.length);
+          } else {
+            console.log('⚠️ No avatar in database OR local storage');
+          }
+          renderAvatarPreview(avatarData);
         }
-      } else {
-        console.log('ℹ️ No avatar found in database');
-        renderAvatarPreview();
+      } catch (error) {
+        console.error('❌ Error loading avatar from database:', error);
+        // Fallback to local storage on error
+        const avatarData = result.avatarDataUrl || result.avatarBgRemovedImg || result.avatarImg;
+        if (avatarData) {
+          console.log('✅ Using local storage avatar after database error, length:', avatarData.length);
+        } else {
+          console.log('⚠️ No avatar in local storage after database error');
+        }
+        renderAvatarPreview(avatarData);
       }
     } else {
-      // Use local storage avatar if available
-      const avatarData = result.avatarBgRemovedImg || result.avatarImg;
-      console.log('Loading stored avatar data:', avatarData ? 'found locally' : 'none');
+      // No user logged in - use local storage avatar if available
+      const avatarData = result.avatarDataUrl || result.avatarBgRemovedImg || result.avatarImg;
+      console.log('👤 No user logged in, loading from local storage:', avatarData ? `found (${avatarData.length} chars)` : 'none');
       renderAvatarPreview(avatarData);
       // Sync to avatarDataUrl if not present
       if (avatarData && !result.avatarDataUrl) {
+        console.log('🔄 Syncing avatar to avatarDataUrl key');
         chrome.storage.local.set({ avatarDataUrl: avatarData });
       }
     }
@@ -1878,6 +2961,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function displayUploadedGarments() {
     console.log('🎨 displayUploadedGarments called');
     console.log('📦 uploadedGarments array:', uploadedGarments);
+    
+    // Set display mode flag to online (uploaded garments are considered online content)
+    currentDisplayMode = 'online';
+    console.log('🔄 Display mode set to:', currentDisplayMode);
+    
     console.log('🔍 garmentPreview element:', garmentPreview);
     
     if (!garmentPreview) {
@@ -1890,37 +2978,27 @@ document.addEventListener('DOMContentLoaded', function() {
     
     let html = '';
     
-    // Display uploaded garments in order
+    // Display uploaded garments using unified garment item structure
     for (let i = 0; i < 4; i++) {
       if (i < uploadedGarments.length) {
         const garment = uploadedGarments[i];
         const isInWardrobe = isGarmentInWardrobe(garment.imgData);
-        html += `
-          <div class="upload-placeholder uploaded-garment garment-item-tryon ${isInWardrobe ? 'favorited' : ''}" data-garment-index="${i}" style="position: relative; cursor: pointer;">
-            <img src="${garment.imgData}" alt="${garment.garmentType} Garment" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" />
-            
-            <!-- Favorite Button -->
-            <button class="favorite-btn ${isInWardrobe ? 'favorited' : ''}" type="button">
-              <span class="heart-icon">${isInWardrobe ? '❤️' : '🤍'}</span>
-            </button>
-            
-            <button class="garment-remove-btn" data-remove-index="${i}" title="Remove garment">
-              ×
-            </button>
-            <div class="garment-type-badge">
-              ${garment.garmentType}
-            </div>
-            <div class="garment-number-badge">
-              ${i + 1}
-            </div>
-            <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
-            </div>
-            
-            <!-- Favorite Status -->
-            <div class="favorite-status">In Wardrobe</div>
-          </div>
-        `;
+        
+        // Use the unified garment item HTML generator
+        html += createGarmentItemHTML({
+          src: garment.imgData,
+          alt: `${garment.garmentType} Garment`,
+          title: garment.garmentType,
+          type: garment.garmentType,
+          isFavorited: isInWardrobe,
+          source: 'uploaded',
+          index: i,
+          showRemoveButton: true,
+          additionalClasses: 'uploaded-garment',
+          extraData: {
+            'garment-index': i
+          }
+        });
       } else {
 
       }
@@ -1950,13 +3028,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const index = parseInt(item.dataset.garmentIndex);
       const selectedGarment = uploadedGarments[index];
       
-      // Add favorite button listener
-      const favoriteBtn = item.querySelector('.favorite-btn');
-      if (favoriteBtn) {
-        favoriteBtn.addEventListener('click', (event) => {
-          handleFavoriteClick(event, selectedGarment.imgData, selectedGarment.garmentType, null);
-        });
-      }
+      // Favorite button handling is now done via delegated event listener
+      // No need for direct event listeners here
       
       item.addEventListener('click', async (e) => {
         // Don't trigger if clicking on remove button or favorite button
@@ -2097,7 +3170,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="selected-garment-preview" style="width:100%;height:80px;background:#f5f5f5;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
             <span style="color:#666;">⏳ Scanning page for garments...</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div>
             <div class="upload-placeholder loading"><span class="upload-text">Loading...</span></div>
             <div class="upload-placeholder loading"><span class="upload-text">Loading...</span></div>
             <div class="upload-placeholder loading"><span class="upload-text">Loading...</span></div>
@@ -2112,7 +3185,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="selected-garment-preview" style="width:100%;height:80px;background:#f5f5f5;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
             <span style="color:#666;">👕 Select a garment below</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div>
         `;
         
         for (let i = 0; i < 4; i++) {
@@ -2166,7 +3239,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="selected-garment-preview" style="width:100%;height:80px;background:#fee;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
             <span style="color:#c33;">❌ ${errorMessage}</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div>
             <div class="upload-placeholder"><span class="upload-text">Error</span></div>
             <div class="upload-placeholder"><span class="upload-text">Error</span></div>
             <div class="upload-placeholder"><span class="upload-text">Error</span></div>
@@ -2181,7 +3254,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="selected-garment-preview" style="width:100%;height:80px;background:#fef9e7;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
             <span style="color:#856404;">👕 ${emptyMessage}</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div>
             <div class="upload-placeholder"><span class="upload-text">Empty</span></div>
             <div class="upload-placeholder"><span class="upload-text">Empty</span></div>
             <div class="upload-placeholder"><span class="upload-text">Empty</span></div>
@@ -2193,7 +3266,7 @@ document.addEventListener('DOMContentLoaded', function() {
       case 'default':
       default:
         garmentPreview.innerHTML = `
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div>
             <div class="upload-placeholder"><span class="upload-text">Garment</span></div>
             <div class="upload-placeholder"><span class="upload-text">Garment</span></div>
             <div class="upload-placeholder"><span class="upload-text">Garment</span></div>
@@ -2289,15 +3362,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // Refresh button logic (if it exists separately)
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
-      console.log('Refresh button clicked - resetting current session');
+      console.log('🔄 Refresh button clicked - forcing fresh extraction and resetting session');
       
-      if (confirm('Reset current session? This will clear uploaded images but keep you signed in.')) {
-        console.log('User confirmed refresh');
+      if (confirm('Refresh page content? This will extract fresh images from the current page and clear uploaded images.')) {
+        console.log('✅ User confirmed refresh');
         
-        // Reset avatar data
-        // renderAvatarPreview();
-        // avatarFile = null;
-        // avatarBgRemovedBlob = null;
+        // Clear extracted images cache for fresh extraction
+        allExtractedImages = [];
+        currentImagePage = 0;
         
         // Reset garment data
         uploadedGarments = [];
@@ -2315,9 +3387,6 @@ document.addEventListener('DOMContentLoaded', function() {
           tryonBody.style.display = 'flex';
         }
         
-        // Reset useGarmentCheckbox variable
-        useGarmentCheckbox = false;
-        
         // Clear image storage but keep user session
         chrome.storage.local.remove([
           'avatarImg', 
@@ -2327,13 +3396,490 @@ document.addEventListener('DOMContentLoaded', function() {
           'garmentType'
         ]);
         
-        console.log('Session refresh completed');
+        // Force fresh brand check and extraction
+        console.log('🔄 Starting fresh brand check and extraction...');
+        initializeBrandCheck().then(() => {
+          console.log('✅ Fresh extraction completed');
+        });
+        
+        console.log('✅ Session refresh completed');
       } else {
-        console.log('User cancelled refresh');
+        console.log('❌ User cancelled refresh');
       }
     });
   } else {
     console.log('Note: refresh-btn element not found');
+  }
+
+  // ===== CHAT INTERFACE FUNCTIONALITY =====
+  const chatButton = document.getElementById('ai-chat-btn');
+  const chatContainer = document.getElementById('ai-chat-interface'); // Changed from .ai-chat-container
+  const chatMessages = document.querySelector('.chat-messages');
+  const chatInput = document.querySelector('.chat-input');
+  const sendButton = document.getElementById('send-chat-btn'); // Changed from .send-button
+
+  // Debug: Log if chat elements are found
+  console.log('🔍 Chat elements found:', {
+    chatButton: !!chatButton,
+    chatContainer: !!chatContainer,
+    chatMessages: !!chatMessages,
+    chatInput: !!chatInput,
+    sendButton: !!sendButton
+  });
+
+  // Toggle chat interface visibility
+  if (chatButton) {
+    chatButton.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (chatContainer) {
+        const isVisible = chatContainer.style.display !== 'none';
+        if (isVisible) {
+          chatContainer.style.display = 'none';
+          chatButton.classList.remove('active');
+          console.log('💬 Chat interface hidden');
+        } else {
+          chatContainer.style.display = 'block';
+          chatButton.classList.add('active');
+          // Reset conversation state for new session
+          resetConversationState();
+          hideViewResultsButton();
+          console.log('💬 Chat interface shown - state reset');
+          // Focus the input when showing chat
+          if (chatInput) {
+            setTimeout(() => chatInput.focus(), 100);
+          }
+        }
+      }
+    });
+  }
+
+  // Close chat button handler
+  const closeChatBtn = document.getElementById('close-chat-btn');
+  if (closeChatBtn) {
+    closeChatBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (chatContainer) {
+        chatContainer.style.display = 'none';
+        chatButton.classList.remove('active');
+        // Hide view results button when closing chat
+        hideViewResultsButton();
+        console.log('💬 Chat interface closed via close button');
+      }
+    });
+  }
+
+  // Send message functionality
+  function sendChatMessage() {
+    if (!chatInput || !chatMessages || !sendButton) {
+      console.log('❌ Chat elements not found');
+      return;
+    }
+
+    const message = chatInput.value.trim();
+    if (!message) {
+      return;
+    }
+
+    // Hide the view results button when starting a new search
+    hideViewResultsButton();
+
+    // Disable input and button while processing
+    chatInput.disabled = true;
+    sendButton.disabled = true;
+    sendButton.textContent = 'Sending...';
+
+    // Add user message to chat
+    addChatMessage(message, 'user');
+    chatInput.value = '';
+
+    // Show loading indicator
+    const loadingElement = addChatLoadingIndicator();
+
+    // Send message to backend
+    processChatMessage(message)
+      .then(response => {
+        // Remove loading indicator
+        if (loadingElement && loadingElement.parentNode) {
+          loadingElement.parentNode.removeChild(loadingElement);
+        }
+        
+        // Add AI response
+        addChatMessage(response, 'system');
+      })
+      .catch(error => {
+        console.error('❌ Chat error:', error);
+        
+        // Remove loading indicator
+        if (loadingElement && loadingElement.parentNode) {
+          loadingElement.parentNode.removeChild(loadingElement);
+        }
+        
+        // Show error message
+        addChatMessage('Sorry, I encountered an error processing your request. Please try again.', 'system');
+      })
+      .finally(() => {
+        // Re-enable input and button
+        chatInput.disabled = false;
+        sendButton.disabled = false;
+        sendButton.textContent = 'Send';
+        chatInput.focus();
+      });
+  }
+
+  // Add message to chat interface
+  function addChatMessage(message, type) {
+    if (!chatMessages) return;
+
+    const messageElement = document.createElement('div');
+    messageElement.className = `chat-message ${type}`;
+    messageElement.textContent = message;
+    
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    console.log(`💬 Added ${type} message:`, message);
+  }
+
+  // Add loading indicator
+  function addChatLoadingIndicator() {
+    if (!chatMessages) return null;
+
+    const loadingElement = document.createElement('div');
+    loadingElement.className = 'chat-loading';
+    loadingElement.innerHTML = `
+      <span>🔍 Searching for garments...</span>
+      <div class="dots">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    `;
+    
+    chatMessages.appendChild(loadingElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return loadingElement;
+  }
+
+  // ==== SIMPLIFIED CHAT LOGIC ====
+  
+  let conversationState = 'initial'; // 'initial', 'awaiting_details', 'searching'
+  let firstMessage = '';
+  
+  // Reset conversation state when chat is opened
+  function resetConversationState() {
+    conversationState = 'initial';
+    firstMessage = '';
+    console.log('💬 Chat conversation reset');
+  }
+
+  // Check for missing required parameters
+  function analyzeGarmentQuery(message) {
+    const lowerMessage = message.toLowerCase();
+    console.log('🔍 Analyzing query for missing info:', message);
+    
+    const missing = [];
+    
+    // Garment type check
+    const garmentTypes = ['shirt', 't-shirt', 'tshirt', 'pant', 'pants', 'jean', 'jeans', 'dress', 'jacket', 'coat', 'skirt', 'shoe', 'sweater', 'shoes', 'sneaker', 'boot', 'hoodie', 'sweater', 'top', 'bottom'];
+    if (!garmentTypes.some(type => lowerMessage.includes(type))) {
+      missing.push('garment type');
+    }
+    
+    // Gender check
+    const genders = ['men', 'women', 'male', 'female', 'unisex', 'boy', 'girl'];
+    if (!genders.some(g => lowerMessage.includes(g))) {
+      missing.push('gender');
+    }
+    
+    // Size check  
+    const sizes = ['small', 'medium', 'large', 'xs', 's', 'm', 'l', 'xl', 'xxl', 'size'];
+    if (!sizes.some(s => lowerMessage.includes(s))) {
+      missing.push('size');
+    }
+    
+    // Style check
+    const styles = ['casual', 'formal', 'sporty', 'sport', 'athletic', 'vintage', 'classic', 'modern'];
+    if (!styles.some(st => lowerMessage.includes(st))) {
+      missing.push('style');
+    }
+    
+    // Fabric check
+    const fabrics = ['cotton', 'polyester', 'wool', 'silk', 'linen', 'denim', 'leather'];
+    if (!fabrics.some(f => lowerMessage.includes(f))) {
+      missing.push('fabric');
+    }
+    
+    // Brand check
+    const brands = ['nike', 'adidas', 'zara', 'gucci', 'levi', 'h&m', 'gap', 'uniqlo'];
+    if (!brands.some(b => lowerMessage.includes(b))) {
+      missing.push('brand');
+    }
+    
+    console.log('🔍 Missing parameters:', missing);
+    return missing;
+  }
+
+  // Process chat message - TWO-STEP FLOW
+  async function processChatMessage(message) {
+    try {
+      console.log(`💬 [${conversationState}] Processing message:`, message);
+      
+      if (conversationState === 'initial') {
+        // STEP 1: Check first message for missing parameters
+        const missing = analyzeGarmentQuery(message);
+        
+        if (missing.length > 0) {
+          // Ask for missing details (only once)
+          firstMessage = message;
+          conversationState = 'awaiting_details';
+          return `I need a few more details:\n\n${missing.map(m => `• ${m}`).join('\n')}\n\nPlease provide these details.`;
+        } else {
+          // All details present, go directly to search
+          conversationState = 'searching';
+          return await performSearch(message);
+        }
+      } else if (conversationState === 'awaiting_details') {
+        // STEP 2: Combine messages and search (no more questions)
+        const combinedQuery = `${firstMessage} ${message}`;
+        conversationState = 'searching';
+        return await performSearch(combinedQuery);
+      } else {
+        // After search, start fresh conversation
+        resetConversationState();
+        return await processChatMessage(message);
+      }
+      
+    } catch (error) {
+      console.error('❌ Chat processing error:', error);
+      resetConversationState();
+      return 'Sorry, I encountered an error. Please try again.';
+    }
+  }
+
+  // Perform the actual search
+  async function performSearch(query) {
+    try {
+      console.log(`🔍 Searching for: "${query}"`);
+      
+      const response = await fetch('http://localhost:5000/api/unified-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('🔍 Search response:', data);
+      
+      if (data.success && data.garment_images && data.garment_images.length > 0) {
+        displayExplorerResults(data.garment_images, query);
+        return `✅ Found ${data.garment_images.length} items! Click "View Results" to see them.`;
+      } else {
+        hideViewResultsButton();
+        return "❌ No items found matching your search. Try different terms.";
+      }
+      
+    } catch (error) {
+      console.error('❌ Search failed:', error);
+      hideViewResultsButton();
+      return 'Sorry, the search service is unavailable. Please try again later.';
+    }
+  }
+
+  // ==== END SIMPLIFIED CHAT LOGIC ====
+
+  // Display explorer search results in garment preview
+  function displayExplorerResults(garmentImages, originalQuery) {
+    console.log('🖼️ Displaying explorer results:', garmentImages.length, 'items');
+    
+    if (!garmentPreview) {
+      console.error('❌ Garment preview element not found');
+      return;
+    }
+    
+    // ✨ ENHANCED: If no search results found, fallback to database wardrobe
+    if (!garmentImages || garmentImages.length === 0) {
+      console.log('⚠️ No garment images from search - loading wardrobe as fallback');
+      hideViewResultsButton();
+      loadWardrobeAsFallback();
+      return;
+    }
+    
+    // Clear current display and set to explorer mode
+    allExtractedImages = garmentImages.map((item, index) => ({
+      src: item.src,
+      title: item.title,
+      price: item.price,
+      store: item.store,
+      url: item.url || item.src, // Use URL if available, fallback to image src
+      query: originalQuery,
+      isExplorerResult: true,
+      index: index
+    }));
+    
+    currentImagePage = 0;
+    currentDisplayMode = 'explorer';
+    
+    // Make sure garment preview is visible
+    garmentPreview.style.display = 'grid';
+    
+    // Render the explorer results
+    renderExplorerResults();
+    
+    // Show the "View Results" button only if we have results
+    showViewResultsButton(garmentImages.length);
+    
+    console.log('✅ Explorer results displayed in garment preview');
+  }
+
+  // Render explorer results with enhanced styling
+  function renderExplorerResults() {
+    if (!garmentPreview) return;
+    
+    const totalPages = Math.ceil(allExtractedImages.length / imagesPerPage);
+    const startIndex = currentImagePage * imagesPerPage;
+    const endIndex = Math.min(startIndex + imagesPerPage, allExtractedImages.length);
+    const currentImages = allExtractedImages.slice(startIndex, endIndex);
+    
+    console.log(`🖼️ Rendering explorer page ${currentImagePage + 1}/${totalPages}, showing items ${startIndex + 1}-${endIndex}`);
+    
+    // Update navigation if it exists
+    const garmentNavigation = document.getElementById('garment-navigation');
+    const pageIndicator = document.getElementById('page-indicator');
+    const prevBtn = document.getElementById('prev-images-btn');
+    const nextBtn = document.getElementById('next-images-btn');
+    
+    if (garmentNavigation && totalPages > 1) {
+      garmentNavigation.style.display = 'flex';
+      if (pageIndicator) {
+        pageIndicator.textContent = `${currentImagePage + 1} / ${totalPages} (${allExtractedImages.length} results found)`;
+      }
+      if (prevBtn) prevBtn.disabled = currentImagePage === 0;
+      if (nextBtn) nextBtn.disabled = currentImagePage === totalPages - 1;
+    } else if (garmentNavigation) {
+      garmentNavigation.style.display = 'none';
+    }
+    
+    // Build enhanced image grid using unified garment item structure
+    let gridHtml = '';
+    
+    for (let i = 0; i < imagesPerPage; i++) {
+      if (i < currentImages.length) {
+        const img = currentImages[i];
+        const isInWardrobe = false; // Explorer results are not in wardrobe initially
+        
+        // Use the unified garment item HTML generator
+        gridHtml += createGarmentItemHTML({
+          src: img.src,
+          title: img.title,
+          price: img.price,
+          store: img.store,
+          url: img.url,
+          isFavorited: isInWardrobe,
+          additionalClasses: 'explorer-item',
+          source: 'explorer'
+        });
+      } else {
+        gridHtml += `
+          <div class="upload-placeholder explorer-placeholder">
+            <span class="upload-text">-</span>
+          </div>
+        `;
+      }
+    }
+    
+    garmentPreview.innerHTML = gridHtml;
+    
+    // Add event listeners for explorer items
+    const explorerItems = garmentPreview.querySelectorAll('.explorer-item');
+    explorerItems.forEach((item, index) => {
+      const globalIndex = startIndex + index;
+      const imgData = allExtractedImages[globalIndex];
+      
+      // Try-on functionality
+      item.addEventListener('click', async (e) => {
+        // Don't trigger if clicking on favorite button
+        if (e.target.classList.contains('favorite-btn') || 
+            e.target.classList.contains('heart-icon')) {
+          return;
+        }
+        
+        console.log(`🎯 Clicked explorer item: ${imgData.title}`);
+        
+        try {
+          // Determine garment type based on title/description
+          const title = imgData.title.toLowerCase();
+          let garmentType = 'upper'; // default
+          
+          if (title.includes('jean') || title.includes('pant') || title.includes('trouser') || 
+              title.includes('short') || title.includes('skirt') || title.includes('bottom')) {
+            garmentType = 'lower';
+          }
+          
+          // Start try-on process
+          await performTryOn(imgData.src, garmentType);
+          console.log('✅ Explorer item try-on completed successfully');
+          
+        } catch (error) {
+          console.error('❌ Explorer item try-on failed:', error);
+          if (tryonResult) {
+            tryonResult.innerHTML = `❌ Try-on failed: ${error.message || error}`;
+            showTryonResult();
+          }
+        }
+      });
+      
+      // Hover effects for explorer items
+      item.addEventListener('mouseenter', () => {
+        const hoverBadge = item.querySelector('.tryon-hover-badge');
+        const img = item.querySelector('img');
+        if (hoverBadge) hoverBadge.style.opacity = '1';
+        if (img) img.style.transform = 'scale(1.05)';
+      });
+      
+      item.addEventListener('mouseleave', () => {
+        const hoverBadge = item.querySelector('.tryon-hover-badge');
+        const img = item.querySelector('img');
+        if (hoverBadge) hoverBadge.style.opacity = '0';
+        if (img) img.style.transform = 'scale(1)';
+      });
+    });
+    
+    console.log('✅ Explorer results page rendered with', explorerItems.length, 'items');
+  }
+
+  // Send button click handler
+  if (sendButton) {
+    sendButton.addEventListener('click', sendChatMessage);
+  }
+
+  // Enter key handler for chat input
+  if (chatInput) {
+    chatInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+
+    // Auto-resize textarea
+    chatInput.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+    });
+  }
+
+  // Initialize chat - don't add welcome message since it's already in HTML
+  if (chatMessages) {
+    console.log('💬 Chat interface initialized - welcome message already in HTML');
   }
 
   // Debug Try-On Button Handler
@@ -2436,8 +3982,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (userProfilePage) userProfilePage.style.display = 'none';
     mainApp.style.display = 'flex';
     
-    // Update toggle button state based on user status
-    updateToggleButtonState();
+    // Ensure proper grid layout for garment preview
+    ensureGridLayout();
+    
+    // Update toggle button state based on user status and brand page detection
+    setTimeout(() => {
+      updateToggleButtonState();
+    }, 100);
     
     // Update user info in header and load avatar
     chrome.storage.local.get(['userEmail', 'isGuest', 'avatarDataUrl'], function(result) {
@@ -2672,6 +4223,13 @@ document.addEventListener('DOMContentLoaded', function() {
   function hideTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
     if (tryonResult) {
+      // Clean up any blob URLs in the try-on result
+      const images = tryonResult.querySelectorAll('img');
+      images.forEach(img => {
+        if (img.src && img.src.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+      });
       tryonResult.style.display = 'none';
       // Remove class to show avatar again
       const mainContainer = document.querySelector('.main-container');
@@ -2679,6 +4237,75 @@ document.addEventListener('DOMContentLoaded', function() {
         mainContainer.classList.remove('tryon-active');
       }
     }
+  }
+
+  // ===== VIEW RESULTS BUTTON FUNCTIONALITY =====
+  
+  // Function to show the "View Results" button
+  function showViewResultsButton(resultCount = null) {
+    const viewResultsBtn = document.getElementById('view-results-btn');
+    if (viewResultsBtn) {
+      // Update button text if result count is provided
+      if (resultCount !== null && resultCount > 0) {
+        const btnText = viewResultsBtn.querySelector('.btn-text');
+        if (btnText) {
+          btnText.textContent = `View ${resultCount} Result${resultCount !== 1 ? 's' : ''}`;
+        }
+      }
+      
+      viewResultsBtn.style.display = 'flex';
+      viewResultsBtn.classList.add('show');
+      console.log('✅ View Results button shown', resultCount ? `with ${resultCount} results` : '');
+    }
+  }
+  
+  // Function to hide the "View Results" button
+  function hideViewResultsButton() {
+    const viewResultsBtn = document.getElementById('view-results-btn');
+    if (viewResultsBtn) {
+      viewResultsBtn.style.display = 'none';
+      viewResultsBtn.classList.remove('show');
+      console.log('✅ View Results button hidden');
+    }
+  }
+  
+  // Function to scroll to garment preview
+  function scrollToGarmentPreview() {
+    const garmentPreview = document.getElementById('garment-preview');
+    const tryonBody = document.querySelector('.tryon-body');
+    const chatInterface = document.getElementById('ai-chat-interface');
+    
+    if (garmentPreview && tryonBody && chatInterface) {
+      // First, hide the chat interface
+      chatInterface.style.display = 'none';
+      
+      // Show the tryon body (main interface)
+      tryonBody.style.display = 'flex';
+      
+      // Ensure garment preview is visible
+      garmentPreview.style.display = 'grid';
+      
+      // Scroll to the garment preview section
+      setTimeout(() => {
+        garmentPreview.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
+      
+      console.log('✅ Navigated to garment preview section');
+    } else {
+      console.error('❌ Could not find required elements for navigation');
+    }
+  }
+  
+  // Add event listener for the view results button
+  const viewResultsBtn = document.getElementById('view-results-btn');
+  if (viewResultsBtn) {
+    viewResultsBtn.addEventListener('click', () => {
+      console.log('🎯 View Results button clicked');
+      scrollToGarmentPreview();
+    });
   }
 
   // Add event listeners for upload placeholders to fix CSP violations
@@ -2693,6 +4320,108 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Add listeners after a small delay to ensure DOM is fully loaded
   setTimeout(addUploadPlaceholderListeners, 100);
+
+  // Add delegated event listener for favorite buttons and premium try-on
+  document.addEventListener('click', async function(event) {
+    console.log('🔍 Document click detected:', event.target.className || '(no class)', event.target.tagName);
+    console.log('🔍 Element details:', {
+      textContent: event.target.textContent,
+      innerHTML: event.target.innerHTML,
+      parentElement: event.target.parentElement?.className,
+      parentTag: event.target.parentElement?.tagName
+    });
+    
+    // Check if the clicked element is a premium try-on button
+    const isPremiumBtn = event.target.classList.contains('premium-tryon-btn');
+    const premiumBtn = event.target.closest('.premium-tryon-btn');
+    const isPremiumText = event.target.classList.contains('premium-text');
+    
+    if (isPremiumBtn || premiumBtn || isPremiumText) {
+      const actualPremiumBtn = isPremiumBtn ? event.target : premiumBtn;
+      const url = actualPremiumBtn?.dataset?.url;
+      
+      if (url) {
+        console.log('👑 Premium try-on clicked for URL:', url);
+        event.stopPropagation();
+        
+        // Open the URL in a new tab
+        try {
+          window.open(url, '_blank', 'noopener,noreferrer');
+          console.log('✅ Premium try-on link opened in new tab');
+        } catch (error) {
+          console.error('❌ Failed to open premium try-on link:', error);
+          // Fallback: try to navigate directly
+          window.location.href = url;
+        }
+      } else {
+        console.warn('⚠️ No URL found for premium try-on button');
+      }
+      return;
+    }
+    
+    // Check if the clicked element is a favorite button or heart icon
+    const isHeartIcon = event.target.classList.contains('heart-icon');
+    const isFavoriteBtn = event.target.classList.contains('favorite-btn');
+    const favoriteBtn = event.target.closest('.favorite-btn');
+    
+    // Also check if this is a heart symbol inside a favorite button
+    const isHeartSymbol = (event.target.textContent === '♥' || event.target.textContent === '♡') && 
+                         event.target.tagName === 'SPAN';
+    
+    if (isHeartIcon || isFavoriteBtn || favoriteBtn || isHeartSymbol) {
+      console.log('🎯 Favorite button clicked via delegation!', {
+        isHeartIcon,
+        isFavoriteBtn,
+        hasFavoriteBtn: !!favoriteBtn,
+        isHeartSymbol,
+        targetClass: event.target.className,
+        textContent: event.target.textContent
+      });
+      
+      const actualFavoriteBtn = isFavoriteBtn ? event.target : favoriteBtn;
+        
+      if (!actualFavoriteBtn) {
+        console.error('❌ Could not find favorite button');
+        return;
+      }
+      
+      event.stopPropagation();
+      
+      // Get the garment item container
+      const garmentItem = actualFavoriteBtn.closest('.garment-item-tryon');
+      if (!garmentItem) {
+        console.error('❌ Could not find garment item container');
+        return;
+      }
+      
+      // Get the image source
+      const img = garmentItem.querySelector('img');
+      if (!img) {
+        console.error('❌ Could not find image in garment item');
+        return;
+      }
+      
+      const imgSrc = img.src;
+      const garmentType = await detectGarmentTypeFromURL();
+      const garmentUrl = window.location.href;
+      
+      // Create a mock event object for handleFavoriteClick
+      const mockEvent = {
+        currentTarget: actualFavoriteBtn,
+        target: event.target,
+        stopPropagation: () => event.stopPropagation()
+      };
+      
+      console.log('🔍 Calling handleFavoriteClick with delegated event');
+      console.log('🔍 Parameters:', {
+        imgSrc: imgSrc.substring(0, 50) + '...',
+        garmentType,
+        garmentUrl: garmentUrl.substring(0, 50) + '...'
+      });
+      
+      await handleFavoriteClick(mockEvent, imgSrc, garmentType, garmentUrl);
+    }
+  });
 
   // Make functions globally available
   window.showTryonResult = showTryonResult;

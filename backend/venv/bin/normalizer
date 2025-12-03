@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/Users/rhishikeshthakur/Enable/Software Development/enable_because_future/backend/venv/bin/python3.12" "$0" "$@"
-' '''
+#!/Users/rhishikeshthakur/Enable/Software_Development/enable_because_future/backend/venv/bin/python3.11
 # -*- coding: utf-8 -*-
 import re
 import sys

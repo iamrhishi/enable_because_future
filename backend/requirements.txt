@@ -1,4 +1,70 @@
+# ============================================
+# Backend Requirements for Enable BCF
+# Python Version: 3.11+ (Recommended)
+# 
+# Setup:
+#   python3.11 -m venv venv
+#   source venv/bin/activate  # On Windows: venv\Scripts\activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+# ============================================
+
+# Core Web Framework
 flask
 flask-cors
+werkzeug
+
+# Database
 mysql-connector-python
+
+# HTTP Requests & Auth
 requests
+
+# Environment Variables
+python-dotenv
+
+# Google AI/ML Services (Requires Python 3.9+)
+google-genai
+google-generativeai
+
+# Background Removal (AI)
+rembg
+
+# Google APIs
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+
+# Image Processing
+Pillow
+numpy
+
+# Web Scraping & HTML Parsing
+beautifulsoup4
+lxml
+
+# Optional: OpenCV (currently commented out in app.py)
+# opencv-python
+
+# ============================================
+# AI Model Runtime
+onnxruntime
+
+# Additional Dependencies
+# (Auto-installed with above packages)
+# ============================================
+# From rembg:
+#   - pooch
+#   - scikit-image
+#   - pymatting
+#   - filetype
+#   - imagehash
+#   - opencv-python-headless (or opencv-python)
+# From werkzeug:
+#   - Security utilities (password hashing)
+# From requests:
+#   - urllib3, certifi, charset-normalizer
+# From onnxruntime:
+#   - coloredlogs, flatbuffers, sympy
+# ============================================

@@ -76,29 +76,59 @@ body {
   font-size: 14px;
   cursor: pointer;
   padding: 8px 2px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 40px;
   min-height: 40px;
+  position: relative;
+  overflow: hidden;
 }
 
 .refresh-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(59, 130, 246, 0.08);
   transform: translateY(-1px);
+}
+
+/* Special styling for AI chat button when active */
+#ai-chat-btn.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+#ai-chat-btn.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(59, 130, 246, 0.1) 50%, transparent 70%);
+  animation: shimmer 2s ease-in-out infinite;
 }
 
 .refresh-btn img {
   width: 20px;
   height: 20px;
   object-fit: contain;
-  transition: transform 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .refresh-btn:hover img {
   transform: scale(1.1) rotate(90deg);
+}
+
+#ai-chat-btn:hover img {
+  transform: scale(1.1);
+  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3));
+}
+
+#ai-chat-btn.active img {
+  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.4));
 }
 
 /* User button styles */
@@ -457,9 +487,49 @@ body {
   width: 100% !important;
   margin-bottom: 12px !important;
   padding: 0 8px !important;
+  gap: 10px !important;
 }
 
-.garment-section-title {
+/* Model Selection Dropdown */
+.model-selection {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #003500;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.model-select {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: #003500;
+  border: 2px solid #003500;
+  border-radius: 15px;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: none;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  min-width: 90px;
+}
+
+.model-select:focus {
+  border-color: #007700;
+  box-shadow: 0 0 0 2px rgba(0, 119, 0, 0.2);
+}
+
+
+/* Garment Source Toggle Button */
+.garment-source-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
   font-weight: 600;
   color: #ffffff;
@@ -472,58 +542,14 @@ body {
   letter-spacing: 0.5px;
   font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
   flex: 1;
-}
-
-/* Garment Source Toggle Button */
-.garment-source-toggle {
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-  color: white;
   border: none;
-  border-radius: 15px;
-  padding: 8px 12px;
-  font-size: 10px;
-  font-weight: 600;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.3s ease;
-  margin-left: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-}
-
-.garment-source-toggle:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
-  background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
 }
 
 .garment-source-toggle:active {
   transform: translateY(0);
 }
 
-#toggle-icon {
-  font-size: 12px;
-  transition: transform 0.3s ease;
-}
-
-.garment-source-toggle:hover #toggle-icon {
-  transform: scale(1.2);
-}
-
-.garment-source-toggle:disabled {
-  cursor: not-allowed;
-  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
-  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
-}
-
-.garment-source-toggle:disabled:hover {
-  transform: none;
-  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
-  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
-}
 
 /* Garment Navigation */
 .garment-navigation {
@@ -579,8 +605,8 @@ body {
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
-  max-width: 280px !important;
-  width: 280px !important;
+  max-width: 100% !important;
+  width: 100% !important;
   margin: 0 auto !important;
   position: relative !important;
 }
@@ -598,13 +624,27 @@ body {
   grid-template-columns: 1fr 1fr !important;
   gap: 12px !important;
   justify-content: center !important;
-  align-items: center !important;
-  width: 260px !important;
-  max-width: 260px !important;
-  justify-items: center !important;
-  place-items: center !important;
+  align-items: start !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  justify-items: stretch !important;
+  place-items: stretch start !important;
   margin: 0 auto !important;
   position: relative !important;
+  min-height: 200px !important;
+}
+
+/* Ensure all grid items take full width of their columns */
+.garment-preview > * {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Ensure grid layout is maintained even when empty */
+.garment-preview:empty {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  min-height: 200px !important;
 }
 
 .garment-preview img {
@@ -625,7 +665,7 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   height: 180px;
-  width: 160px;
+  width: 100%;
   position: relative;
   padding: 8px;
   box-sizing: border-box;
@@ -690,6 +730,23 @@ body {
 }
 
 /* Garment type and number badges */
+.garment-type-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1d211f;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  z-index: 5;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .uploaded-garment .garment-type-badge {
   position: absolute;
   top: 4px;
@@ -703,16 +760,33 @@ body {
   font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
 }
 
-.uploaded-garment .garment-number-badge {
+/* New unified garment item badges */
+.garment-source-badge {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 8px;
+  left: 8px;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.wardrobe-badge {
+  background: rgba(231, 76, 60, 0.9);
+}
+
+.garment-number-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
   background: rgba(0, 0, 0, 0.7);
   color: white;
   padding: 2px 6px;
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 10px;
-  z-index: 5;
+  font-weight: 600;
 }
 
 .image-remove-btn {
@@ -1239,7 +1313,7 @@ select[disabled] {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(255, 255, 255, 0.9);
+  background: none;
   border: none;
   border-radius: 50%;
   width: 32px;
@@ -1254,19 +1328,24 @@ select[disabled] {
 }
 
 .favorite-btn:hover {
-  background: rgba(255, 255, 255, 1);
+  background: none;
   transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .favorite-btn .heart-icon {
-  font-size: 16px;
+  font-size: 18px;
   transition: all 0.3s ease;
-  color: #ccc;
+  color: #ff4757;
+  font-weight: bold;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .favorite-btn.favorited .heart-icon {
-  color: #e74c3c;
+  color: #dc2626 !important;
   transform: scale(1.2);
 }
 
@@ -1281,17 +1360,13 @@ select[disabled] {
   100% { transform: scale(1); }
 }
 
-.favorite-btn.favorited .heart-icon {
-  animation: heartPulse 0.6s ease;
-}
-
 /* Favorite status indicator */
 .favorite-status {
   position: absolute;
   bottom: 8px;
   left: 8px;
   background: rgba(231, 76, 60, 0.9);
-  color: white;
+  color: red;
   padding: 2px 6px;
   border-radius: 10px;
   font-size: 10px;
@@ -1301,4 +1376,785 @@ select[disabled] {
 
 .garment-item-tryon.favorited .favorite-status {
   display: block;
+}
+
+/* ===== AI CHAT INTERFACE STYLES ===== */
+.ai-chat-interface {
+  background: none;
+  margin: 12px;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+@keyframes initialGlow {
+  0% { 
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08), 
+                0 8px 16px rgba(0, 0, 0, 0.04),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+  50% { 
+    box-shadow: 0 20px 40px rgba(59, 130, 246, 0.12), 
+                0 8px 16px rgba(59, 130, 246, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                0 0 0 1px rgba(59, 130, 246, 0.2);
+  }
+  100% { 
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08), 
+                0 8px 16px rgba(0, 0, 0, 0.04),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* Elegant slide down animation with bounce */
+@keyframes elegantSlideDown {
+  0% { 
+    opacity: 0; 
+    transform: translateY(-30px) scale(0.9); 
+    filter: blur(4px);
+  }
+  60% { 
+    transform: translateY(2px) scale(1.02); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+    filter: blur(0);
+  }
+}
+
+/* Subtle glow effect on interface edge */
+.ai-chat-interface::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent);
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+
+.chat-messages {
+  flex: 1; /* Take up remaining space */
+  overflow-y: auto;
+  padding: 20px;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-behavior: smooth;
+}
+
+
+/* Simple scrollbar styling */
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.chat-message {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  margin-bottom: 8px;
+}
+
+.chat-message.user {
+  background: #035000;
+  color: white;
+  align-self: flex-end;
+}
+
+.chat-message.system-message,
+.chat-message.system {
+  background: #035000;
+  color: #fff;
+  align-self: flex-start;
+  border-left: 3px solid hsl(151, 100%, 50%);
+}
+
+.message-content {
+  margin: 0;
+}
+
+.message-content strong {
+  font-weight: 600;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  padding: 8px 10px 10px;
+  background: none;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  position: relative;
+  bottom: 0px; /* Push to bottom */
+}
+
+.chat-input-area::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.3), transparent);
+}
+
+.chat-input {
+  flex: none;
+  width: 75%;
+  border: 1.5px solid rgba(203, 213, 225, 0.6);
+  border-radius: 12px;
+  padding: 6px 8px;
+  font-family: 'SF Pro Text', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 30px;
+  max-height: 35px;
+  background: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.chat-input:focus {
+  border-color: #5fe76d;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1),
+              inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  background: #003500;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.chat-input::placeholder {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.send-chat-btn {
+  background: #003500;
+  color: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  font-family: 'SF Pro Display', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25),
+              0 2px 4px rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.send-chat-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.send-chat-btn:hover::before {
+  left: 100%;
+}
+
+.send-chat-btn:hover {
+  background: linear-gradient(135deg, 
+    #2563eb 0%, 
+    #1d4ed8 50%,
+    #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35),
+              0 4px 8px rgba(59, 130, 246, 0.2);
+}
+
+.send-chat-btn:active {
+  transform: translateY(-1px);
+  transition: all 0.1s ease;
+}
+
+.send-chat-btn:disabled {
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  color: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== VIEW RESULTS BUTTON STYLES ===== */
+.view-results-container {
+  display: flex;
+  justify-content: center;
+  padding: 0px 20px 16px;
+  background: none;
+  position: relative;
+}
+
+.view-results-btn {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.1) 0%, 
+    rgba(37, 99, 235, 0.05) 100%);
+  color: #fff;
+  border: 1.5px solid rgba(59, 130, 246, 0.3);
+  border-radius: 20px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'SF Pro Display', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  position: relative;
+  overflow: hidden;
+}
+
+.view-results-btn:hover {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.15) 0%, 
+    rgba(37, 99, 235, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.view-results-btn:active {
+  transform: translateY(0px);
+  transition: all 0.1s ease;
+}
+
+.view-results-btn .arrow-down {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2563eb;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.view-results-btn:hover .arrow-down {
+  transform: translateY(2px);
+}
+
+.view-results-btn .btn-text {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Animation for showing the button */
+.view-results-btn.show {
+  animation: slideInFromTop 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #64748b;
+  font-size: 13px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.9));
+  border-radius: 16px;
+  align-self: flex-start;
+  border-left: 3px solid #3b82f6;
+  font-family: 'SF Pro Text', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  box-shadow: 0 4px 12px rgba(148, 163, 184, 0.15),
+              0 2px 4px rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-left: 3px solid #3b82f6;
+  position: relative;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.chat-loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.2), transparent);
+}
+
+.chat-loading .dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.chat-loading .dot {
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-radius: 50%;
+  animation: elegantDotPulse 1.6s infinite ease-in-out;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.chat-loading .dot:nth-child(1) { animation-delay: -0.32s; }
+.chat-loading .dot:nth-child(2) { animation-delay: -0.16s; }
+.chat-loading .dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes elegantDotPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+  }
+}
+
+/* ===== UNIFIED GARMENT ITEM STYLES ===== */
+.garment-item-tryon {
+  position: relative;
+  cursor: pointer;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  width: 100%;
+  height: 180px;
+}
+
+.garment-item-tryon:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  border-color: #4caf50;
+}
+
+.garment-item-image-container {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+.garment-item-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.garment-item-tryon:hover .garment-item-image {
+  transform: scale(1.05);
+}
+
+.garment-placeholder-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,200,83,0.05);
+  border: 1px dashed rgba(0,200,83,0.2);
+}
+
+.garment-placeholder-content .upload-text {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  text-align: center;
+}
+
+.garment-item-tryon .favorite-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== PREMIUM TRY-ON BUTTON STYLES ===== */
+.premium-tryon-btn {
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4a 50%, #f7c52d 100%);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'SF Pro Display', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16px;
+  width: 100%;
+  margin-top: 4px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(255, 215, 0, 0.3),
+              0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+}
+
+.premium-tryon-btn .premium-text {
+  font-size: 8px;
+  letter-spacing: 0.2px;
+  font-weight: 700;
+}
+
+.premium-tryon-btn:hover {
+  background: linear-gradient(135deg, #ffed4a 0%, #f7c52d 50%, #eab308 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(255, 215, 0, 0.4),
+              0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.premium-tryon-btn:active {
+  transform: translateY(0px);
+  transition: all 0.1s ease;
+}
+
+.garment-item-tryon .favorite-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.garment-item-tryon .favorite-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(1.1);
+}
+
+.garment-item-tryon .favorite-btn.favorited {
+  background: rgba(231, 76, 60, 0.9);
+  color: white;
+}
+
+.garment-item-tryon .favorite-btn.favorited:hover {
+  background: rgba(231, 76, 60, 1);
+}
+
+.garment-item-tryon .garment-remove-btn {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.garment-item-tryon .garment-remove-btn:hover {
+  background: rgba(255, 0, 0, 1);
+  transform: scale(1.1);
+}
+
+.garment-item-info {
+  padding: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  min-height: 25px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.garment-item-title {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.garment-item-price {
+  color: #27ae60;
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.garment-item-store {
+  color: #7f8c8d;
+  font-size: 9px;
+}
+
+.garment-type-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: #1d211f;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 5;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+.garment-number-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  z-index: 5;
+}
+
+.garment-item-tryon .tryon-hover-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #003500;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.garment-item-tryon:hover .tryon-hover-badge {
+  opacity: 1;
+}
+
+.garment-image-unavailable {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #666;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Legacy compatibility - explorer items now inherit unified styling */
+.explorer-item {
+  /* All styles inherited from .garment-item-tryon */
+  position: relative; /* Ensure position context for absolute children */
+}
+
+/* ===== EXPLORER GRID STYLES ===== */
+.explorer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  justify-content: center;
+}
+
+/* Garment preview grid - used for extracted images and wardrobe items */
+.garment-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  justify-content: center;
+}
+
+/* Try-on processing text with animated gradient */
+.tryon-processing-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #764ba2 75%, #667eea 100%);
+  background-size: 300% 300%;
+  animation: gradientShift 3s ease infinite, pulse 2s ease-in-out infinite;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-block;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.95;
+  }
+}
+
+/* Multi-Garment Try-On Styles */
+.garment-checkbox-container {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 2px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.garment-checkbox {
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  accent-color: #4CAF50;
+}
+
+.garment-item-tryon.selected {
+  outline: 3px solid #4CAF50;
+  outline-offset: -3px;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+.multi-tryon-btn {
+  display: none;
+  width: calc(100% - 32px);
+  margin: 12px 16px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.multi-tryon-btn:hover {
+  background: linear-gradient(135deg, #45a049 0%, #4CAF50 100%);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  transform: translateY(-2px);
+}
+
+.multi-tryon-btn:active {
+  transform: translateY(0px);
+  box-shadow: 0 2px 10px rgba(76, 175, 80, 0.3);
+}
+
+.multi-tryon-btn:disabled {
+  background: linear-gradient(135deg, #9E9E9E 0%, #757575 100%);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }

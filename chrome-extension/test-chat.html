@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Chat Interface</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      width: 400px;
+      height: 650px;
+      margin: 20px;
+    }
+    
+    .test-container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+    
+    .test-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .test-button {
+      background: #4caf50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .test-button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <div class="test-header">
+      <h3>AI Chat Interface Test</h3>
+      <button id="toggle-chat" class="test-button">Toggle Chat</button>
+    </div>
+    
+    <!-- Chat Interface -->
+    <div class="ai-chat-container active">
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-message system">
+          Hi! I'm your AI shopping assistant. Tell me what you're looking for and I'll help you find the perfect garments. For example: "I want blue jeans with narrow bottom for men. I like Zara or Levis."
+        </div>
+      </div>
+      <div class="input-container">
+        <textarea class="chat-input" id="chat-input" placeholder="Ask me about garments... (e.g., 'I want blue jeans with narrow bottom for men. I like Zara or Levis')"></textarea>
+        <button class="send-button" id="send-button">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Chat Interface Test Script
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatContainer = document.querySelector('.ai-chat-container');
+      const chatMessages = document.querySelector('.chat-messages');
+      const chatInput = document.querySelector('.chat-input');
+      const sendButton = document.querySelector('.send-button');
+      const toggleButton = document.getElementById('toggle-chat');
+
+      // Toggle chat visibility
+      toggleButton.addEventListener('click', function() {
+        chatContainer.classList.toggle('active');
+        toggleButton.textContent = chatContainer.classList.contains('active') ? 'Hide Chat' : 'Show Chat';
+      });
+
+      // Send message functionality
+      function sendChatMessage() {
+        if (!chatInput || !chatMessages || !sendButton) {
+          console.log('❌ Chat elements not found');
+          return;
+        }
+
+        const message = chatInput.value.trim();
+        if (!message) {
+          return;
+        }
+
+        // Disable input and button while processing
+        chatInput.disabled = true;
+        sendButton.disabled = true;
+        sendButton.textContent = 'Sending...';
+
+        // Add user message to chat
+        addChatMessage(message, 'user');
+        chatInput.value = '';
+
+        // Show loading indicator
+        const loadingElement = addChatLoadingIndicator();
+
+        // Simulate backend response for testing
+        setTimeout(() => {
+          // Remove loading indicator
+          if (loadingElement && loadingElement.parentNode) {
+            loadingElement.parentNode.removeChild(loadingElement);
+          }
+          
+          // Add AI response
+          const responses = [
+            "I'd recommend looking for slim-fit or tapered jeans from Zara or Levis. Both brands offer excellent narrow-bottom styles. Would you prefer a specific wash or color?",
+            "For blue jeans with a narrow bottom, check out Levis 511 Slim or Zara's skinny fit options. These brands are known for quality denim with modern cuts.",
+            "Great choice! Blue jeans with narrow bottoms are very versatile. Zara has trendy options while Levis offers classic styles like the 512 Slim Taper. What's your size range?",
+            "Both Zara and Levis have excellent blue jeans! For narrow bottom styles, I'd suggest Levis 510 Skinny or Zara's slim fit. Are you looking for a specific shade of blue?"
+          ];
+          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+          addChatMessage(randomResponse, 'system');
+
+          // Re-enable input and button
+          chatInput.disabled = false;
+          sendButton.disabled = false;
+          sendButton.textContent = 'Send';
+          chatInput.focus();
+        }, 1500);
+      }
+
+      // Add message to chat interface
+      function addChatMessage(message, type) {
+        if (!chatMessages) return;
+
+        const messageElement = document.createElement('div');
+        messageElement.className = `chat-message ${type}`;
+        messageElement.textContent = message;
+        
+        chatMessages.appendChild(messageElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        console.log(`💬 Added ${type} message:`, message);
+      }
+
+      // Add loading indicator
+      function addChatLoadingIndicator() {
+        if (!chatMessages) return null;
+
+        const loadingElement = document.createElement('div');
+        loadingElement.className = 'chat-loading';
+        loadingElement.innerHTML = `
+          <span>AI is thinking</span>
+          <div class="dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+        `;
+        
+        chatMessages.appendChild(loadingElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        return loadingElement;
+      }
+
+      // Send button click handler
+      sendButton.addEventListener('click', sendChatMessage);
+
+      // Enter key handler for chat input
+      chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendChatMessage();
+        }
+      });
+
+      // Auto-resize textarea
+      chatInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+      });
+
+      // Focus input initially
+      chatInput.focus();
+    });
+  </script>
+</body>
+</html>

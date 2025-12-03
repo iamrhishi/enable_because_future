@@ -197,7 +197,10 @@
         <div class="header-right">
           <!-- <span id="user-email" class="user-email"></span> -->
           <!-- Replace the signout button around line 48-50: -->
-            <button id="refresh-btn" class="refresh-btn" title="Refresh Session">
+          <button id="ai-chat-btn" class="refresh-btn" title="AI Chat">
+            <img src="ai.png" alt="AI Chat" />
+          </button>
+          <button id="refresh-btn" class="refresh-btn" title="Refresh Session">
             <img src="refresh.png" alt="Refresh" />
           </button>
           <button id="user-btn" class="user-btn" title="User Profile">
@@ -209,18 +212,50 @@
         </div>
       </div>
       
+      <!-- AI Chat Interface -->
+      <div id="ai-chat-interface" class="ai-chat-interface" style="display:none;">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-message system-message">
+            <div class="message-content">
+              <strong>Tell me what you are looking for?</strong><br>
+              "I want blue jeans with narrow bottom for women or men. I like jeans from Zara or Levis"<br>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" class="chat-input" placeholder="Describe a garment in a few words" rows="2"></textarea>
+          <button id="send-chat-btn" class="send-chat-btn">
+            <span>Shop</span>
+          </button>
+        </div>
+        <div class="view-results-container">
+          <button id="view-results-btn" class="view-results-btn" style="display: none;">
+            <span class="arrow-down">↓</span>
+            <span class="btn-text">View Search Results</span>
+          </button>
+        </div>
+      </div>
+      
       <div class="tryon-body">
         <!-- Main Container with Figma-like Layout -->
         <div class="main-container">
           
           <!-- Top Section: URL and Page Info -->
           <div class="page-info-section">
-            <div class="page-url-container">
+            <!-- <div class="page-url-container">
               <input type="text" id="page-url" class="page-url-input" readonly />
               <!-- <label class="use-garment-toggle" for="use-garment-checkbox">
                 <input type="checkbox" id="use-garment-checkbox"/>
                 <span class="toggle-text">get garments from this page</span>
               </label> -->
+            <!-- </div>  -->
+            <!-- AI Model Selection Dropdown -->
+            <div class="model-selection">
+              <select id="ai-model-select" class="model-select">
+                <option value="gemini">Gemini</option>
+                <option value="garmash">Garmash</option>
+                <option value="rembg">RemBG</option>
+              </select>
             </div>
           </div>
 
@@ -248,13 +283,15 @@
             
             <div class="garment-section">
                 <div class="garment-header">
-                    <h3 class="garment-section-title">Try-on Garments</h3>
                     <button id="garment-source-toggle" class="garment-source-toggle">
-                        <span id="toggle-text">Switch to Wardrobe</span>
-                        <span id="toggle-icon">👗</span>
+                        <span id="toggle-text">Show Garments in Wardrobe</span>
                     </button>
+                    
+                    
                 </div>
                 
+                
+
                 <!-- Pagination Navigation -->
                 <div id="garment-navigation" class="garment-navigation" style="display: none;">
                     <button id="prev-images-btn" class="nav-btn">
@@ -270,22 +307,11 @@
                 
                 <div class="garment-container">
                     <div id="garment-preview" class="garment-preview">
-                      <!-- <div class="upload-placeholder">
-                        <span class="upload-text">Upload a garment to try on</span>
-                        <button class="image-remove-btn">×</button>
-                      </div>
-                      <div class="upload-placeholder">
-                        <span class="upload-text">Upload a garment to try on</span>
-                        <button class="image-remove-btn">×</button>
-                      </div>
-                      <div class="upload-placeholder">
-                        <span class="upload-text">Upload a garment to try on</span>
-                        <button class="image-remove-btn">×</button>
-                      </div>
-                      <div class="upload-placeholder">
-                        <span class="upload-text">Upload a garment to try on</span>
-                        <button class="image-remove-btn">×</button>
-                      </div> -->
+                      <!-- Dynamic content populated by JavaScript:
+                           - Upload placeholders (default state)
+                           - Explorer search results (from Google Custom Search API)
+                           - Uploaded garment files
+                           - Wardrobe items -->
                     </div>
                 </div>
             </div>
@@ -299,5 +325,51 @@
     </div>
   </div>
   <script src="popup.js"></script>
+  <script>
+    // Aggressive memory management for Chrome extension
+    let imageCache = new Map();
+    const MAX_CACHE_SIZE = 3; // Limit cached images to 3
+    
+    // Clear image cache when it gets too large
+    function clearImageCache() {
+      if (imageCache.size > MAX_CACHE_SIZE) {
+        imageCache.clear();
+      }
+      
+      // Clear blob URLs to free memory
+      document.querySelectorAll('img').forEach(img => {
+        if (img.src && img.src.startsWith('blob:')) {
+          // Only revoke if the image is not currently visible
+          const rect = img.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) {
+            URL.revokeObjectURL(img.src);
+          }
+        }
+      });
+      
+      // Force garbage collection if available
+      if (window.gc) {
+        window.gc();
+      }
+      
+      // Clear any unused form data
+      window.FormData = class extends FormData {
+        constructor(...args) {
+          super(...args);
+          setTimeout(() => this.delete, 5000); // Clear after 5 seconds
+        }
+      };
+    }
+    
+    // Clear memory every 3 seconds instead of 10
+    setInterval(clearImageCache, 3000);
+    
+    // Clear on page visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearImageCache();
+      }
+    });
+  </script>
 </body>
 </html>
