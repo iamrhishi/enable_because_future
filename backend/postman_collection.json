@@ -64,6 +64,72 @@
 							"path": ["api", "create-account"]
 						}
 					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"confirm_password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/create-account",
+									"host": ["{{base_url}}"],
+									"path": ["api", "create-account"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Account created successfully\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJpYXQiOjE3NjQ3NDIwNDIsImV4cCI6MTc2NDgyODQ0Mn0.example\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"user@example.com\",\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Main St\",\n            \"city\": \"New York\",\n            \"is_active\": true,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    }\n}"
+						},
+						{
+							"name": "Validation Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"invalid-email\",\n  \"password\": \"123\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/create-account",
+									"host": ["{{base_url}}"],
+									"path": ["api", "create-account"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Invalid email format\",\n    \"error_code\": \"VALIDATION_ERROR\"\n}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -109,6 +175,72 @@
 							"path": ["api", "login"]
 						}
 					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"test.user@example.com\",\n  \"password\": \"TestPassword123!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/login",
+									"host": ["{{base_url}}"],
+									"path": ["api", "login"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Login successful\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3QudXNlckBleGFtcGxlLmNvbSIsImlhdCI6MTc2NDc0MjA0MiwiZXhwIjoxNzY0ODI4NDQyfQ.example\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"test.user@example.com\",\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Main St\",\n            \"city\": \"New York\",\n            \"is_active\": true\n        }\n    }\n}"
+						},
+						{
+							"name": "Invalid Credentials",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"wrong@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/login",
+									"host": ["{{base_url}}"],
+									"path": ["api", "login"]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Invalid email or password\",\n    \"error_code\": \"AUTHENTICATION_ERROR\"\n}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -141,7 +273,32 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", "profile"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/users/profile",
+									"host": ["{{base_url}}"],
+									"path": ["api", "users", "profile"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"userid\": \"f3a6ad94\",\n        \"email\": \"user@example.com\",\n        \"first_name\": \"John\",\n        \"last_name\": \"Doe\",\n        \"gender\": \"male\",\n        \"birthday\": \"1990-01-15\",\n        \"street\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"is_active\": true,\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Update My Profile",
@@ -162,7 +319,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", "profile"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"first_name\": \"John Updated\",\n  \"last_name\": \"Doe Updated\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/users/profile",
+									"host": ["{{base_url}}"],
+									"path": ["api", "users", "profile"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Profile updated successfully\",\n    \"data\": {\n        \"userid\": \"f3a6ad94\",\n        \"email\": \"user@example.com\",\n        \"first_name\": \"John Updated\",\n        \"last_name\": \"Doe Updated\",\n        \"gender\": \"male\",\n        \"birthday\": \"1990-01-15\",\n        \"street\": \"456 Oak Ave\",\n        \"city\": \"Los Angeles\",\n        \"is_active\": true\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Change Password",
@@ -183,7 +374,73 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", "profile", "change-password"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"current_password\": \"password123\",\n  \"new_password\": \"newpassword456\",\n  \"confirm_password\": \"newpassword456\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/users/profile/change-password",
+									"host": ["{{base_url}}"],
+									"path": ["api", "users", "profile", "change-password"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Password changed successfully\",\n    \"data\": {\n        \"message\": \"Password changed successfully\"\n    }\n}"
+						},
+						{
+							"name": "Invalid Current Password",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"current_password\": \"wrongpassword\",\n  \"new_password\": \"newpassword456\",\n  \"confirm_password\": \"newpassword456\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/users/profile/change-password",
+									"host": ["{{base_url}}"],
+									"path": ["api", "users", "profile", "change-password"]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Current password is incorrect\",\n    \"error_code\": \"AUTHENTICATION_ERROR\"\n}"
+						}
+					]
 				}
 			]
 		},
@@ -209,7 +466,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "body-measurements"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"waist_circumference\": 80\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements",
+									"host": ["{{base_url}}"],
+									"path": ["api", "body-measurements"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Body measurements created successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"height\": 175.0,\n        \"weight\": 70.0,\n        \"shoulder_circumference\": 110.0,\n        \"arm_length\": 60.0,\n        \"breast_circumference\": 95.0,\n        \"under_breast_circumference\": 85.0,\n        \"waist_circumference\": 80.0,\n        \"hip_circumference\": 95.0,\n        \"upper_thigh_circumference\": 55.0,\n        \"neck_circumference\": 38.0,\n        \"biceps_circumference\": 30.0,\n        \"upper_hip_circumference\": 90.0,\n        \"wide_hip_circumference\": 100.0,\n        \"calf_circumference\": 35.0,\n        \"waist_to_crotch_front_length\": 25.0,\n        \"waist_to_crotch_back_length\": 30.0,\n        \"inner_leg_length\": 75.0,\n        \"foot_length\": 26.0,\n        \"foot_width\": 10.0,\n        \"unit\": \"metric\",\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Get My Measurements",
@@ -221,7 +512,55 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "body-measurements"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements",
+									"host": ["{{base_url}}"],
+									"path": ["api", "body-measurements"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"height\": 175.0,\n        \"weight\": 70.0,\n        \"shoulder_circumference\": 110.0,\n        \"arm_length\": 60.0,\n        \"breast_circumference\": 95.0,\n        \"under_breast_circumference\": 85.0,\n        \"waist_circumference\": 80.0,\n        \"hip_circumference\": 95.0,\n        \"upper_thigh_circumference\": 55.0,\n        \"neck_circumference\": 38.0,\n        \"biceps_circumference\": 30.0,\n        \"upper_hip_circumference\": 90.0,\n        \"wide_hip_circumference\": 100.0,\n        \"calf_circumference\": 35.0,\n        \"waist_to_crotch_front_length\": 25.0,\n        \"waist_to_crotch_back_length\": 30.0,\n        \"inner_leg_length\": 75.0,\n        \"foot_length\": 26.0,\n        \"foot_width\": 10.0,\n        \"unit\": \"metric\",\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+						},
+						{
+							"name": "Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements",
+									"host": ["{{base_url}}"],
+									"path": ["api", "body-measurements"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Body measurements not found\",\n    \"error_code\": \"NOT_FOUND\"\n}"
+						}
+					]
 				},
 				{
 					"name": "Update Measurements",
@@ -242,7 +581,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "body-measurements"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"weight\": 72,\n  \"waist_circumference\": 82\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements",
+									"host": ["{{base_url}}"],
+									"path": ["api", "body-measurements"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Body measurements updated successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"height\": 175.0,\n        \"weight\": 72.0,\n        \"waist_circumference\": 82.0,\n        \"unit\": \"metric\",\n        \"updated_at\": \"2025-12-03T12:00:00\"\n    }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -271,7 +644,42 @@
 							"path": ["api", "save-avatar"]
 						},
 						"description": "Save avatar for the authenticated user. Background is removed using Gemini-1.5-pro and only the person image is stored. Requires Bearer JWT; do not pass user_id."
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "avatar",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/save-avatar",
+									"host": ["{{base_url}}"],
+									"path": ["api", "save-avatar"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"message\": \"Avatar saved successfully\",\n        \"background_removed\": true,\n        \"avatar_url\": \"http://localhost:8000/images/avatars/f3a6ad94/f3a6ad94_9dd42f69.png\"\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Get Avatar",
@@ -284,7 +692,55 @@
 							"path": ["api", "get-avatar"]
 						},
 						"description": "Get authenticated user's avatar URL. Returns absolute URL ready for frontend use: {\"success\": true, \"data\": {\"avatar_url\": \"http://localhost:8000/images/avatars/{user_id}/{filename}.png\"}}"
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/get-avatar",
+									"host": ["{{base_url}}"],
+									"path": ["api", "get-avatar"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"avatar_url\": \"http://localhost:8000/images/avatars/f3a6ad94/f3a6ad94_9dd42f69.png\"\n    }\n}"
+						},
+						{
+							"name": "Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/get-avatar",
+									"host": ["{{base_url}}"],
+									"path": ["api", "get-avatar"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Avatar not found\",\n    \"error_code\": \"NOT_FOUND\"\n}"
+						}
+					]
 				},
 				{
 					"name": "Update Avatar",
@@ -306,7 +762,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "update-avatar"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"avatar_data\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/update-avatar",
+									"host": ["{{base_url}}"],
+									"path": ["api", "update-avatar"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Avatar updated successfully\",\n    \"data\": {\n        \"avatar_url\": \"http://localhost:8000/images/avatars/f3a6ad94/f3a6ad94_updated.png\"\n    }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -333,7 +823,73 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "garments", "scrape"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success (Cached)",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://www.zara.com/in/en/wool-blend-blazer-with-faux-fur-collar-zw-collection-p07522301.html\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/scrape",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "scrape"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/wool-blend-blazer-with-faux-fur-collar-zw-collection-p07522301.html\",\n        \"title\": \"WOOL BLEND BLAZER WITH FAUX FUR COLLAR ZW COLLECTION\",\n        \"price\": \"11950\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/9f9a/8987/dd594037ae26/445abff63cb4/07522301737-p/07522301737-p.jpg\",\n            \"https://static.zara.net/assets/public/613b/fdf8/b52c4fe5af74/2d1e9b04c625/07522301737-a1/07522301737-a1.jpg\"\n        ],\n        \"sizes\": [],\n        \"colors\": [\"Brown / Taupe |\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"jacket\",\n        \"confidence\": 0.8,\n        \"scraped_at\": \"2025-12-03 11:30:00\",\n        \"updated_at\": \"2025-12-03 11:30:00\"\n    }\n}"
+						},
+						{
+							"name": "Success (Fresh Scrape)",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://www.zara.com/in/en/product/12345\",\n  \"force_refresh\": true\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/scrape",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "scrape"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"White\", \"Black\", \"Navy\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Refresh Product (Force Re-scrape)",
@@ -355,7 +911,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "garments", "refresh"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://www.zara.com/in/en/product/12345\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/refresh",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "refresh"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Product data refreshed successfully\",\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"White\", \"Black\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Categorize Garment",
@@ -382,7 +972,42 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "garments", "categorize"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "title",
+											"value": "Blue Cotton T-Shirt",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/categorize",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "categorize"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Extract Images",
@@ -404,7 +1029,73 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "garments", "extract-images"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://www.zara.com/us/en/product/12345\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/extract-images",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "extract-images"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\",\n            \"https://static.zara.net/assets/public/.../image3.jpg\"\n        ],\n        \"url\": \"https://www.zara.com/us/en/product/12345\"\n    }\n}"
+						},
+						{
+							"name": "No Images Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://example.com/product\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/garments/extract-images",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "extract-images"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"No images extracted\",\n    \"data\": {\n        \"images\": [],\n        \"reason\": \"No product images found. Possible reasons: 1) Page requires JavaScript to load images (modern e-commerce sites), 2) Images are loaded dynamically via AJAX, 3) Page structure changed, 4) Access blocked or page not accessible. Try using /api/garments/scrape for more comprehensive extraction with brand-specific logic.\",\n        \"url\": \"https://example.com/product\"\n    }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -431,7 +1122,73 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "fitting", "check"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success - Fits",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_id\": \"zara-tshirt-12345\",\n  \"size\": \"M\",\n  \"size_chart\": {\n    \"M\": {\"chest\": 96, \"waist\": 80, \"hips\": 96}\n  },\n  \"brand\": \"Zara\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/check",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "check"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"fits\": true,\n        \"size\": \"M\",\n        \"fit_score\": 0.85,\n        \"recommendations\": [\"Good fit for chest and waist\", \"Slightly loose at hips\"]\n    }\n}"
+						},
+						{
+							"name": "Success - Doesn't Fit",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_id\": \"zara-tshirt-12345\",\n  \"size\": \"S\",\n  \"size_chart\": {\n    \"S\": {\"chest\": 92, \"waist\": 76, \"hips\": 92}\n  },\n  \"brand\": \"Zara\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/check",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "check"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"fits\": false,\n        \"size\": \"S\",\n        \"fit_score\": 0.45,\n        \"recommendations\": [\"Too tight at chest\", \"Consider size M\"]\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Get Size Recommendation",
@@ -457,7 +1214,32 @@
 								}
 							]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/fitting/size-recommendation?garment_id=zara-tshirt-12345&size_chart={\"M\":{\"chest\":96,\"waist\":80,\"hips\":96}}&brand=Zara",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "size-recommendation"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"recommended_size\": \"M\",\n        \"confidence\": 0.9,\n        \"reasoning\": \"Based on your measurements (chest: 95cm, waist: 80cm, hips: 95cm), size M provides the best fit.\"\n    }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -500,6 +1282,41 @@
 						},
 						"description": "Create try-on job using product URLs. Backend will scrape product pages (Zara, etc.), extract images and garment details, and call Gemini-1.5-pro. If selfie/person_image is not provided, the user's saved avatar is used."
 					},
+					"response": [
+						{
+							"name": "Job Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "item_urls",
+											"value": "[\"https://www.zara.com/us/en/product/12345\"]",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon"]
+								}
+							},
+							"status": "Accepted",
+							"code": 202,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"queued\",\n        \"estimated_time\": 15\n    }\n}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -551,6 +1368,41 @@
 						},
 						"description": "Create try-on job with direct garment image upload. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar."
 					},
+					"response": [
+						{
+							"name": "Job Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_image",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon"]
+								}
+							},
+							"status": "Accepted",
+							"code": 202,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"queued\",\n        \"estimated_time\": 15\n    }\n}"
+						}
+					],
 					"event": [
 						{
 							"listen": "test",
@@ -577,7 +1429,101 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "job", "{{job_id}}"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Job Queued",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"queued\",\n        \"progress\": 0\n    }\n}"
+						},
+						{
+							"name": "Job Processing",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"processing\",\n        \"progress\": 50\n    }\n}"
+						},
+						{
+							"name": "Job Done",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"done\",\n        \"progress\": 100,\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\"\n    }\n}"
+						},
+						{
+							"name": "Job Failed",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"failed\",\n        \"progress\": 0,\n        \"error_message\": \"Failed to process try-on: Gemini API error\"\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Get Job Result",
@@ -589,7 +1535,55 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "job", "{{job_id}}", "result"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce/result",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce", "result"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\"\n    }\n}"
+						},
+						{
+							"name": "Not Ready",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/job/c6e2dd9f-34cd-4578-9055-107034e827ce/result",
+									"host": ["{{base_url}}"],
+									"path": ["api", "job", "c6e2dd9f-34cd-4578-9055-107034e827ce", "result"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Job result not ready yet. Status: processing\",\n    \"error_code\": \"VALIDATION_ERROR\"\n}"
+						}
+					]
 				},
 				{
 					"name": "Multi-Garment Try-On (top + bottom)",
@@ -624,7 +1618,47 @@
 							"path": ["api", "tryon", "multi"]
 						},
 						"description": "Multi-garment try-on (top + bottom). Uses Gemini-1.5-pro. If person_image is not provided, backend uses the authenticated user's saved avatar."
-					}
+					},
+					"response": [
+						{
+							"name": "Job Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "top_garment_image",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "bottom_garment_image",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon/multi",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon", "multi"]
+								}
+							},
+							"status": "Accepted",
+							"code": 202,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"a1b2c3d4-5678-90ef-ghij-klmnopqrstuv\",\n        \"status\": \"queued\",\n        \"estimated_time\": 20\n    }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -644,7 +1678,32 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "category-sections"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/category-sections",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "category-sections"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": [\n        {\n            \"name\": \"upper_body\",\n            \"display_name\": \"Upper Body\",\n            \"description\": \"Upper body garments\",\n            \"sort_order\": 1,\n            \"icon_name\": \"shirt_icon\",\n            \"icon_url\": \"https://example.com/icons/shirt.png\",\n            \"user_id\": null\n        },\n        {\n            \"name\": \"lower_body\",\n            \"display_name\": \"Lower Body\",\n            \"description\": \"Lower body garments\",\n            \"sort_order\": 2,\n            \"icon_name\": \"pants_icon\",\n            \"icon_url\": \"https://example.com/icons/pants.png\",\n            \"user_id\": null\n        },\n        {\n            \"name\": \"accessoires\",\n            \"display_name\": \"Accessories\",\n            \"description\": \"Accessories\",\n            \"sort_order\": 3,\n            \"icon_name\": \"bag_icon\",\n            \"icon_url\": \"https://example.com/icons/bag.png\",\n            \"user_id\": null\n        },\n        {\n            \"name\": \"wishlist\",\n            \"display_name\": \"Wishlist\",\n            \"description\": \"Wishlist items\",\n            \"sort_order\": 4,\n            \"icon_name\": \"heart_icon\",\n            \"icon_url\": \"https://example.com/icons/heart.png\",\n            \"user_id\": null\n        }\n    ]\n}"
+								}
+							]
 						},
 						{
 							"name": "Create User Category Section",
@@ -666,7 +1725,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "category-sections"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"name\": \"summer_collection\",\n  \"display_name\": \"Summer Collection\",\n  \"description\": \"My summer wardrobe items\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/category-sections",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "category-sections"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": 5,\n        \"name\": \"summer_collection\",\n        \"display_name\": \"Summer Collection\",\n        \"description\": \"My summer wardrobe items\",\n        \"sort_order\": 5,\n        \"icon_name\": \"summer_icon\",\n        \"icon_url\": \"https://example.com/icons/summer.png\",\n        \"user_id\": \"f3a6ad94\",\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								}
+							]
 						}
 					]
 				},
@@ -695,7 +1788,32 @@
 										}
 									]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/categories",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "categories"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"upper_body\": [\n            {\n                \"id\": 1,\n                \"name\": \"t_shirts\",\n                \"display_name\": \"T-Shirts\",\n                \"description\": \"Casual t-shirts\",\n                \"category_section\": \"upper_body\",\n                \"user_id\": null\n            },\n            {\n                \"id\": 2,\n                \"name\": \"shirts\",\n                \"display_name\": \"Shirts\",\n                \"description\": \"Formal and casual shirts\",\n                \"category_section\": \"upper_body\",\n                \"user_id\": null\n            }\n        ],\n        \"lower_body\": [\n            {\n                \"id\": 3,\n                \"name\": \"pants\",\n                \"display_name\": \"Pants\",\n                \"description\": \"Trousers and pants\",\n                \"category_section\": \"lower_body\",\n                \"user_id\": null\n            }\n        ],\n        \"accessoires\": [],\n        \"wishlist\": []\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Create Category",
@@ -717,7 +1835,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "categories"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"name\": \"casual_shirts\",\n  \"description\": \"Casual shirts for everyday wear\",\n  \"category_section\": \"upper_body\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/categories",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "categories"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": 10,\n        \"name\": \"casual_shirts\",\n        \"description\": \"Casual shirts for everyday wear\",\n        \"category_section\": \"upper_body\",\n        \"user_id\": \"f3a6ad94\",\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Get Category by ID",
@@ -729,7 +1881,32 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "categories", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/categories/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "categories", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": 1,\n        \"name\": \"t_shirts\",\n        \"display_name\": \"T-Shirts\",\n        \"description\": \"Casual t-shirts\",\n        \"category_section\": \"upper_body\",\n        \"user_id\": null,\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Update Category",
@@ -750,7 +1927,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "categories", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"name\": \"updated_category_name\",\n  \"description\": \"Updated description\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/categories/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "categories", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Category updated successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"name\": \"updated_category_name\",\n        \"description\": \"Updated description\",\n        \"category_section\": \"upper_body\",\n        \"user_id\": null,\n        \"updated_at\": \"2025-12-03T12:00:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Delete Category",
@@ -762,7 +1973,32 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "categories", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/categories/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "categories", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Category deleted successfully\"\n}"
+								}
+							]
 						}
 					]
 				},
@@ -843,7 +2079,47 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "items"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "formdata",
+											"formdata": [
+												{
+													"key": "garment_image",
+													"type": "file",
+													"src": []
+												},
+												{
+													"key": "title",
+													"value": "Classic Blue Cotton T-Shirt",
+													"type": "text"
+												}
+											]
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Garment added successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"title\": \"Classic Blue Cotton T-Shirt\",\n        \"brand\": \"Zara\",\n        \"color\": \"Navy Blue\",\n        \"size\": \"M\",\n        \"category\": \"upper\",\n        \"garment_category_type\": \"t-shirt\",\n        \"image_path\": \"/images/wardrobe/f3a6ad94/1.png\",\n        \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/1.png\",\n        \"fabric\": [{\"name\": \"cotton\", \"percentage\": 100}],\n        \"care_instructions\": \"Machine wash at 30°C, Do not bleach\",\n        \"description\": \"Comfortable 100% cotton t-shirt\",\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Add Garment (URL Extraction)",
@@ -865,7 +2141,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "items"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"garment_url\": \"https://www.zara.com/us/en/product/12345\",\n  \"category_section\": \"upper_body\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items"]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Garment added successfully\",\n    \"data\": {\n        \"id\": 2,\n        \"user_id\": \"f3a6ad94\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"brand\": \"Zara\",\n        \"color\": \"White\",\n        \"size\": null,\n        \"category\": \"upper\",\n        \"garment_category_type\": \"t-shirt\",\n        \"image_path\": \"/images/wardrobe/f3a6ad94/2.png\",\n        \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/2.png\",\n        \"fabric\": null,\n        \"care_instructions\": null,\n        \"description\": null,\n        \"is_external\": false,\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Get Wardrobe Items",
@@ -894,7 +2204,32 @@
 										}
 									]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": [\n        {\n            \"id\": 1,\n            \"user_id\": \"f3a6ad94\",\n            \"title\": \"Classic Blue Cotton T-Shirt\",\n            \"brand\": \"Zara\",\n            \"color\": \"Navy Blue\",\n            \"size\": \"M\",\n            \"category\": \"upper\",\n            \"garment_category_type\": \"t-shirt\",\n            \"image_path\": \"/images/wardrobe/f3a6ad94/1.png\",\n            \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/1.png\",\n            \"fabric\": [{\"name\": \"cotton\", \"percentage\": 100}],\n            \"care_instructions\": \"Machine wash at 30°C, Do not bleach\",\n            \"description\": \"Comfortable 100% cotton t-shirt\",\n            \"is_external\": false,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    ]\n}"
+								}
+							]
 						},
 						{
 							"name": "Get Wardrobe Item by ID",
@@ -906,7 +2241,55 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "items", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"title\": \"Classic Blue Cotton T-Shirt\",\n        \"brand\": \"Zara\",\n        \"color\": \"Navy Blue\",\n        \"size\": \"M\",\n        \"category\": \"upper\",\n        \"garment_category_type\": \"t-shirt\",\n        \"image_path\": \"/images/wardrobe/f3a6ad94/1.png\",\n        \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/1.png\",\n        \"fabric\": [{\"name\": \"cotton\", \"percentage\": 100}],\n        \"care_instructions\": \"Machine wash at 30°C, Do not bleach\",\n        \"description\": \"Comfortable 100% cotton t-shirt\",\n        \"is_external\": false,\n        \"created_at\": \"2025-12-03T11:30:00\",\n        \"updated_at\": \"2025-12-03T11:30:00\"\n    }\n}"
+								},
+								{
+									"name": "Not Found",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items/999",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items", "999"]
+										}
+									},
+									"status": "Not Found",
+									"code": 404,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": false,\n    \"error\": \"Wardrobe item not found\",\n    \"error_code\": \"NOT_FOUND\"\n}"
+								}
+							]
 						},
 						{
 							"name": "Update Wardrobe Item",
@@ -928,7 +2311,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "items", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"title\": \"Updated Classic Blue Cotton T-Shirt\",\n  \"size\": \"L\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Wardrobe item updated successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"title\": \"Updated Classic Blue Cotton T-Shirt\",\n        \"brand\": \"Zara\",\n        \"color\": \"Navy Blue\",\n        \"size\": \"L\",\n        \"category\": \"upper\",\n        \"garment_category_type\": \"t-shirt\",\n        \"image_path\": \"/images/wardrobe/f3a6ad94/1.png\",\n        \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/1.png\",\n        \"fabric\": [{\"name\": \"cotton\", \"percentage\": 95}, {\"name\": \"elastane\", \"percentage\": 5}],\n        \"care_instructions\": \"Machine wash at 30°C, Do not bleach, Line dry\",\n        \"description\": \"Updated: Comfortable 100% cotton t-shirt with updated details\",\n        \"updated_at\": \"2025-12-03T12:00:00\"\n    }\n}"
+								}
+							]
 						},
 						{
 							"name": "Delete Wardrobe Item",
@@ -940,7 +2357,32 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "items", "1"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/items/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "items", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"message\": \"Wardrobe item deleted successfully\"\n}"
+								}
+							]
 						},
 						{
 							"name": "Extract Garment from URL",
@@ -962,7 +2404,41 @@
 									"host": ["{{base_url}}"],
 									"path": ["api", "wardrobe", "extract-from-url"]
 								}
-							}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"url\": \"https://www.zara.com/us/en/product/12345\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/extract-from-url",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "extract-from-url"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/us/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9,\n        \"colors\": [\"White\", \"Black\"],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"]\n    }\n}"
+								}
+							]
 						}
 					]
 				}
@@ -981,7 +2457,32 @@
 							"host": ["{{base_url}}"],
 							"path": ["health"]
 						}
-					}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/health",
+									"host": ["{{base_url}}"],
+									"path": ["health"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"status\": \"healthy\",\n        \"database\": \"connected\"\n    }\n}"
+						}
+					]
 				}
 			]
 		}
