@@ -40,22 +40,31 @@ def create_tryon_job():
     
     try:
         
-        # Get person image (selfie or avatar_id)
-        # Per context.md: 'selfie' field name
+        # Get person image (selfie, person_image file, or use current user's saved avatar)
+        # Priority: 1) selfie file, 2) person_image file, 3) current user's saved avatar (no need to send from frontend)
         person_image = None
         if 'selfie' in request.files:
             person_image = request.files['selfie'].read()
+            logger.info(f"create_tryon_job: Using selfie file for person image")
         elif 'person_image' in request.files:
             person_image = request.files['person_image'].read()
-        elif 'avatar_id' in request.form:
-            # Fetch avatar from database using User model
-            avatar_user_id = request.form.get('avatar_id')
-            avatar_user = User.get_by_id(avatar_user_id)
-            if avatar_user and avatar_user.avatar:
-                person_image = avatar_user.avatar
+            logger.info(f"create_tryon_job: Using person_image file for person image")
+        else:
+            # Use current user's saved avatar (already stored in backend, no need to send from frontend)
+            # Security: Always use the authenticated user's avatar, not arbitrary avatar_id
+            current_user = User.get_by_id(user_id)
+            if current_user and current_user.avatar:
+                person_image = current_user.avatar
+                logger.info(f"create_tryon_job: Using current user's saved avatar (user_id={user_id})")
+            else:
+                return error_response_from_string(
+                    'No person image provided. Please upload a selfie/person_image file or save an avatar first using /api/save-avatar',
+                    400,
+                    'VALIDATION_ERROR'
+                )
         
         if not person_image:
-            return error_response_from_string('selfie/person_image or avatar_id required', 400, 'VALIDATION_ERROR')
+            return error_response_from_string('selfie/person_image required or save avatar first', 400, 'VALIDATION_ERROR')
         
         # Preprocess person image
         try:
@@ -67,10 +76,12 @@ def create_tryon_job():
         # Get garment image - support multiple methods per context.md
         garment_image = None
         garment_type = 'upper'  # Default
+        garment_details = None  # Will be populated from scraping or request
         
         # Method 1: Direct image file
         if 'garment_image' in request.files:
             garment_image = request.files['garment_image'].read()
+            logger.info(f"create_tryon_job: Using garment_image file")
         
         # Method 2: item_urls[] array (per context.md line 125) - PRIMARY METHOD
         if not garment_image and 'item_urls' in request.form:
@@ -99,35 +110,123 @@ def create_tryon_job():
                 logger.info(f"create_tryon_job: Processing item_url[{garment_index}]: {item_url[:100]}")
                 
                 # Try to scrape product page first (if it's a product URL)
-                # Use centralized scraping utilities
+                # CHECK CACHE FIRST to save Scrape.do credits
                 try:
-                    from features.garments.scraper import fetch_html, extract_images_from_html, extract_title_from_html, is_image_url
+                    from features.garments.scraper import is_image_url
+                    from features.wardrobe.extractors import BrandExtractorFactory
                     
                     # Check if URL is a direct image or product page
                     if not is_image_url(item_url):
-                        # Likely a product page, try scraping
-                        html_content = fetch_html(item_url)
-                        if html_content:
-                            # Extract images from HTML
-                            image_urls = extract_images_from_html(html_content, item_url, max_images=10)
+                        # Likely a product page - CHECK CACHE FIRST
+                        product_info = None
+                        cached_data = None
+                        
+                        # Check cache for this URL
+                        try:
+                            cached = db_manager.execute_query(
+                                "SELECT * FROM garment_metadata WHERE url = ?",
+                                (item_url,),
+                                fetch_one=True
+                            )
                             
-                            # Try to fetch first valid image
-                            for img_url in image_urls:
-                                try:
-                                    garment_image = fetch_image_from_url(img_url)
-                                    logger.info(f"create_tryon_job: Successfully fetched scraped image: {img_url[:100]}")
-                                    
-                                    # Extract title for categorization
-                                    title = extract_title_from_html(html_content)
-                                    if title:
-                                        categorization = categorize_garment(title=title)
-                                        garment_type = categorization.get('category', 'upper')
-                                        logger.info(f"create_tryon_job: Detected garment_type={garment_type} from title")
-                                    
-                                    break  # Successfully got image
-                                except Exception as img_fetch_error:
-                                    logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
-                                    continue
+                            if cached:
+                                cached_dict = dict(cached)
+                                # Parse JSON fields
+                                if cached_dict.get('images'):
+                                    try:
+                                        cached_dict['images'] = json.loads(cached_dict['images'])
+                                    except:
+                                        cached_dict['images'] = []
+                                if cached_dict.get('sizes'):
+                                    try:
+                                        cached_dict['sizes'] = json.loads(cached_dict['sizes'])
+                                    except:
+                                        cached_dict['sizes'] = []
+                                if cached_dict.get('colors'):
+                                    try:
+                                        cached_dict['colors'] = json.loads(cached_dict['colors'])
+                                    except:
+                                        cached_dict['colors'] = []
+                                
+                                # Check if cache is valid (has data and not expired - 3 days)
+                                from datetime import datetime, timedelta
+                                scraped_at_str = cached_dict.get('scraped_at') or cached_dict.get('updated_at')
+                                is_valid_cache = False
+                                
+                                if scraped_at_str:
+                                    try:
+                                        if isinstance(scraped_at_str, str):
+                                            scraped_at = datetime.strptime(scraped_at_str, '%Y-%m-%d %H:%M:%S')
+                                        else:
+                                            scraped_at = scraped_at_str
+                                        cache_age = datetime.now() - scraped_at
+                                        is_valid_cache = cache_age <= timedelta(days=3) and (
+                                            (cached_dict.get('title') and cached_dict.get('title').strip()) or
+                                            (cached_dict.get('images') and len(cached_dict.get('images', [])) > 0)
+                                        )
+                                    except:
+                                        is_valid_cache = False
+                                
+                                if is_valid_cache:
+                                    cached_data = cached_dict
+                                    logger.info(f"create_tryon_job: Using cached product data for URL (saving Scrape.do credits)")
+                        except Exception as cache_error:
+                            logger.warning(f"create_tryon_job: Cache check failed: {str(cache_error)}")
+                        
+                        # If cache is valid, use it; otherwise scrape fresh
+                        if cached_data and cached_data.get('images'):
+                            product_info = cached_data
+                            logger.info(f"create_tryon_job: Using cached images ({len(product_info.get('images', []))} images)")
+                        else:
+                            # Cache miss or expired - scrape fresh
+                            logger.info(f"create_tryon_job: Cache miss/expired, scraping fresh data")
+                            try:
+                                extractor = BrandExtractorFactory.get_extractor(item_url)
+                                product_info = extractor.extract_product_info(item_url)
+                            except Exception as extractor_error:
+                                logger.warning(f"create_tryon_job: Brand extractor failed: {str(extractor_error)}, trying simple scraping")
+                                # Fallback to simple scraping
+                                from features.garments.scraper import fetch_html, extract_images_from_html, extract_title_from_html
+                                html_content = fetch_html(item_url)
+                                if html_content:
+                                    image_urls = extract_images_from_html(html_content, item_url, max_images=10)
+                                    product_info = {
+                                        'images': image_urls,
+                                        'title': extract_title_from_html(html_content)
+                                    }
+                        
+                        # Extract garment image from product info (cached or fresh)
+                        if product_info:
+                            images = product_info.get('images', [])
+                            if images:
+                                for img_url in images[:3]:  # Try top 3 images
+                                    try:
+                                        garment_image = fetch_image_from_url(img_url)
+                                        logger.info(f"create_tryon_job: Successfully fetched image: {img_url[:100]}")
+                                        
+                                        # Build garment_details from product_info for Gemini
+                                        garment_details = {
+                                            'category': product_info.get('category'),
+                                            'brand': product_info.get('brand'),
+                                            'title': product_info.get('title'),
+                                            'color': product_info.get('color') or (product_info.get('colors', [])[0] if product_info.get('colors') else None),
+                                            'price': product_info.get('price'),
+                                            'style': product_info.get('style'),
+                                            'material_type': product_info.get('material_type')
+                                        }
+                                        # Remove None values
+                                        garment_details = {k: v for k, v in garment_details.items() if v is not None}
+                                        
+                                        # Get garment_type from categorization
+                                        if product_info.get('title'):
+                                            categorization = categorize_garment(title=product_info.get('title'))
+                                            garment_type = categorization.get('category', 'upper')
+                                            logger.info(f"create_tryon_job: Detected garment_type={garment_type} from product info")
+                                        
+                                        break  # Successfully got image and details
+                                    except Exception as img_fetch_error:
+                                        logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
+                                        continue
                 except Exception as scrape_error:
                     logger.warning(f"create_tryon_job: Scraping failed: {str(scrape_error)}, trying direct URL")
                 
@@ -188,13 +287,23 @@ def create_tryon_job():
         if 'num_inference_steps' in request.form:
             options['num_inference_steps'] = request.form.get('num_inference_steps')
         
-        # Create job
+        # Get garment_details from options if not already set from scraping
+        if not garment_details and 'garment_details' in options:
+            garment_details = options.get('garment_details')
+            if isinstance(garment_details, str):
+                try:
+                    garment_details = json.loads(garment_details)
+                except:
+                    garment_details = None
+        
+        # Create job with garment_details for Gemini API
         job_queue = get_job_queue()
         job_id = job_queue.create_job(
             user_id=user_id,
             person_image=person_image,
             garment_image=garment_image,
             garment_type=garment_type,
+            garment_details=garment_details,  # Pass garment details to Gemini
             options=options
         )
         
@@ -237,6 +346,11 @@ def get_job_status(job_id):
         if job['user_id'] != user_id:
             logger.warning(f"get_job_status: Unauthorized access - job_id={job_id}, user_id={user_id}")
             return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        
+        # Convert result_url to absolute URL if present
+        if job.get('result_url'):
+            from shared.url_utils import to_absolute_url
+            job['result_url'] = to_absolute_url(job['result_url'])
         
         logger.info(f"get_job_status: EXIT - Job status retrieved for job_id={job_id}")
         return success_response(data=job)
@@ -287,9 +401,12 @@ def get_job_result(job_id):
             return send_file(BytesIO(image_data), mimetype='image/png')
         
         # Otherwise, result_url is a file path or URL
-        # For now, return the URL (client can fetch it)
-        logger.info(f"get_job_result: EXIT - Returning result URL for job_id={job_id}")
-        return success_response(data={'result_url': job['result_url']})
+        # Convert relative URL to absolute URL for frontend
+        from shared.url_utils import to_absolute_url
+        result_url = to_absolute_url(job['result_url'])
+        
+        logger.info(f"get_job_result: EXIT - Returning result URL for job_id={job_id}: {result_url}")
+        return success_response(data={'result_url': result_url})
         
     except Exception as e:
         logger.exception(f"get_job_result: EXIT - Error: {str(e)}")
@@ -309,19 +426,26 @@ def create_multi_tryon_job():
     logger.info(f"create_multi_tryon_job: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        # Get person image
+        # Get person image - use current user's saved avatar if no file provided
         person_image = None
         if 'person_image' in request.files:
             person_image = request.files['person_image'].read()
-        elif 'avatar_id' in request.form:
-            # Fetch avatar from database using User model
-            avatar_user_id = request.form.get('avatar_id')
-            avatar_user = User.get_by_id(avatar_user_id)
-            if avatar_user and avatar_user.avatar:
-                person_image = avatar_user.avatar
+            logger.info(f"create_multi_tryon_job: Using person_image file")
+        else:
+            # Use current user's saved avatar (already stored in backend)
+            current_user = User.get_by_id(user_id)
+            if current_user and current_user.avatar:
+                person_image = current_user.avatar
+                logger.info(f"create_multi_tryon_job: Using current user's saved avatar (user_id={user_id})")
+            else:
+                return error_response_from_string(
+                    'No person image provided. Please upload a person_image file or save an avatar first using /api/save-avatar',
+                    400,
+                    'VALIDATION_ERROR'
+                )
         
         if not person_image:
-            return error_response_from_string('person_image or avatar_id required', 400, 'VALIDATION_ERROR')
+            return error_response_from_string('person_image required or save avatar first', 400, 'VALIDATION_ERROR')
         
         # Get top and bottom garments
         top_image = None

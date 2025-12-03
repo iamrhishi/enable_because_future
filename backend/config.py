@@ -24,7 +24,7 @@ class Config:
     # Google Gemini (Nano Banana) API Configuration
     # Used for both background removal and try-on processing
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-    GEMINI_MODEL_NAME = os.environ.get('GEMINI_MODEL_NAME', 'gemini-1.5-pro')  # or gemini-1.5-flash for faster
+    GEMINI_MODEL_NAME = os.environ.get('GEMINI_MODEL_NAME', 'gemini-2.5-flash-image')  # Nano Banana image model
     
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)

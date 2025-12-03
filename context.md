@@ -132,38 +132,43 @@ flowchart LR
 
 ```
 backend/
-├── api/                    # API Blueprints (Route Handlers)
-│   ├── auth.py            # Authentication endpoints
-│   ├── users.py           # User profile endpoints
-│   ├── body_measurements.py  # Body measurements CRUD
-│   ├── tryon.py           # Try-on job endpoints
-│   ├── wardrobe.py        # Wardrobe management
-│   ├── garments.py        # Garment scraping/categorization
-│   └── fitting.py         # Fitting analysis
+├── features/              # Feature-based MVC structure
+│   ├── auth/             # Authentication feature
+│   │   ├── controller.py # API endpoints
+│   │   └── service.py    # JWT token generation/verification
+│   ├── users/            # User profile feature
+│   │   └── controller.py # User profile endpoints
+│   ├── body_measurements/  # Body measurements feature
+│   │   └── controller.py # Body measurements CRUD
+│   ├── tryon/            # Try-on feature
+│   │   ├── controller.py # Try-on job endpoints
+│   │   ├── service.py    # Gemini API integration
+│   │   ├── job_queue.py  # Async job processing
+│   │   └── model.py      # Try-on job model
+│   ├── wardrobe/         # Wardrobe feature
+│   │   ├── controller.py # Wardrobe management endpoints
+│   │   ├── model.py      # Wardrobe item model
+│   │   ├── category_model.py  # Category & section models
+│   │   └── extractors.py  # Brand-specific extractors (Zara, etc.)
+│   ├── garments/         # Garment scraping feature
+│   │   ├── controller.py # Garment scraping/categorization endpoints
+│   │   └── scraper.py    # Generic web scraping utilities
+│   └── fitting/          # Fitting analysis feature
+│       └── controller.py # Fitting analysis endpoints
 │
-├── models/                # Data Models (ORM-like)
-│   ├── user.py            # User model
-│   ├── body_measurements.py  # Body measurements model
-│   ├── wardrobe.py        # Wardrobe item model
-│   ├── category.py        # Category & section models
-│   └── tryon_job.py       # Try-on job model
-│
-├── services/              # Business Logic Services
+├── shared/               # Shared utilities and models
 │   ├── database.py       # Database abstraction layer
-│   ├── auth.py           # JWT token generation/verification
-│   ├── ai_integration.py  # Gemini API integration
-│   ├── job_queue.py      # Async job processing
+│   ├── models/           # Shared data models
+│   │   └── user.py       # User model
 │   ├── image_processing.py  # Image validation/resizing
 │   ├── storage.py        # Local file storage
-│   ├── brand_extractors.py  # Brand-specific scrapers
-│   └── scraper.py        # Generic web scraping utilities
-│
-├── utils/                 # Utility Functions
 │   ├── middleware.py     # JWT authentication decorators
 │   ├── response.py       # Standardized API responses
 │   ├── errors.py         # Custom exception classes
 │   ├── validators.py     # Input validation functions
-│   └── logger.py         # Structured logging
+│   ├── logger.py         # Structured logging
+│   ├── url_utils.py      # URL utility functions (relative to absolute)
+│   └── garment_utils.py  # Garment categorization utilities
 │
 ├── migrations/            # Database Migrations
 │   ├── 001_initial_schema.sql
@@ -184,6 +189,14 @@ backend/
 ├── scripts/               # Utility Scripts
 │   ├── run_migrations.py  # Run database migrations
 │   └── validate.py       # Code validation script
+│
+├── images/                # Local image storage (created at runtime)
+│   ├── avatars/          # User avatar images
+│   ├── tryon-results/    # Try-on result images
+│   └── wardrobe/         # Wardrobe item images
+│
+├── logs/                  # Application logs (created at runtime)
+│   └── app.YYYY-MM-DD.log  # Daily rotating log files
 │
 ├── app.py                 # Flask application entry point
 ├── config.py              # Configuration management
@@ -272,63 +285,91 @@ backend/
 ## 3. Avatar Management
 
 ### Files
-- **API:** `app.py` (legacy endpoints)
-- **Services:** `services/ai_integration.py` (background removal)
-- **Services:** `services/image_processing.py` (image validation)
+- **API:** `app.py` (avatar endpoints)
+- **Services:** `features/tryon/service.py` (background removal via Gemini)
+- **Services:** `shared/image_processing.py` (image validation)
+- **Services:** `shared/storage.py` (disk storage)
+- **Utils:** `shared/url_utils.py` (URL conversion)
 
 ### Features
-- Upload avatar image
-- Automatic background removal via Gemini API
+- Upload avatar image with automatic background removal
+- Background removal via Gemini-1.5-pro API
+- Saves to both disk storage and database
+- Returns absolute URL for frontend use
 - Get/update avatar endpoints
 - Image validation and preprocessing
+- User ID automatically inferred from JWT token
 
 ### Key Functions
 
 **`app.py`:**
 - `save_avatar()` - POST `/api/save-avatar`
+  - Removes background using Gemini-1.5-pro
+  - Saves to disk storage (`images/avatars/{user_id}/`)
+  - Also saves to database for backward compatibility
+  - Returns absolute URL: `avatar_url`
 - `get_avatar()` - GET `/api/get-avatar`
+  - Returns absolute URL if disk file exists
+  - Falls back to blob if no disk file (backward compatibility)
 - `update_avatar()` - PUT `/api/update-avatar`
 
-**`services/ai_integration.py`:**
-- `remove_background()` - Calls Gemini API for background removal
+**`features/tryon/service.py`:**
+- `remove_background()` - Calls Gemini-1.5-pro API for background removal
+  - Returns transparent PNG with person isolated
 
 ---
 
 ## 4. Try-On Processing
 
 ### Files
-- **API:** `api/tryon.py`
-- **Services:** `services/ai_integration.py`, `services/job_queue.py`
-- **Models:** `models/tryon_job.py`
+- **API:** `features/tryon/controller.py`
+- **Services:** `features/tryon/service.py` (Gemini API), `features/tryon/job_queue.py`
+- **Models:** `features/tryon/model.py`
 - **Database:** `migrations/003_add_tryon_jobs.sql`
+- **Utils:** `shared/url_utils.py` (URL conversion), `shared/storage.py` (disk storage)
 
 ### Features
-- Async job queue system
+- Async job queue system with quality guardrails
+- Automatic use of saved avatar if no selfie provided
 - Support for `item_urls[]` array (multiple garments)
+- Automatic product page scraping with brand-specific extractors
+- Garment details extraction (brand, category, color, style, material)
+- Garment details passed to Gemini-1.5-pro for enhanced results
 - Support for direct image upload
 - Multi-garment try-on (top + bottom)
-- Job status polling
-- Result retrieval
+- Job status polling with absolute URLs
+- Result retrieval with absolute URLs
+- Results saved to disk storage
 
 ### Key Functions
 
-**`api/tryon.py`:**
+**`features/tryon/controller.py`:**
 - `create_tryon_job()` - POST `/api/tryon`
+  - Automatically uses saved avatar if no selfie/person_image provided
+  - Extracts garment details from product URLs
+  - Passes garment details to Gemini for better results
 - `get_job_status()` - GET `/api/job/<job_id>`
+  - Returns absolute URL in `result_url` field
 - `get_job_result()` - GET `/api/job/<job_id>/result`
+  - Returns absolute URL ready for frontend use
 - `create_multi_tryon_job()` - POST `/api/tryon/multi`
 
-**`services/job_queue.py`:**
+**`features/tryon/job_queue.py`:**
 - `JobQueue` class:
-  - `create_job()` - Create async job
+  - `create_job()` - Create async job with garment_details
   - `get_job_status()` - Get job status
   - `_process_job()` - Process job in background thread
+    - Saves results to disk storage
+    - Converts to absolute URLs
   - `_worker_loop()` - Worker thread loop
 
-**`services/ai_integration.py`:**
-- `process_tryon()` - Calls Gemini API for try-on processing
+**`features/tryon/service.py`:**
+- `process_tryon()` - Calls Gemini-1.5-pro API for try-on processing
+  - Accepts garment_details (brand, category, color, style, material)
+  - Uses garment details in prompt for better results
+- `remove_background()` - Calls Gemini-1.5-pro API for background removal
 
-**`models/tryon_job.py`:**
+**`features/tryon/model.py`:**
 - `TryOnJob` class with methods:
   - `get_by_id()`, `get_by_user()`, `save()`, `to_dict()`
 
@@ -721,16 +762,46 @@ backend/
 ### `POST /api/save-avatar`
 **File:** `app.py`  
 **Auth:** Required  
-**Description:** Save avatar image with background removal
+**Description:** Save avatar image with background removal using Gemini-1.5-pro. Image is saved to disk storage and database.
 
 **Request:** `multipart/form-data`
-- `avatar` (file)
-- `user_id` (text)
+- `avatar` (file) - Image file (PNG, JPG, JPEG, WEBP, max 5MB)
+- Note: `user_id` is NOT required - authenticated user is inferred from JWT token
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Avatar saved successfully",
+    "background_removed": true,
+    "avatar_url": "http://localhost:8000/images/avatars/{user_id}/{filename}.png"
+  }
+}
+```
+
+**Features:**
+- Automatic background removal via Gemini-1.5-pro
+- Saves to disk storage (`images/avatars/{user_id}/`)
+- Also saves to database for backward compatibility
+- Returns absolute URL for frontend use
 
 ### `GET /api/get-avatar`
 **File:** `app.py`  
 **Auth:** Required  
-**Description:** Get authenticated user's avatar image
+**Description:** Get authenticated user's avatar image URL
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "avatar_url": "http://localhost:8000/images/avatars/{user_id}/{filename}.png"
+  }
+}
+```
+
+**Note:** If no disk file exists, falls back to returning image blob (backward compatibility)
 
 ### `PUT /api/update-avatar`
 **File:** `app.py`  
@@ -742,14 +813,31 @@ backend/
 ### `POST /api/tryon`
 **File:** `api/tryon.py`  
 **Auth:** Required  
-**Description:** Create try-on job (async)
+**Description:** Create try-on job (async) using Gemini-1.5-pro
 
 **Request:** `multipart/form-data`
-- `selfie` (file) OR `avatar_id` (text)
-- `item_urls` (text) - JSON array: `["https://..."]`
-- `garment_image` (file) - Alternative to item_urls
-- `garment_url` (text) - Single URL (backward compatibility)
-- `options` (text) - JSON object with garment_index, etc.
+- `selfie` (file, optional) - Person image file. If not provided, uses authenticated user's saved avatar automatically
+- `person_image` (file, optional) - Alternative to selfie
+- `item_urls` (text) - JSON array: `["https://..."]` - Product URLs (backend will scrape and extract images + garment details)
+- `garment_image` (file, optional) - Direct garment image upload (alternative to item_urls)
+- `garment_url` (text, optional) - Single URL (backward compatibility)
+- `options` (text, optional) - JSON object with `garment_index`, `garment_details`, etc.
+
+**Person Image Priority:**
+1. `selfie` file (if provided)
+2. `person_image` file (if provided)
+3. **Automatically uses authenticated user's saved avatar** (no need to send from frontend)
+
+**Garment Image Priority:**
+1. `garment_image` file (if provided)
+2. `item_urls[]` array - Backend scrapes product page, extracts images and garment details (brand, category, color, etc.)
+3. `garment_url` - Single URL (backward compatibility)
+
+**Features:**
+- Automatically extracts garment details (brand, category, color, style, material) from scraped product pages
+- Passes garment details to Gemini-1.5-pro for better try-on results
+- Uses saved avatar if no person image provided (no need to send from frontend)
+- Saves results to disk storage with absolute URLs
 
 **Response:** `202 Accepted`
 ```json
@@ -757,7 +845,8 @@ backend/
   "success": true,
   "data": {
     "job_id": "uuid",
-    "status": "queued"
+    "status": "queued",
+    "estimated_time": 15
   }
 }
 ```
@@ -774,15 +863,29 @@ backend/
   "data": {
     "status": "done",
     "progress": 100,
-    "result_url": "/images/tryon-results/..."
+    "result_url": "http://localhost:8000/images/tryon-results/{user_id}/{job_id}.png"
   }
 }
 ```
 
+**Note:** `result_url` is always an absolute URL ready for frontend use.
+
 ### `GET /api/job/<job_id>/result`
 **File:** `api/tryon.py`  
 **Auth:** Required  
-**Description:** Get result image (returns image file or URL)
+**Description:** Get result image URL
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "result_url": "http://localhost:8000/images/tryon-results/{user_id}/{job_id}.png"
+  }
+}
+```
+
+**Note:** Returns absolute URL for frontend to use directly in `<img>` tags.
 
 ### `POST /api/tryon/multi`
 **File:** `api/tryon.py`  
@@ -814,10 +917,42 @@ backend/
 - `category_id` (integer) - Filter by category ID
 - `search` (string) - Search in title/brand/description
 
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "image_path": "/images/wardrobe/{user_id}/{garment_id}.png",
+      "image_url": "http://localhost:8000/images/wardrobe/{user_id}/{garment_id}.png",
+      "title": "Classic Blue Cotton T-Shirt",
+      "brand": "Zara",
+      ...
+    }
+  ]
+}
+```
+
+**Note:** All wardrobe items include both `image_path` (relative) and `image_url` (absolute) for frontend use.
+
 ### `GET /api/wardrobe/items/<id>`
 **File:** `api/wardrobe.py`  
 **Auth:** Required  
 **Description:** Get specific wardrobe item
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "image_path": "/images/wardrobe/{user_id}/{garment_id}.png",
+    "image_url": "http://localhost:8000/images/wardrobe/{user_id}/{garment_id}.png",
+    ...
+  }
+}
+```
 
 ### `PUT /api/wardrobe/items/<id>`
 **File:** `api/wardrobe.py`  
@@ -982,16 +1117,23 @@ result = db_manager.execute_query(
 
 ## AI Integration Service
 
-**File:** `services/ai_integration.py`
+**File:** `features/tryon/service.py`
 
 **Functions:**
-- `process_tryon(person_image, garment_image, garment_type, garment_details)` - Process try-on with Gemini API
+- `process_tryon(person_image, garment_image, garment_type, garment_details, options)` - Process try-on with Gemini API
 - `remove_background(image_data)` - Remove background using Gemini API
 
 **Gemini API Integration:**
-- Uses `google.generativeai` library
-- Model: `gemini-1.5-pro` or `gemini-1.5-flash` (configurable)
+- Uses direct HTTP requests to Gemini REST API
+- Model: `gemini-1.5-pro` (configurable via `GEMINI_MODEL_NAME`)
 - API key from environment variable `GEMINI_API_KEY`
+- Supports garment details (brand, category, color, style, material) for enhanced results
+- Returns base64-encoded images which are saved to disk storage
+
+**Features:**
+- Background removal: Removes background from avatar images, keeping only person/subject
+- Try-on processing: Places garment on person image with realistic fit
+- Garment details: Uses extracted product information (brand, category, color) for better results
 
 ## Job Queue Service
 
@@ -1031,24 +1173,35 @@ result = db_manager.execute_query(
 
 ## Storage Service
 
-**File:** `services/storage.py`
+**File:** `shared/storage.py`
 
 **Class:** `StorageService`
 
-**Purpose:** Local file storage management
+**Purpose:** Local file storage management with URL generation
 
 **Storage Structure:**
 ```
 images/
 ├── tryon-results/    # Try-on result images
+│   └── {user_id}/   # User-specific subdirectories
+│       └── {job_id}.png
 ├── avatars/          # User avatar images
+│   └── {user_id}/   # User-specific subdirectories
+│       └── {filename}.png
 └── wardrobe/         # Wardrobe item images
+    └── {user_id}/   # User-specific subdirectories
+        └── {garment_id}.png
 ```
 
 **Key Methods:**
-- `upload_image(image_data, file_path, subdirectory)` - Upload image to local storage
+- `upload_image(image_data, file_path, content_type, expiration_hours)` - Upload image to local storage and return relative URL
 - `delete_image(file_path)` - Delete image from storage
-- `get_image_path(file_path)` - Get full path to image
+- `get_image_path(file_path)` - Get full file system path to image
+
+**URL Generation:**
+- Returns relative URLs (e.g., `/images/avatars/{user_id}/{filename}.png`)
+- Controllers convert to absolute URLs using `shared/url_utils.to_absolute_url()`
+- All image URLs are absolute and ready for frontend use
 
 ## Brand Extractors Service
 

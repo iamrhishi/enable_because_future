@@ -230,7 +230,7 @@ Key variables:
 - `SECRET_KEY` - Flask secret key
 - `JWT_SECRET_KEY` - JWT signing key
 - `GEMINI_API_KEY` - Google Gemini API key (required for background removal and try-on)
-- `GEMINI_MODEL_NAME` - Gemini model to use (default: `gemini-1.5-pro`)
+- `GEMINI_MODEL_NAME` - Gemini model to use (default: `gemini-2.5-flash-image` - Nano Banana)
 - `IMAGES_DIR` - Base directory for storing images (default: `images`)
 - `IMAGES_BASE_URL` - Base URL for serving images (default: `/images`)
 - `MAX_QUEUE_SIZE` - Maximum job queue size (default: 50)

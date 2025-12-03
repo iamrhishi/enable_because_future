@@ -100,7 +100,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
         
         if response.status_code != 200:
-            logger.error(f"process_tryon: Gemini API error - status={response.status_code}, response={response.text[:200]}")
+            logger.error(f"process_tryon: Gemini API error - status={response.status_code}, response={response.text[:500]}")
             raise ExternalServiceError(
                 f"Gemini API error: {response.status_code} - {response.text[:200]}",
                 service='gemini'
@@ -108,12 +108,15 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         # Parse response
         result = response.json()
+        logger.debug(f"process_tryon: Response structure keys: {list(result.keys())}")
         
-        # Extract image from response
+        # Extract image from response - try multiple response formats
+        # Format 1: Standard Gemini format with candidates
         if 'candidates' in result and len(result['candidates']) > 0:
             candidate = result['candidates'][0]
             if 'content' in candidate and 'parts' in candidate['content']:
                 for part in candidate['content']['parts']:
+                    # Check for inline_data (snake_case) - standard Gemini format
                     if 'inline_data' in part and 'data' in part['inline_data']:
                         image_data_b64 = part['inline_data']['data']
                         image_bytes = base64.b64decode(image_data_b64)
@@ -122,8 +125,43 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                         result = f"data:image/png;base64,{result_base64}"
                         logger.info(f"process_tryon: EXIT - Success, result size={len(result_base64)} chars")
                         return result
+                    # Check for inlineData (camelCase) - Nano Banana image model format
+                    if 'inlineData' in part and 'data' in part['inlineData']:
+                        image_data_b64 = part['inlineData']['data']
+                        image_bytes = base64.b64decode(image_data_b64)
+                        # Convert to base64 data URL
+                        result_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                        result = f"data:image/png;base64,{result_base64}"
+                        logger.info(f"process_tryon: EXIT - Success (Nano Banana format), result size={len(result_base64)} chars")
+                        return result
+                    # Also check for text response that might contain base64
+                    if 'text' in part:
+                        text_content = part['text']
+                        # Check if text contains base64 image data
+                        if 'data:image' in text_content or len(text_content) > 1000:
+                            logger.debug(f"process_tryon: Found text content, length={len(text_content)}")
+                            # Try to extract base64 from text
+                            import re
+                            base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
+                            if base64_match:
+                                image_data_b64 = base64_match.group(1)
+                                image_bytes = base64.b64decode(image_data_b64)
+                                result_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                                result = f"data:image/png;base64,{result_base64}"
+                                logger.info(f"process_tryon: EXIT - Success (extracted from text), result size={len(result_base64)} chars")
+                                return result
         
-        logger.warning("process_tryon: Unexpected response structure")
+        # Format 2: Direct response with image data
+        if 'data' in result:
+            image_data_b64 = result['data']
+            image_bytes = base64.b64decode(image_data_b64)
+            result_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            result = f"data:image/png;base64,{result_base64}"
+            logger.info(f"process_tryon: EXIT - Success (direct data), result size={len(result_base64)} chars")
+            return result
+        
+        # Log full response structure for debugging
+        logger.warning(f"process_tryon: Unexpected response structure. Full response: {str(result)[:500]}")
         raise ExternalServiceError("Unexpected response format from Gemini API", service='gemini')
         
     except requests.RequestException as e:
@@ -191,7 +229,7 @@ def remove_background(image_data: bytes) -> bytes:
         response = requests.post(url, json=payload, headers=headers, params=params, timeout=60)
         
         if response.status_code != 200:
-            logger.error(f"remove_background: Gemini API error - status={response.status_code}, response={response.text[:200]}")
+            logger.error(f"remove_background: Gemini API error - status={response.status_code}, response={response.text[:500]}")
             raise ExternalServiceError(
                 f"Gemini API error: {response.status_code} - {response.text[:200]}",
                 service='gemini'
@@ -199,20 +237,50 @@ def remove_background(image_data: bytes) -> bytes:
         
         # Parse response - Gemini returns base64 encoded image in response
         result = response.json()
+        logger.debug(f"remove_background: Response structure keys: {list(result.keys())}")
         
-        # Extract image from response
+        # Extract image from response - try multiple response formats
+        # Format 1: Standard Gemini format with candidates
         if 'candidates' in result and len(result['candidates']) > 0:
             candidate = result['candidates'][0]
             if 'content' in candidate and 'parts' in candidate['content']:
                 for part in candidate['content']['parts']:
+                    # Check for inline_data (snake_case) - standard Gemini format
                     if 'inline_data' in part and 'data' in part['inline_data']:
                         image_data_b64 = part['inline_data']['data']
                         image_bytes = base64.b64decode(image_data_b64)
                         logger.info(f"remove_background: EXIT - Success, result size={len(image_bytes)} bytes")
                         return image_bytes
+                    # Check for inlineData (camelCase) - Nano Banana image model format
+                    if 'inlineData' in part and 'data' in part['inlineData']:
+                        image_data_b64 = part['inlineData']['data']
+                        image_bytes = base64.b64decode(image_data_b64)
+                        logger.info(f"remove_background: EXIT - Success (Nano Banana format), result size={len(image_bytes)} bytes")
+                        return image_bytes
+                    # Also check for text response that might contain base64
+                    if 'text' in part:
+                        text_content = part['text']
+                        # Check if text contains base64 image data
+                        if 'data:image' in text_content or len(text_content) > 1000:
+                            logger.debug(f"remove_background: Found text content, length={len(text_content)}")
+                            # Try to extract base64 from text
+                            import re
+                            base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
+                            if base64_match:
+                                image_data_b64 = base64_match.group(1)
+                                image_bytes = base64.b64decode(image_data_b64)
+                                logger.info(f"remove_background: EXIT - Success (extracted from text), result size={len(image_bytes)} bytes")
+                                return image_bytes
         
-        # Fallback: if structure is different, try alternative parsing
-        logger.warning("remove_background: Unexpected response structure")
+        # Format 2: Direct response with image data
+        if 'data' in result:
+            image_data_b64 = result['data']
+            image_bytes = base64.b64decode(image_data_b64)
+            logger.info(f"remove_background: EXIT - Success (direct data), result size={len(image_bytes)} bytes")
+            return image_bytes
+        
+        # Log full response structure for debugging
+        logger.warning(f"remove_background: Unexpected response structure. Full response: {str(result)[:500]}")
         raise ExternalServiceError("Unexpected response format from Gemini API", service='gemini')
         
     except requests.RequestException as e:

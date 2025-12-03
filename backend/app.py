@@ -113,11 +113,14 @@ def save_avatar():
                 'VALIDATION_ERROR'
             )
         
+        # user_id is already set from JWT token via @require_auth decorator
+        user_id = request.user_id
+        
         # Always remove background using Gemini (Nano Banana) API
         # Per user requirement: Use Nano Banana to remove background and keep only user image
         try:
             from features.tryon.service import remove_background
-            logger.info(f"Removing background from avatar using Gemini API for user: {user_id}")
+            logger.info(f"Removing background from avatar using Gemini API (Nano Banana) for user: {user_id}")
             avatar_data = remove_background(avatar_data)
             logger.info(f"Background removed successfully from avatar for user: {user_id}")
         except Exception as e:
@@ -138,14 +141,36 @@ def save_avatar():
         if not user:
             return error_response_from_string('User not found', 404, 'NOT_FOUND')
         
-        # Update user's avatar using model
+        # Save avatar to disk storage for frontend URL access
+        from shared.storage import get_storage_service
+        import uuid
+        avatar_filename = f"{user_id}_{uuid.uuid4().hex[:8]}.png"
+        storage_path = f"avatars/{user_id}/{avatar_filename}"
+        
+        storage_service = get_storage_service()
+        avatar_url = storage_service.upload_image(
+            avatar_data,
+            storage_path,
+            content_type='image/png'
+        )
+        
+        # Construct absolute URL for frontend
+        # Get base URL from request (works for both localhost and production)
+        base_url = request.url_root.rstrip('/')
+        absolute_avatar_url = f"{base_url}{avatar_url}"
+        
+        # Also save to database for backward compatibility (get_avatar endpoint)
         user.avatar = avatar_data
         user.save()
         
-        logger.info(f"Avatar saved successfully for user: {user_id}")
+        logger.info(f"Avatar saved successfully for user: {user_id}, URL: {absolute_avatar_url}")
         
         return success_response(
-            data={'message': 'Avatar saved successfully', 'background_removed': True},
+            data={
+                'message': 'Avatar saved successfully',
+                'background_removed': True,
+                'avatar_url': absolute_avatar_url  # Return URL for frontend to use
+            },
             message='Avatar saved successfully'
         )
         
@@ -174,16 +199,39 @@ def get_avatar():
         if not user or not user.avatar:
             return error_response_from_string('Avatar not found', 404, 'NOT_FOUND')
         
-        # Return the image as binary response
-        logger.info(f"get_avatar: EXIT - Avatar retrieved for user_id={user_id}")
-        return Response(
-            user.avatar,
-            mimetype='image/png',
-            headers={
-                'Content-Disposition': f'inline; filename=avatar_{user_id}.png',
-                'Cache-Control': 'max-age=300'  # Cache for 5 minutes
-            }
-        )
+        # Try to find avatar URL from disk storage first
+        # Look for avatar files in avatars/{user_id}/ directory
+        from pathlib import Path
+        from config import Config
+        images_dir = Path(Config.IMAGES_DIR)
+        avatar_dir = images_dir / 'avatars' / user_id
+        
+        avatar_url = None
+        if avatar_dir.exists():
+            # Find most recent avatar file
+            avatar_files = sorted(avatar_dir.glob('*.png'), key=lambda p: p.stat().st_mtime, reverse=True)
+            if avatar_files:
+                # Construct URL
+                relative_path = f"avatars/{user_id}/{avatar_files[0].name}"
+                base_url = request.url_root.rstrip('/')
+                avatar_url = f"{base_url}/images/{relative_path}"
+        
+        # If no disk file found, return blob (backward compatibility)
+        # But also include URL if available
+        if avatar_url:
+            logger.info(f"get_avatar: EXIT - Avatar URL retrieved for user_id={user_id}: {avatar_url}")
+            return success_response(data={'avatar_url': avatar_url})
+        else:
+            # Fallback: return blob if no disk file (backward compatibility)
+            logger.info(f"get_avatar: EXIT - Avatar blob retrieved for user_id={user_id} (no disk file)")
+            return Response(
+                user.avatar,
+                mimetype='image/png',
+                headers={
+                    'Content-Disposition': f'inline; filename=avatar_{user_id}.png',
+                    'Cache-Control': 'max-age=300'  # Cache for 5 minutes
+                }
+            )
         
     except Exception as e:
         logger.exception(f"get_avatar: EXIT - Error: {str(e)}")

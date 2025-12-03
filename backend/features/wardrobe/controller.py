@@ -455,6 +455,11 @@ def add_garment():
         if product_info:
             result['product_info'] = product_info
         
+        # Convert image_path to absolute URL for frontend
+        if result.get('image_path'):
+            from shared.url_utils import to_absolute_url
+            result['image_url'] = to_absolute_url(result['image_path'])
+        
         logger.info(f"add_garment: EXIT - Garment added: {garment_id}")
         return success_response(data=result, status_code=201)
         
@@ -501,6 +506,12 @@ def get_wardrobe_items():
         
         result = [item.to_dict() for item in items]
         
+        # Convert image_path to absolute URLs for frontend
+        from shared.url_utils import to_absolute_url
+        for item in result:
+            if item.get('image_path'):
+                item['image_url'] = to_absolute_url(item['image_path'])
+        
         logger.info(f"get_wardrobe_items: EXIT - Found {len(result)} items")
         return success_response(data=result)
         
@@ -526,8 +537,14 @@ def get_wardrobe_item(item_id: int):
         if not item:
             return error_response_from_string('Wardrobe item not found', 404, 'NOT_FOUND')
         
+        result = item.to_dict()
+        # Convert image_path to absolute URL for frontend
+        if result.get('image_path'):
+            from shared.url_utils import to_absolute_url
+            result['image_url'] = to_absolute_url(result['image_path'])
+        
         logger.info(f"get_wardrobe_item: EXIT - Item found")
-        return success_response(data=item.to_dict())
+        return success_response(data=result)
         
     except Exception as e:
         logger.exception(f"get_wardrobe_item: EXIT - Error: {str(e)}")
@@ -600,8 +617,14 @@ def update_wardrobe_item(item_id: int):
         
         item.save()
         
+        result = item.to_dict()
+        # Convert image_path to absolute URL for frontend
+        if result.get('image_path'):
+            from shared.url_utils import to_absolute_url
+            result['image_url'] = to_absolute_url(result['image_path'])
+        
         logger.info(f"update_wardrobe_item: EXIT - Item updated")
-        return success_response(data=item.to_dict())
+        return success_response(data=result)
         
     except Exception as e:
         logger.exception(f"update_wardrobe_item: EXIT - Error: {str(e)}")

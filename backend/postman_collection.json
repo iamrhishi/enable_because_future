@@ -260,12 +260,8 @@
 								{
 									"key": "avatar",
 									"type": "file",
-									"src": []
-								},
-								{
-									"key": "user_id",
-									"value": "{{user_id}}",
-									"type": "text"
+									"src": [],
+									"description": "Avatar image file. Authenticated user is inferred from JWT; no user_id field is required."
 								}
 							]
 						},
@@ -273,7 +269,8 @@
 							"raw": "{{base_url}}/api/save-avatar",
 							"host": ["{{base_url}}"],
 							"path": ["api", "save-avatar"]
-						}
+						},
+						"description": "Save avatar for the authenticated user. Background is removed using Gemini-1.5-pro and only the person image is stored. Requires Bearer JWT; do not pass user_id."
 					}
 				},
 				{
@@ -285,7 +282,8 @@
 							"raw": "{{base_url}}/api/get-avatar",
 							"host": ["{{base_url}}"],
 							"path": ["api", "get-avatar"]
-						}
+						},
+						"description": "Get authenticated user's avatar URL. Returns absolute URL ready for frontend use: {\"success\": true, \"data\": {\"avatar_url\": \"http://localhost:8000/images/avatars/{user_id}/{filename}.png\"}}"
 					}
 				},
 				{
@@ -327,12 +325,35 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"url\": \"https://example.com/product/123\"\n}"
+							"raw": "{\n  \"url\": \"https://example.com/product/123\",\n  \"force_refresh\": false\n}"
 						},
+						"description": "Scrape product information from URL. Results are cached for 3 days to save Scrape.do credits. Set force_refresh=true to bypass cache and force re-scraping.",
 						"url": {
 							"raw": "{{base_url}}/api/garments/scrape",
 							"host": ["{{base_url}}"],
 							"path": ["api", "garments", "scrape"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Product (Force Re-scrape)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com/product/123\"\n}"
+						},
+						"description": "Force refresh product data by re-scraping (bypasses cache). Always fetches fresh data regardless of cache status. Useful when user suspects data is outdated.",
+						"url": {
+							"raw": "{{base_url}}/api/garments/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garments", "refresh"]
 						}
 					}
 				},
@@ -444,7 +465,7 @@
 			"name": "Try-On",
 			"item": [
 				{
-					"name": "Create Try-On Job (with item_urls)",
+					"name": "Create Try-On Job (with item_urls + optional selfie)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -454,7 +475,9 @@
 								{
 									"key": "selfie",
 									"type": "file",
-									"src": []
+									"src": [],
+									"disabled": true,
+									"description": "Optional: person image file. If omitted, backend will use the authenticated user's saved avatar from /api/save-avatar."
 								},
 								{
 									"key": "item_urls",
@@ -466,7 +489,7 @@
 									"key": "options",
 									"value": "{\"garment_index\": 0}",
 									"type": "text",
-									"description": "Optional: JSON object with garment_index"
+									"description": "Optional: JSON object with garment_index and garment_details, e.g. {\"garment_index\":0,\"garment_details\":{\"brand\":\"Zara\"}}"
 								}
 							]
 						},
@@ -475,7 +498,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
 						},
-						"description": "Create try-on job with product URLs. Backend will scrape product page and extract images automatically."
+						"description": "Create try-on job using product URLs. Backend will scrape product pages (Zara, etc.), extract images and garment details, and call Gemini-1.5-pro. If selfie/person_image is not provided, the user's saved avatar is used."
 					},
 					"event": [
 						{
@@ -494,7 +517,7 @@
 					]
 				},
 				{
-					"name": "Create Try-On Job (with garment_image)",
+					"name": "Create Try-On Job (with garment_image + optional selfie)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -504,7 +527,9 @@
 								{
 									"key": "selfie",
 									"type": "file",
-									"src": []
+									"src": [],
+									"disabled": true,
+									"description": "Optional: person image file. If omitted, backend will use the authenticated user's saved avatar from /api/save-avatar."
 								},
 								{
 									"key": "garment_image",
@@ -514,7 +539,8 @@
 								{
 									"key": "garment_type",
 									"value": "upper",
-									"type": "text"
+									"type": "text",
+									"description": "Garment type: upper or lower. Defaults to upper."
 								}
 							]
 						},
@@ -523,7 +549,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
 						},
-						"description": "Create try-on job with direct image upload"
+						"description": "Create try-on job with direct garment image upload. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar."
 					},
 					"event": [
 						{
@@ -566,7 +592,7 @@
 					}
 				},
 				{
-					"name": "Multi-Garment Try-On",
+					"name": "Multi-Garment Try-On (top + bottom)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -574,9 +600,11 @@
 							"mode": "formdata",
 							"formdata": [
 								{
-									"key": "selfie",
+									"key": "person_image",
 									"type": "file",
-									"src": []
+									"src": [],
+									"disabled": true,
+									"description": "Optional: person image file. If omitted, backend uses the authenticated user's saved avatar."
 								},
 								{
 									"key": "top_garment_image",
@@ -594,7 +622,8 @@
 							"raw": "{{base_url}}/api/tryon/multi",
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon", "multi"]
-						}
+						},
+						"description": "Multi-garment try-on (top + bottom). Uses Gemini-1.5-pro. If person_image is not provided, backend uses the authenticated user's saved avatar."
 					}
 				}
 			]
@@ -951,28 +980,6 @@
 							"raw": "{{base_url}}/health",
 							"host": ["{{base_url}}"],
 							"path": ["health"]
-						}
-					}
-				},
-				{
-					"name": "Remove Background",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "file",
-									"type": "file",
-									"src": []
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/remove-bg",
-							"host": ["{{base_url}}"],
-							"path": ["api", "remove-bg"]
 						}
 					}
 				}
