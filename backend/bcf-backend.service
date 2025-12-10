@@ -1,0 +1,35 @@
+[Unit]
+Description=Enable Because Future - Flask Backend Server
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=rhishikeshthakur
+Group=rhishikeshthakur
+WorkingDirectory=/home/rhishikeshthakur/enable_because_future/backend
+Environment="PATH=/home/rhishikeshthakur/enable_because_future/backend/venv/bin"
+
+# Load environment variables from .env file
+EnvironmentFile=/home/rhishikeshthakur/enable_because_future/backend/.env
+
+# Start command using virtual environment Python
+ExecStart=/home/rhishikeshthakur/enable_because_future/backend/venv/bin/python app.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Restart if process exits with non-zero code
+RestartMode=direct
+
+# Resource limits
+LimitNOFILE=65536
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=append:/home/rhishikeshthakur/enable_because_future/backend/flask_server.log
+StandardError=append:/home/rhishikeshthakur/enable_because_future/backend/flask_server.log
+
+[Install]
+WantedBy=multi-user.target
