@@ -64,8 +64,8 @@ def allowed_file(filename):
 @app.route('/api/remove-bg', methods=['POST'])
 def remove_bg():
     api_url = "https://api.becausefuture.tech/bg-service/api/remove"
-    api_username = 'becausefuture'  # TODO: Replace with your API username
-    api_password = 'becausefuture!2025'  # TODO: Replace with your API password
+    api_username = os.getenv('BG_SERVICE_USERNAME', 'becausefuture')
+    api_password = os.getenv('BG_SERVICE_PASSWORD', 'becausefuture!2025')
     if 'file' not in request.files:
         return {'error': 'No file uploaded'}, 400
     file = request.files['file']
@@ -739,8 +739,8 @@ def remove_bg_alt_disabled():
 @app.route('/api/tryon', methods=['POST'])
 def tryon():
 
-    api_username = 'becausefuture'  
-    api_password = 'becausefuture!2025' 
+    api_username = os.getenv('TRYON_SERVICE_USERNAME', 'becausefuture')
+    api_password = os.getenv('TRYON_SERVICE_PASSWORD', 'becausefuture!2025')
 
     try:
         # Get files and form data
@@ -786,17 +786,19 @@ def tryon():
 @app.route('/api/tryon-gemini', methods=['POST'])
 def tryon_gemini():
     """
-    Virtual try-on API using Gemini 2.5 Flash Image (Nano Banana) for direct image generation
+    🎯 UNIFIED Virtual Try-On API using Gemini 2.5 Flash Image (Nano Banana)
     
-    ENHANCED: Now supports multiple images of the SAME garment for improved accuracy
+    ✨ Handles BOTH single and multiple garments with a single endpoint!
     
     Input formats:
-    1. Single image (legacy): avatar_image, garment_image, garment_type
-    2. Multiple views: avatar_image, garment_image_1, garment_image_2, garment_image_3, ..., garment_type
+    1. Single garment (single view): avatar_image, garment_image, garment_type
+    2. Single garment (multi-view): avatar_image, garment_image_1, garment_image_2, ..., garment_type
+    3. Multiple garments (single view each): avatar_image, garment_image_1, garment_image_2, garment_type_1, garment_type_2
+    4. Multiple garments (multi-view): avatar_image, garment_1_image_1, garment_1_image_2, garment_2_image_1, garment_type_1, garment_type_2
     
-    Multiple images allow the AI to see front, back, side, and detail views for better accuracy.
+    The API automatically detects whether you're trying on 1 or multiple garments and adjusts the prompt accordingly.
     """
-    print("[TRYON-GEMINI][START] API call initiated")
+    print("[TRYON-GEMINI][START] Unified try-on API call initiated")
     try:
         print(f"[TRYON-GEMINI][REQUEST] Content-Type: {request.content_type}")
         print(f"[TRYON-GEMINI][REQUEST] Files: {list(request.files.keys())}")
@@ -821,58 +823,121 @@ def tryon_gemini():
                 "statusCode": 400
             }), 400
 
-        # NEW: Support multiple images of the SAME garment for better accuracy
-        garment_files = []
+        # 🎯 UNIFIED GARMENT DETECTION: Support both single and multiple garments
+        garment_files_by_garment = []  # List of lists - each inner list = one garment's images
+        garment_types = []  # List of garment types (one per garment)
         
-        # Try numbered format first (garment_image_1, garment_image_2, ...)
-        idx = 1
+        # Strategy 1: Try multi-garment format (garment_1_image_1, garment_1_image_2, garment_2_image_1, ...)
+        garment_idx = 1
         while True:
-            garment_file = request.files.get(f'garment_image_{idx}')
-            if garment_file:
-                garment_files.append(garment_file)
-                print(f"[TRYON-GEMINI][FILES] Found garment_image_{idx}: {garment_file.filename}")
-                idx += 1
+            garment_images = []
+            image_idx = 1
+            while True:
+                garment_file = request.files.get(f'garment_{garment_idx}_image_{image_idx}')
+                if garment_file:
+                    garment_images.append(garment_file)
+                    print(f"[TRYON-GEMINI][FILES] Found garment_{garment_idx}_image_{image_idx}: {garment_file.filename}")
+                    image_idx += 1
+                else:
+                    break
+            
+            if garment_images:
+                garment_files_by_garment.append(garment_images)
+                garment_type = request.form.get(f'garment_{garment_idx}_type', f'garment_{garment_idx}')
+                garment_types.append(garment_type)
+                print(f"[TRYON-GEMINI][FILES] Garment {garment_idx}: {len(garment_images)} image(s), type: {garment_type}")
+                garment_idx += 1
             else:
                 break
         
-        # Fallback to single garment_image
-        if not garment_files:
+        # Strategy 2: Try legacy single-garment multi-view format (garment_image_1, garment_image_2, ...)
+        if not garment_files_by_garment:
+            print("[TRYON-GEMINI][LEGACY] Trying single-garment multi-view format")
+            garment_images = []
+            idx = 1
+            while True:
+                garment_file = request.files.get(f'garment_image_{idx}')
+                if garment_file:
+                    garment_images.append(garment_file)
+                    print(f"[TRYON-GEMINI][FILES] Found garment_image_{idx}: {garment_file.filename}")
+                    idx += 1
+                else:
+                    break
+            
+            if garment_images:
+                garment_files_by_garment.append(garment_images)
+                garment_type = request.form.get('garment_type', 'top')
+                garment_types.append(garment_type)
+        
+        # Strategy 3: Try simple single image format (garment_image)
+        if not garment_files_by_garment:
+            print("[TRYON-GEMINI][LEGACY] Trying simple single image format")
             garment_file = request.files.get('garment_image')
             if garment_file:
-                garment_files.append(garment_file)
+                garment_files_by_garment.append([garment_file])
+                garment_type = request.form.get('garment_type', 'top')
+                garment_types.append(garment_type)
                 print(f"[TRYON-GEMINI][FILES] Found single garment_image: {garment_file.filename}")
         
-        if not garment_files:
+        # Strategy 4: Try array format from multi-garment calls
+        if not garment_files_by_garment:
+            garment_files_list = request.files.getlist('garment_images')
+            if garment_files_list:
+                print(f"[TRYON-GEMINI][LEGACY] Found {len(garment_files_list)} garments in array format")
+                garment_files_by_garment = [[f] for f in garment_files_list]
+                
+                garment_types_str = request.form.get('garment_types', '')
+                if garment_types_str:
+                    garment_types = [t.strip() for t in garment_types_str.split(',')]
+                else:
+                    garment_types = [f'garment_{i+1}' for i in range(len(garment_files_list))]
+        
+        if not garment_files_by_garment:
             print("[TRYON-GEMINI][ERROR] No garment images provided")
             return jsonify({
-                "message": "Missing required file: garment_image or garment_image_1, garment_image_2, etc.",
+                "message": "At least one garment image is required",
                 "code": "INVALID_INPUT",
                 "statusCode": 400
             }), 400
 
-        print(f"[TRYON-GEMINI][FILES] Avatar: {avatar_file.filename}, Garment images: {len(garment_files)}")
+        total_garment_count = len(garment_files_by_garment)
+        total_image_count = sum(len(images) for images in garment_files_by_garment)
+        
+        print(f"[TRYON-GEMINI][FILES] Avatar: {avatar_file.filename}")
+        print(f"[TRYON-GEMINI][FILES] Processing {total_garment_count} garment(s) with {total_image_count} total image(s)")
+        print(f"[TRYON-GEMINI][MODE] {'MULTI-GARMENT' if total_garment_count > 1 else 'SINGLE-GARMENT'} try-on")
 
-        garment_type = request.form.get('garment_type', 'top')
-        style_prompt = request.form.get('style_prompt', 'realistic virtual try-on')
-
-        # Load and normalize images
+        # Load and normalize avatar image
         try:
             avatar_file.seek(0)
             avatar_pil = Image.open(avatar_file).convert("RGB")
             print(f"[TRYON-GEMINI][IMAGES] Avatar loaded size={avatar_pil.size}, mode={avatar_pil.mode}")
-
-            # Load all garment images
-            garment_pils = []
-            for idx, garment_file in enumerate(garment_files):
-                garment_file.seek(0)
-                garment_pil = Image.open(garment_file).convert("RGBA")  # keep alpha if garment has transparency
-                garment_pils.append(garment_pil)
-                print(f"[TRYON-GEMINI][IMAGES] Garment image {idx+1} loaded size={garment_pil.size}, mode={garment_pil.mode}")
         except Exception as img_err:
-            print(f"[TRYON-GEMINI][ERROR] Image processing failed: {img_err}")
+            print(f"[TRYON-GEMINI][ERROR] Avatar image processing failed: {img_err}")
             return jsonify({
-                "message": f"Image processing failed: {str(img_err)}",
-                "code": "IMAGE_ERROR",
+                "message": f"Failed to process avatar image: {str(img_err)}",
+                "code": "IMAGE_PROCESSING_ERROR",
+                "statusCode": 400
+            }), 400
+
+        # Load and normalize garment images (now supporting multiple garments with multiple images each)
+        garment_pils_by_garment = []  # List of lists - each inner list contains PIL images of same garment
+        
+        try:
+            for garment_idx, garment_files in enumerate(garment_files_by_garment):
+                garment_pils = []
+                for img_idx, garment_file in enumerate(garment_files):
+                    garment_file.seek(0)
+                    garment_pil = Image.open(garment_file).convert("RGBA")
+                    garment_pils.append(garment_pil)
+                    print(f"[TRYON-GEMINI][IMAGES] Garment {garment_idx+1}, Image {img_idx+1} loaded size={garment_pil.size}, mode={garment_pil.mode}")
+                
+                garment_pils_by_garment.append(garment_pils)
+        except Exception as img_err:
+            print(f"[TRYON-GEMINI][ERROR] Garment image processing failed: {img_err}")
+            return jsonify({
+                "message": f"Failed to process garment image: {str(img_err)}",
+                "code": "IMAGE_PROCESSING_ERROR",
                 "statusCode": 400
             }), 400
 
@@ -886,66 +951,167 @@ def tryon_gemini():
         avatar_bytes = pil_to_bytes(avatar_pil, fmt="PNG")
         avatar_b64 = base64.b64encode(avatar_bytes).decode('utf-8')
         
-        # Convert all garment images to base64
-        garment_b64_list = []
-        for garment_pil in garment_pils:
-            garment_bytes = pil_to_bytes(garment_pil, fmt="PNG")
-            garment_b64 = base64.b64encode(garment_bytes).decode('utf-8')
-            garment_b64_list.append(garment_b64)
+        # Convert all garment images to base64 (grouped by garment)
+        garment_b64_by_garment = []
+        for garment_pils in garment_pils_by_garment:
+            garment_b64_list = []
+            for garment_pil in garment_pils:
+                garment_bytes = pil_to_bytes(garment_pil, fmt="PNG")
+                garment_b64 = base64.b64encode(garment_bytes).decode('utf-8')
+                garment_b64_list.append(garment_b64)
+            garment_b64_by_garment.append(garment_b64_list)
 
-        # Use genai.Client properly and call the image model name 'gemini-2.5-flash-image'
+        # Use genai.Client properly and select the model based on user preference
         client = genai.Client(api_key=GEMINI_API_KEY)
-        model_name = "gemini-2.5-flash-image"
-
-        # Prepare prompt - Enhanced for detail preservation and multiple views
-        num_garment_images = len(garment_b64_list)
         
-        if num_garment_images > 1:
-            reference_context = (
-                f"📷 REFERENCE IMAGES PROVIDED: {num_garment_images} images of the SAME garment showing different views.\n"
-                f"Use ALL {num_garment_images} reference images to:\n"
-                f"- Understand the complete 3D structure from all angles (front, back, side views)\n"
-                f"- Capture design details visible only in specific views (back pockets, side seams, hood details, etc.)\n"
-                f"- Ensure accurate color by cross-referencing multiple views\n"
-                f"- Identify fabric texture, material properties, and construction details\n"
-                f"- Understand how the garment drapes and fits in reality\n\n"
+        # 🤖 Get AI model selection from request (default to gemini 2.5 if not specified)
+        ai_model_selection = request.form.get('ai_model', 'gemini')
+        print(f"[TRYON-GEMINI][MODEL] AI model selection from frontend: {ai_model_selection}")
+        
+        # Map frontend model selection to actual Gemini model names
+        model_mapping = {
+            'gemini': 'gemini-2.5-flash-image',      # Gemini 2.5 Flash Image
+            'gemini3': 'gemini-3-pro-image-preview',       # Gemini 3.0 (using 2.0-flash-exp as placeholder)
+        }
+        
+        model_name = model_mapping.get(ai_model_selection, 'gemini-2.5-flash-image')
+        print(f"[TRYON-GEMINI][MODEL] Using Gemini model: {model_name}")
+
+        # 🎯 Determine if this is single or multi-garment try-on
+        is_multi_garment = total_garment_count > 1
+        
+        # Build garment descriptions for prompt
+        if is_multi_garment:
+            garment_descriptions = []
+            for idx, (garment_type, garment_images) in enumerate(zip(garment_types, garment_b64_by_garment)):
+                img_count = len(garment_images)
+                if img_count > 1:
+                    garment_descriptions.append(f"Garment {idx+1} ({garment_type}) - {img_count} reference images")
+                else:
+                    garment_descriptions.append(f"Garment {idx+1} ({garment_type})")
+            garments_list_str = ", ".join(garment_descriptions)
+        
+        # Generate appropriate prompt based on mode
+        if is_multi_garment:
+            # MULTI-GARMENT PROMPT
+            generation_prompt = (
+                f"🚨 CRITICAL INSTRUCTION: This is a MULTI-GARMENT VIRTUAL TRY-ON task. You MUST keep the person from the FIRST image (avatar) 100% unchanged.\n"
+                f"Your ONLY job is to add {total_garment_count} garments onto this existing person. DO NOT create a new person.\n\n"
+                
+                f"📋 IMAGE ORDER:\n"
+                f"- Image 1: AVATAR (the person to dress - keep this person exactly as-is)\n"
+                f"- Images 2-{total_image_count + 1}: GARMENT reference images (extract garment designs only)\n"
+                f"  {garments_list_str}\n\n"
+                
+                f"⛔ ABSOLUTE PROHIBITIONS - NEVER DO THESE:\n"
+                f"1. DO NOT replace the avatar person with a different person\n"
+                f"2. DO NOT use any person/model from the garment reference images\n"
+                f"3. DO NOT change the avatar's face, body, pose, or appearance in ANY way\n"
+                f"4. DO NOT change the background or lighting from the avatar image\n"
+                f"5. DO NOT create a composite of the avatar and any garment model\n\n"
+                
+                f"✅ WHAT YOU MUST DO:\n\n"
+                f"1. AVATAR PRESERVATION (100% UNCHANGED):\n"
+                f"Keep these EXACTLY as shown in the AVATAR image (image 1):\n"
+                f"- EXACT same face, eyes, nose, mouth, facial expression\n"
+                f"- EXACT same hair style, color, and position\n"
+                f"- EXACT same skin tone and complexion\n"
+                f"- EXACT same body pose, hand position, arm position\n"
+                f"- EXACT same body proportions and build\n"
+                f"- EXACT same background, floor, walls, environment\n"
+                f"- EXACT same lighting direction, color, and intensity\n"
+                f"- EXACT same camera angle and perspective\n\n"
+                
+                f"2. GARMENT EXTRACTION (from reference images):\n"
+                f"Analyze ALL {total_image_count} garment reference images to extract garment designs - ignore the people wearing them.\n"
+                f"For each garment, extract:\n"
+                f"- Design details (colors, patterns, logos, buttons, pockets, etc.)\n"
+                f"- Front, back, and side design elements (if multiple views provided)\n"
+                f"- Fabric texture and material properties\n"
+                f"- 3D structure from multiple angles\n\n"
+                
+                f"3. GARMENT COORDINATION:\n"
+                f"Layer the {total_garment_count} garments correctly:\n"
+                f"- Layer properly (top over bottom, jacket over shirt)\n"
+                f"- Position each garment appropriately on body\n"
+                f"- Maintain realistic proportions between garments\n\n"
+                
+                f"4. GARMENT ADAPTATION (Apply to extracted garments):\n"
+                f"Take the extracted garment designs and adapt them to fit the AVATAR's body:\n"
+                f"- **DRAPING:** Warp each garment to fit the avatar's body contours and pose\n"
+                f"- **WRINKLES:** Add natural wrinkles based on avatar's pose and fabric type\n"
+                f"- **SHADOWS:** Apply shadows that match the avatar's lighting\n"
+                f"- **OCCLUSION:** Layer garments behind avatar's hands/arms if they're in front\n"
+                f"- **STYLING:** If garments show styling (rolled sleeves, raised collar), apply to garments on avatar\n"
+                f"- **INTERACTION:** Show realistic interaction between garments\n\n"
+                
+                f"🎯 FINAL OUTPUT SPECIFICATION:\n"
+                f"You MUST generate an image that is:\n"
+                f"✓ The EXACT avatar person (image 1) - same face, same body, same pose, same background\n"
+                f"✓ With ALL {total_garment_count} garment designs (from garment images) now fitted onto them\n"
+                f"✓ The garments look realistically worn, not pasted on\n"
+                f"✓ All garments work together as a cohesive outfit\n\n"
+                
+                f"❌ YOUR OUTPUT MUST NOT BE:\n"
+                f"✗ A different person\n"
+                f"✗ Any model from the garment reference images\n"
+                f"✗ A blend/composite of avatar and any garment model\n"
+                f"✗ A changed/modified version of the avatar\n\n"
+                
+                f"🔴 FINAL REMINDER: Use the avatar person from image 1. Extract only the garment designs from the other images. "
+                f"DO NOT replace the avatar with anyone else. Use ALL {total_image_count} reference images to extract complete garment details."
             )
         else:
-            reference_context = ""
-        
-        generation_prompt = (
-            f"🚨 CRITICAL INSTRUCTION: This is a VIRTUAL TRY-ON task. You MUST keep the person from the FIRST image (avatar) 100% unchanged.\n"
-            f"Your ONLY job is to add the garment onto this existing person. DO NOT create a new person.\n\n"
+            # SINGLE-GARMENT PROMPT
+            garment_type = garment_types[0]
+            num_views = len(garment_b64_by_garment[0])
             
-            f"📸 IMAGE ORDER:\n"
-            f"- Image 1: AVATAR (the person to dress - keep this person exactly as-is)\n"
-            f"- Image{'s' if num_garment_images > 1 else ''} {', '.join([str(i) for i in range(2, num_garment_images + 2)])}: GARMENT reference image{'s' if num_garment_images > 1 else ''} (extract garment design only)\n\n"
+            if num_views > 1:
+                reference_context = (
+                    f"REFERENCE IMAGES PROVIDED: {num_views} images of the SAME garment showing different views.\n"
+                    f"Use ALL {num_views} reference images to:\n"
+                    f"- Understand the complete structure from all angles (front, back, side views)\n"
+                    f"- Capture design details visible only in specific views\n"
+                    f"- Ensure accurate color by cross-referencing multiple views\n"
+                    f"- Identify fabric texture and material properties\n\n"
+                )
+            else:
+                reference_context = ""
             
-            f"{reference_context}"
-            
-            f"⛔ ABSOLUTE PROHIBITIONS - NEVER DO THESE:\n"
-            f"1. DO NOT replace the avatar person with a different person\n"
-            f"2. DO NOT use the person/model from the garment reference images\n"
-            f"3. DO NOT change the avatar's face, body, pose, or appearance in ANY way\n"
-            f"4. DO NOT change the background or lighting from the avatar image\n"
-            f"5. DO NOT create a composite of the avatar and garment model\n\n"
-            
-            f"✅ WHAT YOU MUST DO:\n\n"
-            f"1. AVATAR PRESERVATION (100% UNCHANGED):\n"
-            f"Keep these EXACTLY as shown in the AVATAR image (image 1):\n"
-            f"- EXACT same face, eyes, nose, mouth, facial expression\n"
-            f"- EXACT same hair style, color, and position\n"
-            f"- EXACT same skin tone and complexion\n"
-            f"- EXACT same body pose, hand position, arm position\n"
-            f"- EXACT same body proportions and build\n"
-            f"- EXACT same background, floor, walls, environment\n"
-            f"- EXACT same lighting direction, color, and intensity\n"
-            f"- EXACT same camera angle and perspective\n\n"
-            
-            f"2. GARMENT EXTRACTION (from reference images):\n"
-            f"{'Analyze ALL garment reference images to extract: ' if num_garment_images > 1 else 'From the garment reference image, extract only: '}\n"
-            f"Extract ONLY the {garment_type} design - ignore the person wearing it.\n"
-        )
+            generation_prompt = (
+                f"CRITICAL INSTRUCTION: This is a VIRTUAL TRY-ON task. You MUST keep the person from the FIRST image (avatar) 100% unchanged.\n"
+                f"Your ONLY job is to add the garment onto this existing person. DO NOT create a new person.\n\n"
+                
+                f"IMAGE ORDER:\n"
+                f"- Image 1: AVATAR (the person to dress - keep this person exactly as-is)\n"
+                f"- Image{'s' if num_views > 1 else ''} {', '.join([str(i) for i in range(2, num_views + 2)])}: GARMENT reference image{'s' if num_views > 1 else ''} (extract garment design only)\n\n"
+                
+                f"{reference_context}"
+                
+                f"ABSOLUTE PROHIBITIONS - NEVER DO THESE:\n"
+                f"1. DO NOT replace the avatar person with a different person\n"
+                f"2. DO NOT use the person/model from the garment reference images\n"
+                f"3. DO NOT change the avatar's face, body, pose, or appearance in ANY way\n"
+                f"4. DO NOT change the background or lighting from the avatar image\n"
+                f"5. DO NOT create a composite of the avatar and garment model\n\n"
+                
+                f"✅ WHAT YOU MUST DO:\n\n"
+                f"1. AVATAR PRESERVATION (100% UNCHANGED):\n"
+                f"Keep these EXACTLY as shown in the AVATAR image (image 1):\n"
+                f"- EXACT same face, eyes, nose, mouth, facial expression\n"
+                f"- EXACT same hair style, color, and position\n"
+                f"- EXACT same skin tone and complexion\n"
+                f"- EXACT same body pose, hand position, arm position\n"
+                f"- EXACT same body proportions and build\n"
+                f"- EXACT same background, floor, walls, environment\n"
+                f"- EXACT same lighting direction, color, and intensity\n"
+                f"- EXACT same camera angle and perspective\n\n"
+                
+                f"2. GARMENT EXTRACTION (from reference images):\n"
+                f"{'Analyze ALL garment reference images to extract: ' if num_views > 1 else 'From the garment reference image, extract only: '}\n"
+                f"Extract ONLY the {garment_type} design - ignore the person wearing it.\n"
+                f"Always select the front facing garment image for the try on\n"
+            )
 
         # Add specific requirements based on garment type
         # This logic is excellent and has been preserved.
@@ -1008,7 +1174,7 @@ def tryon_gemini():
         )
 
         print(f"[TRYON-GEMINI][GEMINI] Using model {model_name}; prompt length={len(generation_prompt)}")
-        print(f"[TRYON-GEMINI][GEMINI] Processing {num_garment_images} garment reference image(s)")
+        print(f"[TRYON-GEMINI][MODE] {'MULTI-GARMENT' if is_multi_garment else 'SINGLE-GARMENT'} try-on with {total_garment_count} garment(s), {total_image_count} total reference image(s)")
 
         # Call the API with retry logic
         max_retries = 3
@@ -1026,17 +1192,24 @@ def tryon_gemini():
                     {"parts": [{"inline_data": {"mime_type": "image/png", "data": avatar_b64}}]}
                 ]
                 
-                # Add all garment reference images
-                for idx, garment_b64 in enumerate(garment_b64_list):
-                    contents.append({"parts": [{"inline_data": {"mime_type": "image/png", "data": garment_b64}}]})
-                    print(f"[TRYON-GEMINI][GEMINI] Added garment reference image {idx+1} to contents")
+                # Add all images for each garment (multiple images per garment for improved accuracy)
+                for garment_idx, garment_b64_list in enumerate(garment_b64_by_garment):
+                    for img_idx, garment_b64 in enumerate(garment_b64_list):
+                        contents.append({
+                            "parts": [{"inline_data": {"mime_type": "image/png", "data": garment_b64}}]
+                        })
+                        print(f"[TRYON-GEMINI][GEMINI] Added garment {garment_idx+1}, image {img_idx+1} to contents")
                 
-                print(f"[TRYON-GEMINI][GEMINI] Sending {len(contents)} total items to model (1 avatar + {num_garment_images} garment images)")
+                print(f"[TRYON-GEMINI][GEMINI] Sending {len(contents)} total items to model (1 avatar + {total_image_count} garment images across {total_garment_count} garment(s))")
                 
                 generation_response = client.models.generate_content(
                     model=model_name,
                     contents=contents,
-                    # optionally add other kwargs like temperature, max_output_tokens if supported
+                    config={
+                        "temperature": 0.2,  # Lower temperature for more consistent, accurate results (0.0-1.0, default ~1.0)
+                        "top_p": 0.95,        # Nucleus sampling - focus on most likely tokens (0.0-1.0, default ~0.95)
+                        "top_k": 20,         # Limit token selection to top K most likely (1-100, default varies)
+                    }
                 )
                 print("[TRYON-GEMINI][GEMINI] generation_response received")
                 break
@@ -1074,8 +1247,9 @@ def tryon_gemini():
                     print(f"[TRYON-GEMINI][SUCCESS] returning image part {i} mime={mime_type} size={len(image_data)}")
                     resp = make_response(send_file(BytesIO(image_data), mimetype=mime_type, as_attachment=False))
                     resp.headers['X-AI-Model'] = model_name
-                    resp.headers['X-Generation-Method'] = 'direct-tryon-multi-view' if num_garment_images > 1 else 'direct-tryon'
-                    resp.headers['X-Reference-Images'] = str(num_garment_images)
+                    resp.headers['X-Generation-Method'] = 'multi-garment-tryon' if is_multi_garment else 'single-garment-tryon'
+                    resp.headers['X-Garment-Count'] = str(total_garment_count)
+                    resp.headers['X-Total-Reference-Images'] = str(total_image_count)
                     resp.status_code = 200
                     return resp
 
@@ -1094,8 +1268,9 @@ def tryon_gemini():
                             mime_type = getattr(inline, "mime_type", "image/png")
                             resp = make_response(send_file(BytesIO(image_data), mimetype=mime_type, as_attachment=False))
                             resp.headers['X-AI-Model'] = model_name
-                            resp.headers['X-Generation-Method'] = 'direct-tryon-multi-view' if num_garment_images > 1 else 'direct-tryon'
-                            resp.headers['X-Reference-Images'] = str(num_garment_images)
+                            resp.headers['X-Generation-Method'] = 'multi-garment-tryon' if is_multi_garment else 'single-garment-tryon'
+                            resp.headers['X-Garment-Count'] = str(total_garment_count)
+                            resp.headers['X-Total-Reference-Images'] = str(total_image_count)
                             resp.status_code = 200
                             return resp
 
@@ -1140,634 +1315,24 @@ def tryon_gemini():
 @app.route('/api/tryon-gemini-multi', methods=['POST'])
 def tryon_gemini_multi():
     """
-    Multi-garment virtual try-on API using Gemini 2.5 Flash Image
-    Supports trying on multiple garments simultaneously with multiple images per garment for improved accuracy
+    🔄 DEPRECATED: This endpoint is now unified with /api/tryon-gemini
     
-    Input format:
-    - avatar_image: Single avatar image
-    - garment_1_image_1, garment_1_image_2, ... : Multiple views of garment 1 (front, back, side, detail)
-    - garment_2_image_1, garment_2_image_2, ... : Multiple views of garment 2
-    - garment_1_type, garment_2_type, ... : Types for each garment
+    This endpoint still works for backward compatibility, but simply redirects to the unified endpoint.
+    The unified /api/tryon-gemini automatically detects single vs multi-garment requests.
     
-    Legacy format still supported:
-    - garment_image_1, garment_image_2 (single image per garment)
+    Please update your code to use /api/tryon-gemini for both single and multiple garments.
     """
-    print("[TRYON-GEMINI-MULTI][START] API call initiated")
-    try:
-        print(f"[TRYON-GEMINI-MULTI][REQUEST] Content-Type: {request.content_type}")
-        print(f"[TRYON-GEMINI-MULTI][REQUEST] Files: {list(request.files.keys())}")
-        print(f"[TRYON-GEMINI-MULTI][REQUEST] Form data: {dict(request.form)}")
+    print("[TRYON-GEMINI-MULTI][DEPRECATED] Redirecting to unified /api/tryon-gemini endpoint")
+    # Simply call the unified endpoint - it handles both single and multi-garment
+    return tryon_gemini()
 
-        if not GEMINI_API_KEY:
-            print("[TRYON-GEMINI-MULTI][ERROR] Gemini API key not configured")
-            return jsonify({
-                "message": "Gemini API key not configured",
-                "code": "MISSING_API_KEY",
-                "statusCode": 500
-            }), 500
 
-        print(f"[TRYON-GEMINI-MULTI][CONFIG] Gemini API key configured: {GEMINI_API_KEY[:10]}...")
+# ========== OLD MULTI-GARMENT ENDPOINT REMOVED ==========
+# The old /api/tryon-gemini-multi implementation has been merged into /api/tryon-gemini
+# The unified endpoint automatically detects single vs multi-garment requests
+# Old endpoint kept above for backward compatibility - it simply redirects to unified endpoint
 
-        # Get avatar image
-        avatar_file = request.files.get('avatar_image')
-        if not avatar_file:
-            print("[TRYON-GEMINI-MULTI][ERROR] Missing avatar_image")
-            return jsonify({
-                "message": "Missing required file: avatar_image",
-                "code": "INVALID_INPUT",
-                "statusCode": 400
-            }), 400
-
-        # NEW: Support multiple images per garment for improved accuracy
-        # Structure: garment_files_by_garment = [[img1, img2, img3], [img1, img2], ...]
-        garment_files_by_garment = []  # List of lists - each inner list contains multiple images of same garment
-        garment_types = []
-        
-        # Try new multi-image format first (garment_1_image_1, garment_1_image_2, ...)
-        garment_idx = 1
-        while True:
-            garment_images = []
-            image_idx = 1
-            
-            # Collect all images for this garment
-            while True:
-                garment_file = request.files.get(f'garment_{garment_idx}_image_{image_idx}')
-                if garment_file:
-                    garment_images.append(garment_file)
-                    print(f"[TRYON-GEMINI-MULTI][FILES] Found garment_{garment_idx}_image_{image_idx}: {garment_file.filename}")
-                    image_idx += 1
-                else:
-                    break
-            
-            # If we found images for this garment, add to collection
-            if garment_images:
-                garment_files_by_garment.append(garment_images)
-                garment_type = request.form.get(f'garment_{garment_idx}_type', f'garment_{garment_idx}')
-                garment_types.append(garment_type)
-                print(f"[TRYON-GEMINI-MULTI][FILES] Garment {garment_idx}: {len(garment_images)} image(s), type: {garment_type}")
-                garment_idx += 1
-            else:
-                break
-        
-        # FALLBACK: Try legacy single-image format (garment_image_1, garment_image_2, ...)
-        if not garment_files_by_garment:
-            print("[TRYON-GEMINI-MULTI][LEGACY] Trying legacy single-image format")
-            i = 1
-            while True:
-                garment_file = request.files.get(f'garment_image_{i}')
-                if garment_file:
-                    garment_files_by_garment.append([garment_file])  # Wrap in list for consistency
-                    garment_type = request.form.get(f'garment_type_{i}', f'garment_{i}')
-                    garment_types.append(garment_type)
-                    print(f"[TRYON-GEMINI-MULTI][LEGACY] Found garment_{i}: {garment_file.filename}, type: {garment_type}")
-                    i += 1
-                else:
-                    break
-        
-        # FALLBACK 2: Try array format
-        if not garment_files_by_garment:
-            garment_files = request.files.getlist('garment_images')
-            if garment_files:
-                print(f"[TRYON-GEMINI-MULTI][LEGACY] Found {len(garment_files)} garments in array format")
-                garment_files_by_garment = [[f] for f in garment_files]  # Wrap each in list
-                
-                garment_types_str = request.form.get('garment_types', '')
-                if garment_types_str:
-                    garment_types = [t.strip() for t in garment_types_str.split(',')]
-                else:
-                    garment_types = [f'garment_{i+1}' for i in range(len(garment_files))]
-
-        if not garment_files_by_garment:
-            print("[TRYON-GEMINI-MULTI][ERROR] No garment images provided")
-            return jsonify({
-                "message": "At least one garment image is required (use garment_1_image_1, garment_1_image_2, etc.)",
-                "code": "INVALID_INPUT",
-                "statusCode": 400
-            }), 400
-
-        total_garment_count = len(garment_files_by_garment)
-        total_image_count = sum(len(images) for images in garment_files_by_garment)
-        
-        print(f"[TRYON-GEMINI-MULTI][FILES] Avatar: {avatar_file.filename}")
-        print(f"[TRYON-GEMINI-MULTI][FILES] Processing {total_garment_count} garment(s) with {total_image_count} total image(s)")
-
-        # Load and normalize avatar image
-        try:
-            avatar_file.seek(0)
-            avatar_pil = Image.open(avatar_file).convert("RGB")
-            print(f"[TRYON-GEMINI-MULTI][IMAGES] Avatar loaded size={avatar_pil.size}, mode={avatar_pil.mode}")
-        except Exception as img_err:
-            print(f"[TRYON-GEMINI-MULTI][ERROR] Avatar image processing failed: {img_err}")
-            return jsonify({
-                "message": f"Failed to process avatar image: {str(img_err)}",
-                "code": "IMAGE_PROCESSING_ERROR",
-                "statusCode": 400
-            }), 400
-
-        # Load and normalize garment images (now supporting multiple images per garment)
-        garment_pils_by_garment = []  # List of lists - each inner list contains PIL images of same garment
-        
-        for garment_idx, garment_files in enumerate(garment_files_by_garment):
-            garment_pils = []
-            for img_idx, garment_file in enumerate(garment_files):
-                try:
-                    garment_file.seek(0)
-                    garment_pil = Image.open(garment_file).convert("RGBA")
-                    garment_pils.append(garment_pil)
-                    print(f"[TRYON-GEMINI-MULTI][IMAGES] Garment {garment_idx+1}, Image {img_idx+1} loaded size={garment_pil.size}, mode={garment_pil.mode}")
-                except Exception as img_err:
-                    print(f"[TRYON-GEMINI-MULTI][ERROR] Garment {garment_idx+1}, Image {img_idx+1} processing failed: {img_err}")
-                    return jsonify({
-                        "message": f"Failed to process garment {garment_idx+1}, image {img_idx+1}: {str(img_err)}",
-                        "code": "IMAGE_PROCESSING_ERROR",
-                        "statusCode": 400
-                    }), 400
-            
-            garment_pils_by_garment.append(garment_pils)
-
-        # Convert PIL images to bytes
-        def pil_to_bytes(img: Image.Image, fmt="PNG"):
-            buf = BytesIO()
-            img.save(buf, format=fmt)
-            buf.seek(0)
-            return buf.read()
-
-        avatar_bytes = pil_to_bytes(avatar_pil, fmt="PNG")
-        avatar_b64 = base64.b64encode(avatar_bytes).decode('utf-8')
-
-        # Convert all garment images to base64 (grouped by garment)
-        garment_b64_by_garment = []
-        for garment_pils in garment_pils_by_garment:
-            garment_b64_list = []
-            for garment_pil in garment_pils:
-                garment_bytes = pil_to_bytes(garment_pil, fmt="PNG")
-                garment_b64 = base64.b64encode(garment_bytes).decode('utf-8')
-                garment_b64_list.append(garment_b64)
-            garment_b64_by_garment.append(garment_b64_list)
-
-        # Initialize Gemini client
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        model_name = "gemini-2.5-flash-image"
-
-        # Build garment descriptions for prompt (with image counts)
-        garment_descriptions = []
-        for idx, (garment_type, garment_images) in enumerate(zip(garment_types, garment_b64_by_garment)):
-            img_count = len(garment_images)
-            if img_count > 1:
-                garment_descriptions.append(f"Garment {idx+1} ({garment_type}) - {img_count} reference images showing different views")
-            else:
-                garment_descriptions.append(f"Garment {idx+1} ({garment_type})")
-        
-        garments_list_str = ", ".join(garment_descriptions)
-        
-        # Prepare multi-garment prompt (enhanced for multiple reference images)
-        generation_prompt = (
-            f"🚨 CRITICAL INSTRUCTION: This is a MULTI-GARMENT VIRTUAL TRY-ON task. You MUST keep the person from the FIRST image (avatar) 100% unchanged.\n"
-            f"Your ONLY job is to add {total_garment_count} garments onto this existing person. DO NOT create a new person.\n\n"
-            
-            f"� IMAGE ORDER:\n"
-            f"- Image 1: AVATAR (the person to dress - keep this person exactly as-is)\n"
-            f"- Images 2-{total_image_count + 1}: GARMENT reference images (extract garment designs only)\n"
-            f"  {garments_list_str}\n\n"
-            
-            f"⛔ ABSOLUTE PROHIBITIONS - NEVER DO THESE:\n"
-            f"1. DO NOT replace the avatar person with a different person\n"
-            f"2. DO NOT use any person/model from the garment reference images\n"
-            f"3. DO NOT change the avatar's face, body, pose, or appearance in ANY way\n"
-            f"4. DO NOT change the background or lighting from the avatar image\n"
-            f"5. DO NOT create a composite of the avatar and any garment model\n\n"
-            
-            f"✅ WHAT YOU MUST DO:\n\n"
-            f"1. AVATAR PRESERVATION (100% UNCHANGED):\n"
-            f"Keep these EXACTLY as shown in the AVATAR image (image 1):\n"
-            f"- EXACT same face, eyes, nose, mouth, facial expression\n"
-            f"- EXACT same hair style, color, and position\n"
-            f"- EXACT same skin tone and complexion\n"
-            f"- EXACT same body pose, hand position, arm position\n"
-            f"- EXACT same body proportions and build\n"
-            f"- EXACT same background, floor, walls, environment\n"
-            f"- EXACT same lighting direction, color, and intensity\n"
-            f"- EXACT same camera angle and perspective\n\n"
-            
-            f"2. GARMENT EXTRACTION (from reference images):\n"
-            f"Analyze ALL {total_image_count} garment reference images to extract garment designs - ignore the people wearing them.\n"
-            f"For each garment, extract:\n"
-            f"- Design details (colors, patterns, logos, buttons, pockets, etc.)\n"
-            f"- Front, back, and side design elements\n"
-            f"- Fabric texture and material properties\n"
-            f"- 3D structure from multiple angles\n\n"
-            
-            f"3. GARMENT COORDINATION:\n"
-            f"Layer the {total_garment_count} garments correctly:\n"
-            f"- Layer properly (top over bottom, jacket over shirt)\n"
-            f"- Position each garment appropriately on body\n"
-            f"- Maintain realistic proportions between garments\n\n"
-            
-            f"4. GARMENT ADAPTATION (Apply to extracted garments):\n"
-            f"Take the extracted garment designs and adapt them to fit the AVATAR's body:\n"
-            f"- **DRAPING:** Warp each garment to fit the avatar's body contours and pose\n"
-            f"- **WRINKLES:** Add natural wrinkles based on avatar's pose and fabric type\n"
-            f"- **SHADOWS:** Apply shadows that match the avatar's lighting\n"
-            f"- **OCCLUSION:** Layer garments behind avatar's hands/arms if they're in front\n"
-            f"- **STYLING:** If garments show styling (rolled sleeves, long sleeves on hands, raised collar, open collar, short length trousers, long and bell bottom trousers, etc. consider all of these fitting shown in the images provided and change it.), apply to garments on avatar\n"
-            f"- **INTERACTION:** Show realistic interaction between garments\n\n"
-            
-            f"🎯 FINAL OUTPUT SPECIFICATION:\n"
-            f"You MUST generate an image that is:\n"
-            f"✓ The EXACT avatar person (image 1) - same face, same body, same pose, same background\n"
-            f"✓ With ALL {total_garment_count} garment designs (from garment images) now fitted onto them\n"
-            f"✓ The garments look realistically worn, not pasted on\n"
-            f"✓ All garments work together as a cohesive outfit\n\n"
-            
-            f"❌ YOUR OUTPUT MUST NOT BE:\n"
-            f"✗ A different person\n"
-            f"✗ Any model from the garment reference images\n"
-            f"✗ A blend/composite of avatar and any garment model\n"
-            f"✗ A changed/modified version of the avatar\n\n"
-            
-            f"🔴 FINAL REMINDER: Use the avatar person from image 1. Extract only the garment designs from the other images. "
-            f"DO NOT replace the avatar with anyone else. Use ALL {total_image_count} reference images to extract complete garment details."
-        )
-
-        print(f"[TRYON-GEMINI-MULTI][GEMINI] Using model {model_name}; prompt length={len(generation_prompt)}")
-        print(f"[TRYON-GEMINI-MULTI][GEMINI] Processing {total_garment_count} garment(s) with {total_image_count} total reference images")
-
-        # Build contents with avatar + all garment images (grouped by garment for better context)
-        contents = [
-            {"parts": [{"text": generation_prompt}]},
-            {"parts": [{"inline_data": {"mime_type": "image/png", "data": avatar_b64}}]}
-        ]
-        
-        # Add all images for each garment (multiple images per garment for improved accuracy)
-        for garment_idx, garment_b64_list in enumerate(garment_b64_by_garment):
-            for img_idx, garment_b64 in enumerate(garment_b64_list):
-                contents.append({
-                    "parts": [{"inline_data": {"mime_type": "image/png", "data": garment_b64}}]
-                })
-                print(f"[TRYON-GEMINI-MULTI][GEMINI] Added garment {garment_idx+1}, image {img_idx+1} to contents")
-        
-        print(f"[TRYON-GEMINI-MULTI][GEMINI] Sending {len(contents)} total items to model (1 avatar + {total_image_count} garment images across {total_garment_count} garments)")
-
-        # Call the API with retry logic
-        max_retries = 3
-        backoff = 1.0
-        generation_response = None
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                print(f"[TRYON-GEMINI-MULTI][GEMINI] Attempt {attempt}")
-                
-                generation_response = client.models.generate_content(
-                    model=model_name,
-                    contents=contents
-                )
-                
-                print("[TRYON-GEMINI-MULTI][GEMINI] Response received")
-                break
-                
-            except Exception as ex:
-                print(f"[TRYON-GEMINI-MULTI][ERROR] Attempt {attempt} failed: {ex}")
-                if attempt < max_retries:
-                    time.sleep(backoff)
-                    backoff *= 2
-                else:
-                    print(f"[TRYON-GEMINI-MULTI][ERROR] All retries failed")
-                    return jsonify({
-                        "message": f"Multi-garment try-on failed: {str(ex)}",
-                        "code": "GENERATION_ERROR",
-                        "statusCode": 500
-                    }), 500
-
-        if generation_response is None:
-            return jsonify({
-                "message": "Multi-garment try-on failed - no response from AI",
-                "code": "GENERATION_ERROR",
-                "statusCode": 500
-            }), 500
-
-        print(f"[TRYON-GEMINI-MULTI][DEBUG] Response dir: {dir(generation_response)}")
-
-        # Extract image data from response (check parts first)
-        parts = getattr(generation_response, "parts", None)
-        if parts:
-            for i, part in enumerate(parts):
-                inline = getattr(part, "inline_data", None)
-                if inline and getattr(inline, "data", None):
-                    image_data = inline.data
-                    
-                    print(f"[TRYON-GEMINI-MULTI][SUCCESS] Got multi-garment try-on image, size={len(image_data)} bytes")
-                    
-                    # Apply background removal post-processing
-                    try:
-                        print("[TRYON-GEMINI-MULTI][POST-PROCESS] Removing background...")
-                        result_image = Image.open(BytesIO(image_data))
-                        
-                        # Convert to RGBA if not already
-                        if result_image.mode != 'RGBA':
-                            result_image = result_image.convert('RGBA')
-                            print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Converted to RGBA mode")
-                        
-                        # Convert to numpy array for processing
-                        data = np.array(result_image)
-                        
-                        # Extract RGBA channels
-                        r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
-                        
-                        # Create masks for background removal
-                        # 1. White/very light pixels (R, G, B all > 240)
-                        white_mask = (r > 240) & (g > 240) & (b > 240)
-                        
-                        # 2. Light gray pixels (checkered pattern - RGB between 200-240)
-                        gray_mask = (r > 200) & (r < 240) & (g > 200) & (g < 240) & (b > 200) & (b < 240)
-                        
-                        # 3. Very light pixels (RGB > 235) - catch near-white
-                        near_white_mask = (r > 235) & (g > 235) & (b > 235)
-                        
-                        # 4. Black/very dark pixels (R, G, B all < 15)
-                        black_mask = (r < 15) & (g < 15) & (b < 15)
-                        
-                        # 5. Near-black pixels (R, G, B all < 30) - catch dark gray
-                        near_black_mask = (r < 30) & (g < 30) & (b < 30)
-                        
-                        # Combine all background masks
-                        background_mask = white_mask | gray_mask | near_white_mask | black_mask | near_black_mask
-                        
-                        # Set background pixels to fully transparent
-                        data[background_mask, 3] = 0
-                        
-                        # Advanced: Remove pixels similar to detected background color
-                        if np.any(background_mask):
-                            bg_pixels = data[background_mask]
-                            if len(bg_pixels) > 100:  # Need sufficient samples
-                                # Calculate average background color
-                                avg_r = float(np.mean(bg_pixels[:,0]))
-                                avg_g = float(np.mean(bg_pixels[:,1]))
-                                avg_b = float(np.mean(bg_pixels[:,2]))
-                                
-                                print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Detected background color: RGB({avg_r:.0f}, {avg_g:.0f}, {avg_b:.0f})")
-                                
-                                # Find pixels within 40 units of background color (Euclidean distance)
-                                color_diff = np.sqrt(
-                                    (r.astype(float) - avg_r)**2 + 
-                                    (g.astype(float) - avg_g)**2 + 
-                                    (b.astype(float) - avg_b)**2
-                                )
-                                similar_bg_mask = color_diff < 40
-                                data[similar_bg_mask, 3] = 0
-                                
-                                # Soften edges: Make near-background pixels semi-transparent
-                                edge_mask = (color_diff >= 40) & (color_diff < 80)
-                                if np.any(edge_mask):
-                                    # Gradually fade alpha based on distance from background
-                                    alpha_fade = ((color_diff[edge_mask] - 40) / 40 * 255).astype(np.uint8)
-                                    data[edge_mask, 3] = np.minimum(data[edge_mask, 3], alpha_fade)
-                        
-                        # Count transparent pixels for verification
-                        transparent_count = np.sum(data[:,:,3] == 0)
-                        total_pixels = data.shape[0] * data.shape[1]
-                        transparency_percent = (transparent_count / total_pixels) * 100
-                        
-                        print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Transparency: {transparency_percent:.1f}% ({transparent_count}/{total_pixels} pixels)")
-                        
-                        # Convert back to PIL Image
-                        result_image = Image.fromarray(data, 'RGBA')
-                        
-                        # Save to bytes with PNG format (preserves transparency)
-                        output_buffer = BytesIO()
-                        result_image.save(output_buffer, format='PNG', optimize=True)
-                        output_buffer.seek(0)
-                        processed_image_data = output_buffer.read()
-                        
-                        print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] ✅ Complete! Output size: {len(processed_image_data)} bytes")
-                        
-                        # Use processed image instead of original
-                        image_data = processed_image_data
-                        
-                    except Exception as post_err:
-                        print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Warning: Background removal failed: {post_err}")
-                        # Continue with original image if post-processing fails
-                    
-                    resp = make_response(send_file(
-                        BytesIO(image_data),
-                        mimetype='image/png',
-                        as_attachment=False,
-                        download_name='tryon_multi_garment.png'
-                    ))
-                    resp.headers['X-AI-Model'] = model_name
-                    resp.headers['X-Processing-Method'] = 'multi-garment-tryon-enhanced'
-                    resp.headers['X-Garment-Count'] = str(total_garment_count)
-                    resp.headers['X-Total-Reference-Images'] = str(total_image_count)
-                    resp.status_code = 200
-                    return resp
-
-        # Check candidates structure
-        candidates = getattr(generation_response, "candidates", None)
-        if candidates:
-            for ci, cand in enumerate(candidates):
-                maybe_parts = getattr(cand, "parts", None) or getattr(cand, "output", None)
-                if maybe_parts:
-                    for part in maybe_parts:
-                        inline = getattr(part, "inline_data", None)
-                        if inline and getattr(inline, "data", None):
-                            image_data = inline.data
-                            
-                            print(f"[TRYON-GEMINI-MULTI][SUCCESS] Got multi-garment try-on image from candidates, size={len(image_data)} bytes")
-                            
-                            # Apply background removal post-processing
-                            try:
-                                print("[TRYON-GEMINI-MULTI][POST-PROCESS] Removing background...")
-                                result_image = Image.open(BytesIO(image_data))
-                                
-                                # Convert to RGBA if not already
-                                if result_image.mode != 'RGBA':
-                                    result_image = result_image.convert('RGBA')
-                                    print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Converted to RGBA mode")
-                                
-                                # Convert to numpy array for processing
-                                data = np.array(result_image)
-                                
-                                # Extract RGBA channels
-                                r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
-                                
-                                # Create masks for background removal
-                                # 1. White/very light pixels (R, G, B all > 240)
-                                white_mask = (r > 240) & (g > 240) & (b > 240)
-                                
-                                # 2. Light gray pixels (checkered pattern - RGB between 200-240)
-                                gray_mask = (r > 200) & (r < 240) & (g > 200) & (g < 240) & (b > 200) & (b < 240)
-                                
-                                # 3. Very light pixels (RGB > 235) - catch near-white
-                                near_white_mask = (r > 235) & (g > 235) & (b > 235)
-                                
-                                # 4. Black/very dark pixels (R, G, B all < 15)
-                                black_mask = (r < 15) & (g < 15) & (b < 15)
-                                
-                                # 5. Near-black pixels (R, G, B all < 30) - catch dark gray
-                                near_black_mask = (r < 30) & (g < 30) & (b < 30)
-                                
-                                # Combine all background masks
-                                background_mask = white_mask | gray_mask | near_white_mask | black_mask | near_black_mask
-                                
-                                # Set background pixels to fully transparent
-                                data[background_mask, 3] = 0
-                                
-                                # Advanced: Remove pixels similar to detected background color
-                                if np.any(background_mask):
-                                    bg_pixels = data[background_mask]
-                                    if len(bg_pixels) > 100:  # Need sufficient samples
-                                        # Calculate average background color
-                                        avg_r = float(np.mean(bg_pixels[:,0]))
-                                        avg_g = float(np.mean(bg_pixels[:,1]))
-                                        avg_b = float(np.mean(bg_pixels[:,2]))
-                                        
-                                        print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Detected background color: RGB({avg_r:.0f}, {avg_g:.0f}, {avg_b:.0f})")
-                                        
-                                        # Find pixels within 40 units of background color (Euclidean distance)
-                                        color_diff = np.sqrt(
-                                            (r.astype(float) - avg_r)**2 + 
-                                            (g.astype(float) - avg_g)**2 + 
-                                            (b.astype(float) - avg_b)**2
-                                        )
-                                        similar_bg_mask = color_diff < 40
-                                        data[similar_bg_mask, 3] = 0
-                                        
-                                        # Soften edges: Make near-background pixels semi-transparent
-                                        edge_mask = (color_diff >= 40) & (color_diff < 80)
-                                        if np.any(edge_mask):
-                                            # Gradually fade alpha based on distance from background
-                                            alpha_fade = ((color_diff[edge_mask] - 40) / 40 * 255).astype(np.uint8)
-                                            data[edge_mask, 3] = np.minimum(data[edge_mask, 3], alpha_fade)
-                                
-                                # Count transparent pixels for verification
-                                transparent_count = np.sum(data[:,:,3] == 0)
-                                total_pixels = data.shape[0] * data.shape[1]
-                                transparency_percent = (transparent_count / total_pixels) * 100
-                                
-                                print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Transparency: {transparency_percent:.1f}% ({transparent_count}/{total_pixels} pixels)")
-                                
-                                # Convert back to PIL Image
-                                result_image = Image.fromarray(data, 'RGBA')
-                                
-                                # Save to bytes with PNG format (preserves transparency)
-                                output_buffer = BytesIO()
-                                result_image.save(output_buffer, format='PNG', optimize=True)
-                                output_buffer.seek(0)
-                                processed_image_data = output_buffer.read()
-                                
-                                print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] ✅ Complete! Output size: {len(processed_image_data)} bytes")
-                                
-                                # Use processed image instead of original
-                                image_data = processed_image_data
-                                
-                            except Exception as post_err:
-                                print(f"[TRYON-GEMINI-MULTI][POST-PROCESS] Warning: Background removal failed: {post_err}")
-                                # Continue with original image if post-processing fails
-                            
-                            resp = make_response(send_file(
-                                BytesIO(image_data),
-                                mimetype='image/png',
-                                as_attachment=False,
-                                download_name='tryon_multi_garment.png'
-                            ))
-                            resp.headers['X-AI-Model'] = model_name
-                            resp.headers['X-Processing-Method'] = 'multi-garment-tryon-enhanced'
-                            resp.headers['X-Garment-Count'] = str(total_garment_count)
-                            resp.headers['X-Total-Reference-Images'] = str(total_image_count)
-                            resp.status_code = 200
-                            return resp
-
-        # No image data found
-        print("[TRYON-GEMINI-MULTI][ERROR] No image data found in the response")
-        print("[TRYON-GEMINI-MULTI][ERROR] Full response repr:")
-        try:
-            print(repr(generation_response)[:2000])
-        except Exception:
-            pass
-
-        return jsonify({
-            "message": "Multi-garment try-on failed - no image generated",
-            "code": "GENERATION_FAILED",
-            "statusCode": 500,
-            "details": "No image data returned from Gemini model - possibly blocked or model returned text only"
-        }), 500
-
-    except ValueError as ve:
-        print(f"[TRYON-GEMINI-MULTI][ERROR] ValueError: {ve}")
-        return jsonify({
-            "message": "Gemini request was blocked or returned no valid content",
-            "code": "CONTENT_BLOCKED",
-            "statusCode": 400,
-            "details": str(ve)
-        }), 400
-
-    except Exception as e:
-        print(f"[TRYON-GEMINI-MULTI][ERROR] Unexpected error: {e}")
-        print(traceback.format_exc())
-        return jsonify({
-            "message": f"Multi-garment virtual try-on failed: {str(e)}",
-            "code": "SERVER_ERROR",
-            "statusCode": 500
-        }), 500
-
-@app.route('/api/gemini/test', methods=['GET'])
-def test_gemini():
-    """Test endpoint to verify Gemini API connection"""
-    try:
-        if not GEMINI_API_KEY:
-            return jsonify({
-                "status": "error",
-                "message": "Gemini API key not configured",
-                "configured": False
-            }), 500
-            
-        # Test with the new genai.Client
-        try:
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            
-            # Test basic text generation first
-            test_response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[{"text": "Say 'Gemini API is working correctly' if you can read this."}]
-            )
-            
-            # Try to extract text response
-            response_text = "API test completed"
-            if hasattr(test_response, 'text'):
-                response_text = test_response.text
-            elif hasattr(test_response, 'candidates') and test_response.candidates:
-                for candidate in test_response.candidates:
-                    if hasattr(candidate, 'text'):
-                        response_text = candidate.text
-                        break
-                    elif hasattr(candidate, 'parts') and candidate.parts:
-                        for part in candidate.parts:
-                            if hasattr(part, 'text'):
-                                response_text = part.text
-                                break
-            
-            return jsonify({
-                "status": "success", 
-                "message": "Gemini API is working correctly",
-                "configured": True,
-                "client_type": "google.genai.Client",
-                "models_available": ["gemini-2.5-flash", "gemini-2.5-flash-image"],
-                "response": response_text
-            })
-            
-        except Exception as model_error:
-            return jsonify({
-                "status": "error",
-                "message": f"Gemini client test failed: {str(model_error)}",
-                "configured": True,
-                "error_type": str(type(model_error))
-            })
-        
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Gemini API test failed: {str(e)}",
-            "configured": bool(GEMINI_API_KEY)
-        }), 500
+# 577 lines of old code removed - functionality now in unified /api/tryon-gemini endpoint
 
 @app.route('/api/message')
 def get_message():

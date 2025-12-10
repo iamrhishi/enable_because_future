@@ -1,3 +1,18 @@
+// ============================
+// API Configuration
+// ============================
+// 🔧 DEVELOPMENT MODE: Uncomment the line below for local development
+const API_BASE_URL = 'http://localhost:5000';
+
+// 🚀 PRODUCTION MODE: Uncomment the line below when deploying to GCP
+// Replace 'YOUR_VM_IP' with your actual GCP VM's external IP address
+// const API_BASE_URL = 'http://YOUR_VM_IP:5000';
+
+// 📝 Instructions:
+// - For LOCAL testing: Keep the localhost line uncommented
+// - For PRODUCTION: Comment out localhost, uncomment the VM IP line and replace YOUR_VM_IP
+// Example: const API_BASE_URL = 'http://34.123.45.67:5000';
+
 // Global garment item counter for unique IDs
 let garmentItemCounter = 0;
 
@@ -557,7 +572,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('🔍 Loading wardrobe for user:', userId);
       
       // Fetch wardrobe items from API
-      const response = await fetch(`http://localhost:5000/api/wardrobe/user/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/user/${userId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch wardrobe: ${response.status}`);
@@ -683,172 +698,12 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
     
-    // Update multi-try-on button
-    updateMultiTryOnButton();
+    // Note: With unified API, individual try-on button now handles multiple garments automatically
   }
 
-  // Update the visibility and text of the multi-garment try-on button
-  function updateMultiTryOnButton() {
-    let multiTryOnBtn = document.getElementById('multi-tryon-btn');
-    
-    if (selectedGarments.length >= 2) {
-      // Show button if 2+ garments selected
-      if (!multiTryOnBtn) {
-        // Create the button if it doesn't exist
-        const garmentPreview = document.getElementById('garment-preview');
-        if (garmentPreview && garmentPreview.parentElement) {
-          multiTryOnBtn = document.createElement('button');
-          multiTryOnBtn.id = 'multi-tryon-btn';
-          multiTryOnBtn.className = 'multi-tryon-btn';
-          garmentPreview.parentElement.insertBefore(multiTryOnBtn, garmentPreview.nextSibling);
-          
-          // Add click listener
-          multiTryOnBtn.addEventListener('click', handleMultiGarmentTryOn);
-        }
-      }
-      
-      if (multiTryOnBtn) {
-        multiTryOnBtn.textContent = `Try On ${selectedGarments.length} Garments Together`;
-        multiTryOnBtn.style.display = 'block';
-      }
-    } else {
-      // Hide button if less than 2 garments selected
-      if (multiTryOnBtn) {
-        multiTryOnBtn.style.display = 'none';
-      }
-    }
-  }
-
-  // Handle multi-garment try-on
-  async function handleMultiGarmentTryOn() {
-    console.log('👔 Multi-garment try-on initiated with', selectedGarments.length, 'garments');
-    
-    if (selectedGarments.length < 2) {
-      alert('Please select at least 2 garments for multi-garment try-on');
-      return;
-    }
-    
-    // Debug: Check all storage keys before avatar check
-    chrome.storage.local.get(null, (allData) => {
-      console.log('🗄️ ALL Chrome storage data:', Object.keys(allData));
-      console.log('🗄️ Avatar-related keys:', {
-        hasAvatarBgRemovedImg: 'avatarBgRemovedImg' in allData,
-        hasAvatarImg: 'avatarImg' in allData,
-        hasAvatarDataUrl: 'avatarDataUrl' in allData,
-        avatarBgRemovedImgLength: allData.avatarBgRemovedImg ? allData.avatarBgRemovedImg.length : 0,
-        avatarImgLength: allData.avatarImg ? allData.avatarImg.length : 0,
-        avatarDataUrlLength: allData.avatarDataUrl ? allData.avatarDataUrl.length : 0
-      });
-    });
-    
-    // Check if avatar is available
-    chrome.storage.local.get(['avatarBgRemovedImg', 'avatarImg', 'avatarDataUrl'], async (result) => {
-      console.log('🔍 Avatar check - raw result:', result);
-      
-      const avatarData = result.avatarBgRemovedImg || result.avatarDataUrl || result.avatarImg;
-      
-      console.log('🔍 Avatar check:', {
-        hasAvatarBgRemoved: !!result.avatarBgRemovedImg,
-        hasAvatar: !!result.avatarImg,
-        hasAvatarDataUrl: !!result.avatarDataUrl,
-        avatarDataExists: !!avatarData,
-        avatarDataType: typeof avatarData,
-        avatarDataLength: avatarData ? avatarData.length : 0,
-        avatarDataPreview: avatarData ? avatarData.substring(0, 100) : 'null'
-      });
-      
-      if (!avatarData) {
-        console.error('❌ No avatar data found in storage');
-        console.error('❌ Storage result was:', result);
-        console.error('❌ Checked keys: avatarBgRemovedImg, avatarDataUrl, avatarImg - all empty');
-        alert('Please upload an avatar first!');
-        return;
-      }
-      
-      console.log('✅ Avatar found in storage, proceeding with multi-garment try-on');
-      
-      try {
-        // Show loading state
-        const multiTryOnBtn = document.getElementById('multi-tryon-btn');
-        if (multiTryOnBtn) {
-          multiTryOnBtn.disabled = true;
-          multiTryOnBtn.textContent = 'Processing...';
-        }
-        
-        console.log('🚀 Starting multi-garment try-on with', selectedGarments.length, 'garments');
-        console.log('📦 Avatar data type:', typeof avatarData, 'starts with:', avatarData.substring(0, 50));
-        
-        // Convert avatar data to blob
-        const avatarBlob = await safeImageToBlob(avatarData);
-        console.log('✅ Avatar blob created:', avatarBlob.size, 'bytes');
-        
-        // Prepare FormData
-        const formData = new FormData();
-        formData.append('avatar_image', avatarBlob, 'avatar.png');
-        
-        // Add each selected garment
-        for (let i = 0; i < selectedGarments.length; i++) {
-          const garment = selectedGarments[i];
-          console.log(`🔄 Processing garment ${i + 1}:`, garment.src);
-          
-          const garmentBlob = await safeImageToBlob(garment.src);
-          console.log(`✅ Garment ${i + 1} blob created:`, garmentBlob.size, 'bytes');
-          formData.append(`garment_image_${i + 1}`, garmentBlob, `garment_${i + 1}.png`);
-          
-          // Detect garment type for each garment (pass the URL)
-          const garmentType = await detectGarmentTypeFromURL(garment.src);
-          console.log(`🏷️ Garment ${i + 1} type detected:`, garmentType);
-          formData.append(`garment_type_${i + 1}`, garmentType);
-        }
-        
-        // Call the multi-garment try-on API
-        console.log('📤 Sending request to /api/tryon-gemini-multi');
-        const response = await fetch('http://localhost:5000/api/tryon-gemini-multi', {
-          method: 'POST',
-          body: formData
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `API error: ${response.status}`);
-        }
-        
-        // Get the result image
-        const resultBlob = await response.blob();
-        const resultUrl = URL.createObjectURL(resultBlob);
-        
-        console.log('✅ Multi-garment try-on successful!');
-        
-        // Display the result
-        const tryonResult = document.getElementById('tryon-result');
-        if (tryonResult) {
-          tryonResult.innerHTML = `
-            <img src="${resultUrl}" alt="Multi-Garment Try-On Result" 
-                 style="width: 100%; height: 100%; object-fit: contain; border-radius: 10px;" />
-          `;
-          tryonResult.style.display = 'block';
-        }
-        
-        // Clear selection after successful try-on
-        selectedGarments = [];
-        updateMultiTryOnButton();
-        
-        // Re-render to update checkboxes
-        renderImagePage();
-        
-      } catch (error) {
-        console.error('❌ Multi-garment try-on failed:', error);
-        alert(`Multi-garment try-on failed: ${error.message}`);
-      } finally {
-        // Restore button state
-        const multiTryOnBtn = document.getElementById('multi-tryon-btn');
-        if (multiTryOnBtn) {
-          multiTryOnBtn.disabled = false;
-          updateMultiTryOnButton();
-        }
-      }
-    });
-  }
+  // REMOVED: handleMultiGarmentTryOn() - Multi-garment functionality now integrated into performTryOn()
+  // The unified performTryOn() function automatically detects if multiple garments are selected
+  // via checkboxes and sends them all to the unified /api/tryon-gemini endpoint
 
   // Function to detect garment type from current URL
   async function detectGarmentTypeFromURL() {
@@ -936,7 +791,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('🌐 Fetching external image through backend proxy...');
       try {
         // Use backend proxy to fetch external images and avoid CORS issues
-        const proxyUrl = `http://localhost:5000/api/proxy-image?url=${encodeURIComponent(imageData)}`;
+        const proxyUrl = `${API_BASE_URL}/api/proxy-image?url=${encodeURIComponent(imageData)}`;
         const response = await fetch(proxyUrl);
         
         if (!response.ok) {
@@ -1008,7 +863,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log(wardrobeData);
 
       // Save to backend database
-      const response = await fetch('http://localhost:5000/api/wardrobe/save', {
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1099,7 +954,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('🗑️ Removing garment from wardrobe:', garmentToRemove.garment_id);
 
       // Remove from backend database
-      const response = await fetch('http://localhost:5000/api/wardrobe/remove', {
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/remove`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -1229,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       if (!currentUser || !currentUser.userID) return;
       
-      const response = await fetch(`http://localhost:5000/api/wardrobe/user/${currentUser.userID}`);
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/user/${currentUser.userID}`);
       if (response.ok) {
         wardrobeItems = await response.json();
         console.log('👗 Loaded wardrobe items:', wardrobeItems.length);
@@ -1385,7 +1240,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   async function performTryOn(garmentImageData, garmentType) {
     console.log(`🎯 performTryOn function called globally!`);
-    console.log(`🎯 Starting try-on with ${garmentType} garment`);
+    
+    // Check if multiple garments are selected via checkboxes
+    const isMultiGarment = selectedGarments && selectedGarments.length > 0;
+    const garmentCount = isMultiGarment ? selectedGarments.length : 1;
+    
+    console.log(`🎯 Starting try-on with ${garmentCount} garment(s)`);
+    console.log('👔 Multi-garment mode:', isMultiGarment);
     console.log('🤖 Selected AI Model at start of performTryOn:', selectedAIModel);
     console.log('📸 Garment image data:', garmentImageData ? 'Present' : 'Missing');
     
@@ -1427,7 +1288,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('✅ Avatar data found in storage, proceeding with try-on');
         
-        if (!garmentImageData) {
+        // Validate garment data (either single garment or multiple selected garments)
+        if (!garmentImageData && !isMultiGarment) {
           console.error('❌ No garment image data provided');
           tryonResult.innerHTML = '👕 Please select a garment';
           showTryonResult();
@@ -1435,7 +1297,7 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         
-        console.log('✅ Both avatar and garment present, starting try-on process');
+        console.log(`✅ Avatar and ${garmentCount} garment(s) present, starting try-on process`);
         
         // Create close button element instead of inline onclick
         const processingCloseBtn = document.createElement('button');
@@ -1453,42 +1315,70 @@ document.addEventListener('DOMContentLoaded', function() {
         showTryonResult();
         
         try {
-          // Try to remove background from garment, but continue if it fails
-          let garmentBgRemovedBlob;
-          try {
-            const garmentBlob = await safeImageToBlob(garmentImageData);
-            const garmentForm = new FormData();
-            garmentForm.append('file', garmentBlob, 'garment.png');
-            const garmentBgResp = await fetch('http://localhost:5000/api/remove-bg', {
-              method: 'POST',
-              body: garmentForm,
-            });
-            if (garmentBgResp.ok) {
-              garmentBgRemovedBlob = await garmentBgResp.blob();
-              console.log('✅ Garment background removed successfully');
-            } else {
-              throw new Error(`Background removal failed: ${garmentBgResp.status}`);
-            }
-          } catch (bgError) {
-            console.warn('⚠️ Background removal failed, using original garment:', bgError.message);
-            // Use original garment if background removal fails
-            garmentBgRemovedBlob = await safeImageToBlob(garmentImageData);
-          }
-          
-          // Always use Gemini API for try-ons (regardless of background removal model)
+          // Always use unified Gemini API for try-ons
           const formData = new FormData();
           
           // Use processed avatar image  
           const avatarBlob = await safeImageToBlob(avatarData);
-          
-          // Use Gemini API for virtual try-on
-          const apiUrl = 'http://localhost:5000/api/tryon-gemini';
           formData.append('avatar_image', avatarBlob, 'avatar.png');
-          formData.append('garment_image', garmentBgRemovedBlob, 'garment.png');
-          formData.append('garment_type', garmentType === 'upper' ? 'top' : garmentType === 'lower' ? 'bottom' : 'top');
-          formData.append('style_prompt', 'realistic virtual try-on with natural lighting');
           
-          console.log('Sending try-on request to Gemini API (background removal model:', selectedAIModel + '), garment type:', garmentType);
+          // Handle single vs multiple garments
+          if (isMultiGarment) {
+            // MULTI-GARMENT MODE: Add all selected garments
+            console.log(`👔 Multi-garment mode: Processing ${selectedGarments.length} garments`);
+            
+            for (let i = 0; i < selectedGarments.length; i++) {
+              const garment = selectedGarments[i];
+              console.log(`🔄 Processing garment ${i + 1}:`, garment.src);
+              
+              const garmentBlob = await safeImageToBlob(garment.src);
+              console.log(`✅ Garment ${i + 1} blob created:`, garmentBlob.size, 'bytes');
+              formData.append(`garment_image_${i + 1}`, garmentBlob, `garment_${i + 1}.png`);
+              
+              // Detect garment type for each garment
+              const detectedType = await detectGarmentTypeFromURL(garment.src);
+              console.log(`🏷️ Garment ${i + 1} type detected:`, detectedType);
+              formData.append(`garment_type_${i + 1}`, detectedType);
+            }
+          } else {
+            // SINGLE-GARMENT MODE: Process the provided garment
+            console.log('👕 Single-garment mode: Processing 1 garment');
+            
+            // Try to remove background from garment, but continue if it fails
+            let garmentBgRemovedBlob;
+            try {
+              const garmentBlob = await safeImageToBlob(garmentImageData);
+              const garmentForm = new FormData();
+              garmentForm.append('file', garmentBlob, 'garment.png');
+              const garmentBgResp = await fetch(`${API_BASE_URL}/api/remove-bg`, {
+                method: 'POST',
+                body: garmentForm,
+              });
+              if (garmentBgResp.ok) {
+                garmentBgRemovedBlob = await garmentBgResp.blob();
+                console.log('✅ Garment background removed successfully');
+              } else {
+                throw new Error(`Background removal failed: ${garmentBgResp.status}`);
+              }
+            } catch (bgError) {
+              console.warn('⚠️ Background removal failed, using original garment:', bgError.message);
+              // Use original garment if background removal fails
+              garmentBgRemovedBlob = await safeImageToBlob(garmentImageData);
+            }
+            
+            formData.append('garment_image', garmentBgRemovedBlob, 'garment.png');
+            formData.append('garment_type', garmentType === 'upper' ? 'top' : garmentType === 'lower' ? 'bottom' : 'top');
+            formData.append('style_prompt', 'realistic virtual try-on with natural lighting');
+          }
+          
+          // Add selected AI model to FormData
+          formData.append('ai_model', selectedAIModel);
+          console.log(`🤖 Selected AI model being sent: ${selectedAIModel}`);
+          
+          // Use unified Gemini API for virtual try-on
+          const apiUrl = `${API_BASE_URL}/api/tryon-gemini`;
+          
+          console.log(`Sending try-on request to unified Gemini API with ${garmentCount} garment(s)`);
           console.log('🔗 API URL being used:', apiUrl);
           console.log('📋 FormData contents:', [...formData.entries()].map(([key, value]) => [key, value instanceof Blob ? `${value.type} blob (${value.size} bytes)` : value]));
           
@@ -1513,7 +1403,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const bgRemovalForm = new FormData();
             bgRemovalForm.append('file', tryonBlob, 'tryon-result.png');
             
-            const bgRemovalResp = await fetch('http://localhost:5000/api/remove-bg', {
+            const bgRemovalResp = await fetch(`${API_BASE_URL}/api/remove-bg`, {
               method: 'POST',
               body: bgRemovalForm,
             });
@@ -1536,6 +1426,20 @@ document.addEventListener('DOMContentLoaded', function() {
               tryonResult.appendChild(resultCloseBtn);
               tryonResult.appendChild(resultImg);
               console.log('✅ Background removed from try-on result');
+              
+              // Clear selected garments after successful try-on
+              if (isMultiGarment) {
+                console.log('🧹 Clearing selected garments array');
+                selectedGarments = [];
+                // Update UI to reflect cleared selection
+                document.querySelectorAll('.garment-item-tryon.selected').forEach(item => {
+                  item.classList.remove('selected');
+                });
+                document.querySelectorAll('.garment-checkbox:checked').forEach(checkbox => {
+                  checkbox.checked = false;
+                });
+              }
+              
               resolve();
               return;
             }
@@ -1556,6 +1460,20 @@ document.addEventListener('DOMContentLoaded', function() {
           tryonResult.appendChild(fallbackCloseBtn);
           tryonResult.appendChild(resultImg);
           console.log('✅ Try-on completed successfully');
+          
+          // Clear selected garments after successful try-on
+          if (isMultiGarment) {
+            console.log('🧹 Clearing selected garments array');
+            selectedGarments = [];
+            // Update UI to reflect cleared selection
+            document.querySelectorAll('.garment-item-tryon.selected').forEach(item => {
+              item.classList.remove('selected');
+            });
+            document.querySelectorAll('.garment-checkbox:checked').forEach(checkbox => {
+              checkbox.checked = false;
+            });
+          }
+          
           resolve();
           
         } catch (error) {
@@ -1567,9 +1485,9 @@ document.addEventListener('DOMContentLoaded', function() {
           if (error.message && error.message.includes('CORS policy')) {
             errorMessage = '🚫 Cannot access external image due to browser security policy. Please try uploading the image directly.';
           } else if (error.message && error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-            errorMessage = '🔌 Server connection timed out. Please check if the backend server at localhost:5000 is running and accessible.';
+            errorMessage = `🔌 Server connection timed out. Please check if the backend server at ${API_BASE_URL} is running and accessible.`;
           } else if (error.message && error.message.includes('Failed to fetch')) {
-            errorMessage = '🔌 Cannot connect to try-on server. Please verify the server is running at localhost:5000.';
+            errorMessage = `🔌 Cannot connect to try-on server. Please verify the server is running at ${API_BASE_URL}.`;
           } else if (error.message && error.message.includes('Proxy fetch failed')) {
             errorMessage = '🌐 Failed to load external image. The image source may not be accessible.';
           } else if (error.message) {
@@ -1972,7 +1890,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     try {
       // Call the login API
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2212,7 +2130,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('Sending account data to API:', accountData);
       
       // Call the create account API
-      const response = await fetch('http://localhost:5000/api/create-account', {
+      const response = await fetch(`${API_BASE_URL}/api/create-account`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2269,7 +2187,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Convert data URL to base64
       const base64Data = imageData.split(',')[1];
       
-      const response = await fetch('http://localhost:5000/api/update-avatar', {
+      const response = await fetch(`${API_BASE_URL}/api/update-avatar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2301,7 +2219,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       console.log('📥 Loading avatar from database for user:', userId);
       
-      const response = await fetch(`http://localhost:5000/api/get-avatar/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/api/get-avatar/${userId}`);
       
       if (response.ok) {
         const blob = await response.blob();
@@ -2465,17 +2383,17 @@ document.addEventListener('DOMContentLoaded', function() {
       let formFieldName;
       
       if (selectedAIModel === 'rembg') {
-        bgRemovalEndpoint = 'http://localhost:5000/api/remove-bg-rembg';
+        bgRemovalEndpoint = `${API_BASE_URL}/api/remove-bg-rembg`;
         formFieldName = 'image';
         avatarForm.append('image', avatarBlob, 'avatar.png');
         console.log('🤖 Using Rembg model for background removal');
       } else if (selectedAIModel === 'gemini') {
-        bgRemovalEndpoint = 'http://localhost:5000/api/remove-person-bg';
+        bgRemovalEndpoint = `${API_BASE_URL}/api/remove-person-bg`;
         formFieldName = 'image';
         avatarForm.append('image', avatarBlob, 'avatar.png');
         console.log('🤖 Using Gemini model for background removal');
       } else {
-        bgRemovalEndpoint = 'http://localhost:5000/api/remove-bg';
+        bgRemovalEndpoint = `${API_BASE_URL}/api/remove-bg`;
         formFieldName = 'file';
         avatarForm.append('file', avatarBlob, 'avatar.png');
         console.log('🤖 Using Garmash model for background removal');
@@ -3666,7 +3584,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       console.log(`🔍 Searching for: "${query}"`);
       
-      const response = await fetch('http://localhost:5000/api/unified-search', {
+      const response = await fetch(`${API_BASE_URL}/api/unified-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query })
@@ -3906,7 +3824,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
         
-        const testResponse = await fetch('http://localhost:5000/api/tryon', {
+        const testResponse = await fetch(`${API_BASE_URL}/api/tryon`, {
           method: 'OPTIONS',
           signal: controller.signal
         });
@@ -3939,11 +3857,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       } catch (error) {
         if (error.name === 'AbortError') {
-          tryonResult.innerHTML = '⏱️ Connection timeout: Server at localhost:5000 is not responding. Please check if the backend server is running.';
+          tryonResult.innerHTML = `⏱️ Connection timeout: Server at ${API_BASE_URL} is not responding. Please check if the backend server is running.`;
         } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {
-          tryonResult.innerHTML = '🚫 Connection refused: Server at localhost:5000 is not accepting connections. Please start the backend server.';
+          tryonResult.innerHTML = `🚫 Connection refused: Server at ${API_BASE_URL} is not accepting connections. Please start the backend server.`;
         } else if (error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-          tryonResult.innerHTML = '⏱️ Connection timed out: Cannot reach server at localhost:5000. Check network connectivity.';
+          tryonResult.innerHTML = `⏱️ Connection timed out: Cannot reach server at ${API_BASE_URL}. Check network connectivity.`;
         } else {
           tryonResult.innerHTML = `❌ Try-on API connection failed: ${error.message}`;
         }
