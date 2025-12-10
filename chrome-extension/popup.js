@@ -1873,7 +1873,19 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Sign In Button Handler
+  console.log('🔧 [LOGIN] Attaching event listener to signinBtn:', signinBtn);
+  
+  if (!signinBtn) {
+    console.error('❌ [LOGIN] signinBtn element not found! Cannot attach event listener.');
+  } else {
+    console.log('✅ [LOGIN] signinBtn found, attaching click event listener');
+  }
+  
   signinBtn.addEventListener('click', async function() {
+    console.log('🔐 [LOGIN] Sign In button clicked!');
+    console.log('📧 [LOGIN] Email field value:', signinEmail?.value);
+    console.log('🔑 [LOGIN] Password field exists:', !!signinPassword);
+    
     const email = signinEmail.value.trim();
     const password = signinPassword.value.trim();
 
@@ -1889,6 +1901,10 @@ document.addEventListener('DOMContentLoaded', function() {
     signinBtn.disabled = true;
 
     try {
+      console.log('🌐 [LOGIN] Calling login API...');
+      console.log('🌐 [LOGIN] API URL:', `${API_BASE_URL}/api/login`);
+      console.log('📤 [LOGIN] Sending credentials:', { email, password: '***' });
+      
       // Call the login API
       const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
@@ -1900,6 +1916,8 @@ document.addEventListener('DOMContentLoaded', function() {
           password: password
         })
       });
+      
+      console.log('📥 [LOGIN] Response received:', response.status, response.statusText);
 
       const result = await response.json();
 
