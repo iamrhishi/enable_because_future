@@ -1238,9 +1238,16 @@ def tryon_gemini():
                     model=model_name,
                     contents=contents,
                     config={
-                        "temperature": 0.2,  # Lower temperature for more consistent, accurate results (0.0-1.0, default ~1.0)
-                        "top_p": 0.95,        # Nucleus sampling - focus on most likely tokens (0.0-1.0, default ~0.95)
-                        "top_k": 20,         # Limit token selection to top K most likely (1-100, default varies)
+                        "temperature": 0.2,  # Lower temperature for more consistent, accurate results
+                        "top_p": 0.95,        # Nucleus sampling
+                        "top_k": 20,         # Limit token selection
+                        # Safety settings to reduce false positives for fashion/clothing content
+                        "safety_settings": [
+                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+                        ]
                     }
                 )
                 print("[TRYON-GEMINI][GEMINI] generation_response received")
@@ -1263,6 +1270,32 @@ def tryon_gemini():
             }), 500
 
         print(f"[TRYON-GEMINI][DEBUG] Response dir: {dir(generation_response)}")
+
+        # Check for safety/blocking issues first
+        candidates = getattr(generation_response, "candidates", None)
+        if candidates:
+            for ci, cand in enumerate(candidates):
+                finish_reason = getattr(cand, "finish_reason", None)
+                print(f"[TRYON-GEMINI][DEBUG] Candidate {ci} finish_reason: {finish_reason}")
+                
+                # Check if content was blocked
+                if finish_reason and str(finish_reason) in ['IMAGE_OTHER', 'SAFETY', 'BLOCKED_REASON_UNSPECIFIED']:
+                    print(f"[TRYON-GEMINI][ERROR] Content generation blocked: {finish_reason}")
+                    
+                    # Get safety ratings if available
+                    safety_ratings = getattr(cand, "safety_ratings", None)
+                    if safety_ratings:
+                        print(f"[TRYON-GEMINI][SAFETY] Safety ratings: {safety_ratings}")
+                    
+                    return jsonify({
+                        "message": "Virtual try-on was blocked by AI safety filters. This can happen with certain images or clothing items. Please try different images.",
+                        "code": "CONTENT_BLOCKED",
+                        "statusCode": 400,
+                        "details": {
+                            "finish_reason": str(finish_reason),
+                            "suggestion": "Try using clearer, well-lit images with simple backgrounds"
+                        }
+                    }), 400
 
         # Some SDKs return .parts, others return .candidates[].output or similar.
         # Try to guard against several common shapes.
@@ -1627,8 +1660,13 @@ def login():
 @app.route('/api/save-avatar', methods=['POST'])
 def save_avatar():
     try:
+        print(f"[SAVE-AVATAR][START] Request received")
+        print(f"[SAVE-AVATAR][FILES] Files in request: {list(request.files.keys())}")
+        print(f"[SAVE-AVATAR][FORM] Form data: {dict(request.form)}")
+        
         # Check if file and user_id are provided
         if 'avatar' not in request.files:
+            print("[SAVE-AVATAR][ERROR] No avatar file in request")
             return jsonify({
                 'success': False,
                 'error': 'No avatar file provided'
@@ -1636,6 +1674,7 @@ def save_avatar():
         
         user_id = request.form.get('user_id')
         if not user_id:
+            print("[SAVE-AVATAR][ERROR] No user_id in form data")
             return jsonify({
                 'success': False,
                 'error': 'User ID is required'
@@ -1645,6 +1684,7 @@ def save_avatar():
         
         # Validate file type
         if not avatar_file or not allowed_file(avatar_file.filename):
+            print(f"[SAVE-AVATAR][ERROR] Invalid file type: {avatar_file.filename if avatar_file else 'None'}")
             return jsonify({
                 'success': False,
                 'error': 'Invalid file type. Please upload PNG, JPG, JPEG, or WEBP'
@@ -1656,12 +1696,13 @@ def save_avatar():
         # Validate file size (max 5MB)
         max_size = 5 * 1024 * 1024  # 5MB
         if len(avatar_data) > max_size:
+            print(f"[SAVE-AVATAR][ERROR] File too large: {len(avatar_data)} bytes")
             return jsonify({
                 'success': False,
                 'error': 'File too large. Maximum size is 5MB'
             }), 400
         
-        print(f"📸 Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes")
+        print(f"[SAVE-AVATAR][DATA] Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes")
         
         # Connect to database
         connection = mysql.connector.connect(**db_config)
@@ -1672,6 +1713,7 @@ def save_avatar():
         user = cursor.fetchone()
         
         if not user:
+            print(f"[SAVE-AVATAR][ERROR] User not found: {user_id}")
             cursor.close()
             connection.close()
             return jsonify({
@@ -1679,19 +1721,46 @@ def save_avatar():
                 'error': 'User not found'
             }), 404
         
+        print(f"[SAVE-AVATAR][DB] User found with id: {user[0]}")
+        
+        # Check if user already has an avatar (for debugging)
+        cursor.execute("SELECT LENGTH(avatar) as current_avatar_size FROM users WHERE userid = %s", (user_id,))
+        current_avatar = cursor.fetchone()
+        if current_avatar and current_avatar[0]:
+            print(f"[SAVE-AVATAR][DB] User already has avatar of size: {current_avatar[0]} bytes - will replace it")
+        else:
+            print(f"[SAVE-AVATAR][DB] User has no existing avatar - this will be first upload")
+        
         # Update user's avatar
         update_query = "UPDATE users SET avatar = %s WHERE userid = %s"
         cursor.execute(update_query, (avatar_data, user_id))
+        rows_affected = cursor.rowcount
         
         connection.commit()
+        
+        print(f"[SAVE-AVATAR][DB] UPDATE executed, rows affected: {rows_affected}")
+        
+        # Verify the update by checking if avatar was saved
+        cursor.execute("SELECT LENGTH(avatar) as avatar_size FROM users WHERE userid = %s", (user_id,))
+        verification = cursor.fetchone()
+        
         cursor.close()
         connection.close()
         
-        print(f"✅ Avatar saved successfully for user: {user_id}")
+        if verification and verification[0]:
+            print(f"[SAVE-AVATAR][SUCCESS] Avatar saved successfully! Stored size: {verification[0]} bytes")
+            print(f"[SAVE-AVATAR][SUCCESS] Expected size: {len(avatar_data)} bytes, Stored size: {verification[0]} bytes")
+            if verification[0] == len(avatar_data):
+                print(f"[SAVE-AVATAR][SUCCESS] ✅ Sizes match - avatar replaced successfully!")
+            else:
+                print(f"[SAVE-AVATAR][WARNING] ⚠️ Size mismatch - expected {len(avatar_data)}, got {verification[0]}")
+        else:
+            print(f"[SAVE-AVATAR][WARNING] Update completed but avatar not found in database!")
         
         return jsonify({
             'success': True,
-            'message': 'Avatar saved successfully'
+            'message': 'Avatar saved successfully',
+            'avatar_size': verification[0] if verification else 0
         }), 200
         
     except mysql.connector.Error as e:
@@ -1759,10 +1828,13 @@ def get_avatar(user_id):
 @app.route('/api/update-avatar', methods=['PUT'])
 def update_avatar():
     try:
+        print(f"[UPDATE-AVATAR][START] Request received")
+        
         # Get JSON data with base64 encoded image
         data = request.get_json()
         
         if not data or 'user_id' not in data or 'avatar_data' not in data:
+            print(f"[UPDATE-AVATAR][ERROR] Missing data - user_id: {'user_id' in data if data else False}, avatar_data: {'avatar_data' in data if data else False}")
             return jsonify({
                 'success': False,
                 'error': 'User ID and avatar data are required'
@@ -1771,14 +1843,19 @@ def update_avatar():
         user_id = data.get('user_id')
         avatar_base64 = data.get('avatar_data')
         
+        print(f"[UPDATE-AVATAR][DATA] user_id: {user_id}, base64 length: {len(avatar_base64) if avatar_base64 else 0}")
+        
         # Remove data URL prefix if present (e.g., "data:image/png;base64,")
         if avatar_base64.startswith('data:'):
             avatar_base64 = avatar_base64.split(',')[1]
+            print(f"[UPDATE-AVATAR][DATA] Removed data URL prefix, new length: {len(avatar_base64)}")
         
         # Decode base64 to binary
         try:
             avatar_data = base64.b64decode(avatar_base64)
+            print(f"[UPDATE-AVATAR][DATA] Base64 decoded successfully, binary size: {len(avatar_data)} bytes")
         except Exception as e:
+            print(f"[UPDATE-AVATAR][ERROR] Base64 decode failed: {e}")
             return jsonify({
                 'success': False,
                 'error': 'Invalid base64 data'
@@ -1787,12 +1864,13 @@ def update_avatar():
         # Validate file size (max 5MB)
         max_size = 5 * 1024 * 1024  # 5MB
         if len(avatar_data) > max_size:
+            print(f"[UPDATE-AVATAR][ERROR] File too large: {len(avatar_data)} bytes")
             return jsonify({
                 'success': False,
                 'error': 'File too large. Maximum size is 5MB'
             }), 400
         
-        print(f"📸 Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
+        print(f"[UPDATE-AVATAR][DATA] Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
         
         # Connect to database
         connection = mysql.connector.connect(**db_config)
@@ -1803,6 +1881,7 @@ def update_avatar():
         user = cursor.fetchone()
         
         if not user:
+            print(f"[UPDATE-AVATAR][ERROR] User not found: {user_id}")
             cursor.close()
             connection.close()
             return jsonify({
@@ -1810,19 +1889,46 @@ def update_avatar():
                 'error': 'User not found'
             }), 404
         
+        print(f"[UPDATE-AVATAR][DB] User found with id: {user[0]}")
+        
+        # Check if user already has an avatar (for debugging)
+        cursor.execute("SELECT LENGTH(avatar) as current_avatar_size FROM users WHERE userid = %s", (user_id,))
+        current_avatar = cursor.fetchone()
+        if current_avatar and current_avatar[0]:
+            print(f"[UPDATE-AVATAR][DB] User already has avatar of size: {current_avatar[0]} bytes - will replace it")
+        else:
+            print(f"[UPDATE-AVATAR][DB] User has no existing avatar - this will be first upload")
+        
         # Update user's avatar
         update_query = "UPDATE users SET avatar = %s WHERE userid = %s"
         cursor.execute(update_query, (avatar_data, user_id))
+        rows_affected = cursor.rowcount
         
         connection.commit()
+        
+        print(f"[UPDATE-AVATAR][DB] UPDATE executed, rows affected: {rows_affected}")
+        
+        # Verify the update by checking if avatar was saved
+        cursor.execute("SELECT LENGTH(avatar) as avatar_size FROM users WHERE userid = %s", (user_id,))
+        verification = cursor.fetchone()
+        
         cursor.close()
         connection.close()
         
-        print(f"✅ Avatar updated successfully for user: {user_id}")
+        if verification and verification[0]:
+            print(f"[UPDATE-AVATAR][SUCCESS] Avatar updated successfully! Stored size: {verification[0]} bytes")
+            print(f"[UPDATE-AVATAR][SUCCESS] Expected size: {len(avatar_data)} bytes, Stored size: {verification[0]} bytes")
+            if verification[0] == len(avatar_data):
+                print(f"[UPDATE-AVATAR][SUCCESS] ✅ Sizes match - avatar replaced successfully!")
+            else:
+                print(f"[UPDATE-AVATAR][WARNING] ⚠️ Size mismatch - expected {len(avatar_data)}, got {verification[0]}")
+        else:
+            print(f"[UPDATE-AVATAR][WARNING] Update completed but avatar not found in database!")
         
         return jsonify({
             'success': True,
-            'message': 'Avatar updated successfully'
+            'message': 'Avatar updated successfully',
+            'avatar_size': verification[0] if verification else 0
         }), 200
         
     except mysql.connector.Error as e:
