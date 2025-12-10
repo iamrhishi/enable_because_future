@@ -2,11 +2,11 @@
 // API Configuration
 // ============================
 // 🔧 DEVELOPMENT MODE: Uncomment the line below for local development
-const API_BASE_URL = 'http://localhost:5000';
+// const API_BASE_URL = 'http://localhost:5000';
 
 // 🚀 PRODUCTION MODE: Uncomment the line below when deploying to GCP
 // Replace 'YOUR_VM_IP' with your actual GCP VM's external IP address
-// const API_BASE_URL = 'http://YOUR_VM_IP:5000';
+const API_BASE_URL = 'http://35.198.124.100:5000';
 
 // 📝 Instructions:
 // - For LOCAL testing: Keep the localhost line uncommented
@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let currentDisplayMode = 'online'; // 'online' for page images, 'wardrobe' for wardrobe images
 
   // AI Model selection
-  let selectedAIModel = 'garmash'; // Default to Garmash
+  let selectedAIModel = 'rembg'; // Default to Rembg for faster processing
 
   // Multi-garment try-on selection
   let selectedGarments = []; // Array to track selected garment images for multi-try-on
@@ -2360,18 +2360,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // Helper function to compress image to reduce storage size
+  async function compressImage(dataUrl, maxSizeKB = 500) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Reduce dimensions if image is too large
+        const maxDimension = 800;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension;
+            width = maxDimension;
+          } else {
+            width = (width / height) * maxDimension;
+            height = maxDimension;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Try different quality levels to meet size requirement
+        let quality = 0.9;
+        let compressed = canvas.toDataURL('image/jpeg', quality);
+        
+        while (compressed.length > maxSizeKB * 1024 && quality > 0.1) {
+          quality -= 0.1;
+          compressed = canvas.toDataURL('image/jpeg', quality);
+        }
+        
+        console.log(`📦 Compressed image: ${dataUrl.length} → ${compressed.length} bytes (${Math.round(compressed.length / 1024)}KB)`);
+        resolve(compressed);
+      };
+      img.src = dataUrl;
+    });
+  }
+
   async function processAvatarUpload(imgData) {
     console.log('🔄 processAvatarUpload called');
     
-    // Store avatar with callback to ensure it's saved before proceeding
-    await new Promise((resolve) => {
-      chrome.storage.local.set({ avatarImg: imgData }, () => {
-        console.log('✅ Initial avatar saved to storage');
-        resolve();
-      });
-    });
+    // Get avatarPreview element (it's inside initializeMainApp scope, so we fetch it here)
+    const avatarPreview = document.getElementById('avatar-preview');
     
-    avatarFile = imgData;
+    // Show loading state with message (same style as try-on)
+    if (avatarPreview) {
+      avatarPreview.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; border-radius: 15px;">
+          <span class="tryon-processing-text">Creating Your Digital Avatar Look...</span>
+        </div>
+      `;
+    }
+    
+    // Don't store full base64 in storage initially - wait for processed version
+    // This prevents quota exceeded errors
+    console.log('⏳ Skipping initial storage to avoid quota issues');
+    
+    let avatarFile = imgData;
     
     try {
       // Remove background from avatar
@@ -2422,20 +2472,27 @@ document.addEventListener('DOMContentLoaded', function() {
       
       bgReader.onloadend = async function() {
         const processedAvatarData = bgReader.result;
+        
+        // Wait a moment before showing the avatar
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         renderAvatarPreview(processedAvatarData);
         
-        // Update ALL avatar storage keys to ensure consistency with async/await
+        // Compress avatar before storing to avoid quota errors
+        console.log('🗜️ Compressing avatar for storage...');
+        const compressedAvatar = await compressImage(processedAvatarData, 400); // Max 400KB
+        
+        // Store compressed version in local storage
         await new Promise((resolve) => {
           chrome.storage.local.set({ 
-            avatarBgRemovedImg: processedAvatarData,
-            avatarDataUrl: processedAvatarData,
-            avatarImg: processedAvatarData
+            avatarDataUrl: compressedAvatar
           }, () => {
-            console.log('✅ Avatar stored in ALL storage keys:', {
-              avatarBgRemovedImg: processedAvatarData.length,
-              avatarDataUrl: processedAvatarData.length,
-              avatarImg: processedAvatarData.length
-            });
+            if (chrome.runtime.lastError) {
+              console.error('❌ Storage error:', chrome.runtime.lastError);
+              console.log('⚠️ Will rely on database storage only.');
+            } else {
+              console.log('✅ Compressed avatar stored successfully');
+            }
             resolve();
           });
         });
@@ -2446,11 +2503,9 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('✅ avatarFile variable set, length:', processedAvatarData.length);
         
         // Verify storage immediately after setting
-        chrome.storage.local.get(['avatarBgRemovedImg', 'avatarDataUrl', 'avatarImg'], (verifyResult) => {
+        chrome.storage.local.get(['avatarDataUrl'], (verifyResult) => {
           console.log('🔍 Verification - Avatar in storage:', {
-            avatarBgRemovedImg: verifyResult.avatarBgRemovedImg ? verifyResult.avatarBgRemovedImg.length : 'NOT SET',
-            avatarDataUrl: verifyResult.avatarDataUrl ? verifyResult.avatarDataUrl.length : 'NOT SET',
-            avatarImg: verifyResult.avatarImg ? verifyResult.avatarImg.length : 'NOT SET'
+            avatarDataUrl: verifyResult.avatarDataUrl ? verifyResult.avatarDataUrl.length : 'NOT SET (Will use database instead)'
           });
         });
         
@@ -2473,12 +2528,20 @@ document.addEventListener('DOMContentLoaded', function() {
       bgReader.readAsDataURL(avatarBgRemovedBlob);
     } catch (error) {
       console.error(`Error processing avatar with ${selectedAIModel}:`, error.message || error);
-      renderAvatarPreview();
+      
+      // Show error message in avatar preview
       if (avatarPreview) {
-        const cameraOverlay = avatarPreview.querySelector('.avatar-upload-camera-overlay');
-        if (cameraOverlay) {
-          cameraOverlay.insertAdjacentHTML('beforebegin', `❌ Failed to process avatar with ${selectedAIModel}`);
-        }
+        avatarPreview.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 15px; color: white; padding: 20px; text-align: center;">
+            <div style="font-size: 40px; margin-bottom: 15px;">❌</div>
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Processing Failed</div>
+            <div style="font-size: 12px; opacity: 0.9; margin-bottom: 10px;">Failed to process with ${selectedAIModel}</div>
+            <div style="font-size: 10px; opacity: 0.8; line-height: 1.4;">Check your connection and try again</div>
+            <button id="avatar-upload-btn" class="avatar-upload-camera-overlay" style="margin-top: 15px; background: white; color: #f5576c; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 12px;">
+              Try Again
+            </button>
+          </div>
+        `;
       }
     }
   }
