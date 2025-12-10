@@ -477,6 +477,10 @@ def remove_bg_rembg():
     Output: PNG image with transparent background
     """
     print("[REMOVE-BG-REMBG][START] API call initiated")
+    
+    input_image = None
+    output_image = None
+    
     try:
         # Get uploaded file
         if 'image' not in request.files:
@@ -515,114 +519,118 @@ def remove_bg_rembg():
             original_mode = input_image.mode
             print(f"[REMOVE-BG-REMBG][IMAGE] Loaded size={original_size}, mode={original_mode}")
             
+            # Resize if image is too large (to prevent memory issues)
+            MAX_DIMENSION = 2048
+            if max(original_size) > MAX_DIMENSION:
+                print(f"[REMOVE-BG-REMBG][IMAGE] Image too large, resizing from {original_size}")
+                ratio = MAX_DIMENSION / max(original_size)
+                new_size = tuple(int(dim * ratio) for dim in original_size)
+                input_image = input_image.resize(new_size, Image.Resampling.LANCZOS)
+                print(f"[REMOVE-BG-REMBG][IMAGE] Resized to {input_image.size}")
+            
             # Convert to RGB if needed (rembg works best with RGB)
-            # But preserve original mode info for quality decisions
             if input_image.mode not in ('RGB', 'RGBA'):
                 input_image = input_image.convert('RGB')
                 print(f"[REMOVE-BG-REMBG][IMAGE] Converted {original_mode} to RGB for processing")
                 
         except Exception as img_err:
             print(f"[REMOVE-BG-REMBG][ERROR] Image loading failed: {img_err}")
+            if input_image:
+                input_image.close()
             return jsonify({
                 "message": f"Image processing failed: {str(img_err)}",
                 "code": "IMAGE_ERROR",
                 "statusCode": 400
             }), 400
 
-        # Remove background using rembg with HIGH QUALITY settings
+        # Remove background using rembg with OPTIMIZED settings for stability
         try:
-            print("[REMOVE-BG-REMBG][PROCESSING] Removing background with high-quality settings...")
+            print("[REMOVE-BG-REMBG][PROCESSING] Removing background (using stable settings)...")
             
-            # Use rembg with quality-focused parameters
-            # alpha_matting=True provides better edge quality
-            # alpha_matting_foreground_threshold and background_threshold fine-tune the mask
-            output_image = remove(
-                input_image,
-                alpha_matting=True,              # Enable alpha matting for smoother edges
-                alpha_matting_foreground_threshold=240,  # Fine-tune foreground detection
-                alpha_matting_background_threshold=10,   # Fine-tune background detection
-                alpha_matting_erode_size=10,     # Erosion size for matting
-                post_process_mask=True           # Enable post-processing for cleaner results
-            )
+            # Use simplified rembg call to prevent crashes
+            # Removed alpha_matting parameters that can cause memory issues
+            output_image = remove(input_image)
             
             print(f"[REMOVE-BG-REMBG][PROCESSING] Background removed, output size={output_image.size}, mode={output_image.mode}")
             
+            # Clean up input image to free memory
+            input_image.close()
+            input_image = None
+            
         except ImportError:
             print("[REMOVE-BG-REMBG][ERROR] rembg library not installed")
+            if input_image:
+                input_image.close()
             return jsonify({
                 "message": "Background removal library not installed. Please install: pip install rembg",
                 "code": "LIBRARY_MISSING",
                 "statusCode": 500
             }), 500
-        except TypeError as type_err:
-            # If alpha_matting parameters not supported, fall back to basic mode
-            print(f"[REMOVE-BG-REMBG][WARNING] Advanced parameters not supported, using basic mode: {type_err}")
-            try:
-                output_image = remove(input_image)
-                print(f"[REMOVE-BG-REMBG][PROCESSING] Background removed (basic mode), output size={output_image.size}")
-            except Exception as fallback_err:
-                print(f"[REMOVE-BG-REMBG][ERROR] Background removal failed: {fallback_err}")
-                return jsonify({
-                    "message": f"Background removal failed: {str(fallback_err)}",
-                    "code": "PROCESSING_ERROR",
-                    "statusCode": 500
-                }), 500
+        except MemoryError as mem_err:
+            print(f"[REMOVE-BG-REMBG][ERROR] Out of memory: {mem_err}")
+            if input_image:
+                input_image.close()
+            if output_image:
+                output_image.close()
+            return jsonify({
+                "message": "Image too large to process. Please use a smaller image.",
+                "code": "OUT_OF_MEMORY",
+                "statusCode": 413
+            }), 413
         except Exception as rembg_err:
             print(f"[REMOVE-BG-REMBG][ERROR] Background removal failed: {rembg_err}")
+            print(f"[REMOVE-BG-REMBG][ERROR] Traceback: {traceback.format_exc()}")
+            if input_image:
+                input_image.close()
+            if output_image:
+                output_image.close()
             return jsonify({
                 "message": f"Background removal failed: {str(rembg_err)}",
                 "code": "PROCESSING_ERROR",
                 "statusCode": 500
             }), 500
 
-        # POST-PROCESSING: Enhance edge quality and remove artifacts
+        # POST-PROCESSING: Simple cleanup (avoid memory-intensive operations)
         try:
-            print("[REMOVE-BG-REMBG][POST-PROCESS] Enhancing output quality...")
+            print("[REMOVE-BG-REMBG][POST-PROCESS] Preparing output...")
             
             # Ensure output is RGBA
             if output_image.mode != 'RGBA':
                 output_image = output_image.convert('RGBA')
             
-            # Convert to numpy for advanced processing
-            img_array = np.array(output_image)
-            
-            # Extract alpha channel
-            alpha = img_array[:, :, 3]
-            
-            # Clean up semi-transparent pixels for sharper edges
-            # Pixels with very low alpha (< 10) should be fully transparent
-            alpha[alpha < 10] = 0
-            
-            # Pixels with very high alpha (> 245) should be fully opaque
-            alpha[alpha > 245] = 255
-            
-            # Update alpha channel
-            img_array[:, :, 3] = alpha
-            
-            # Convert back to PIL Image
-            output_image = Image.fromarray(img_array, 'RGBA')
-            
-            # Calculate transparency statistics
-            transparent_pixels = np.sum(alpha == 0)
-            total_pixels = alpha.size
-            transparency_percent = (transparent_pixels / total_pixels) * 100
-            
-            print(f"[REMOVE-BG-REMBG][POST-PROCESS] Enhanced! Transparency: {transparency_percent:.1f}%")
+            print(f"[REMOVE-BG-REMBG][POST-PROCESS] Output ready in RGBA mode")
             
         except Exception as post_err:
-            print(f"[REMOVE-BG-REMBG][POST-PROCESS] Warning: Post-processing failed, using original output: {post_err}")
-            # Continue with original rembg output
+            print(f"[REMOVE-BG-REMBG][POST-PROCESS] Warning: Post-processing failed: {post_err}")
+            # Continue with whatever we have
 
-        # Convert to bytes for response with MAXIMUM QUALITY settings
+        # Convert to bytes for response with optimized settings
         output_buffer = BytesIO()
-        output_image.save(
-            output_buffer, 
-            format='PNG',
-            compress_level=6,  # PNG compression (0-9, 6 is good balance of quality/size)
-            optimize=False     # Disable optimize to prevent quality loss
-        )
-        output_buffer.seek(0)
-        image_data = output_buffer.read()
+        try:
+            output_image.save(
+                output_buffer, 
+                format='PNG',
+                compress_level=6,  # PNG compression (0-9, 6 is good balance)
+                optimize=False     # Disable optimize to save CPU
+            )
+            output_buffer.seek(0)
+            image_data = output_buffer.read()
+            
+            print(f"[REMOVE-BG-REMBG][SUCCESS] Returning image, size={len(image_data)} bytes")
+            
+            # Clean up
+            output_image.close()
+            output_image = None
+            
+        except Exception as save_err:
+            print(f"[REMOVE-BG-REMBG][ERROR] Failed to save output: {save_err}")
+            if output_image:
+                output_image.close()
+            return jsonify({
+                "message": f"Failed to save output image: {str(save_err)}",
+                "code": "SAVE_ERROR",
+                "statusCode": 500
+            }), 500
         
         print(f"[REMOVE-BG-REMBG][SUCCESS] Returning image, size={len(image_data)} bytes")
         
@@ -638,9 +646,33 @@ def remove_bg_rembg():
         resp.status_code = 200
         return resp
 
+    except MemoryError as mem_err:
+        print(f"[REMOVE-BG-REMBG][ERROR] Out of memory: {mem_err}")
+        # Clean up any resources
+        if 'input_image' in locals() and input_image:
+            input_image.close()
+        if 'output_image' in locals() and output_image:
+            output_image.close()
+        return jsonify({
+            "message": "Out of memory. Please use a smaller image.",
+            "code": "OUT_OF_MEMORY",
+            "statusCode": 413
+        }), 413
     except Exception as e:
         print(f"[REMOVE-BG-REMBG][ERROR] Unexpected error: {e}")
+        print(f"[REMOVE-BG-REMBG][ERROR] Full traceback:")
         print(traceback.format_exc())
+        # Clean up any resources
+        if 'input_image' in locals() and input_image:
+            try:
+                input_image.close()
+            except:
+                pass
+        if 'output_image' in locals() and output_image:
+            try:
+                output_image.close()
+            except:
+                pass
         return jsonify({
             "message": f"Background removal failed: {str(e)}",
             "code": "SERVER_ERROR",
