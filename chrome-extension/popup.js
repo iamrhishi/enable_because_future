@@ -4408,3 +4408,51 @@ document.addEventListener('DOMContentLoaded', function() {
   window.showTryonResult = showTryonResult;
   window.hideTryonResult = hideTryonResult;
 });
+
+// ============================================================================
+// MEMORY MANAGEMENT
+// ============================================================================
+// Aggressive memory management for Chrome extension
+let imageCache = new Map();
+const MAX_CACHE_SIZE = 3; // Limit cached images to 3
+
+// Clear image cache when it gets too large
+function clearImageCache() {
+  if (imageCache.size > MAX_CACHE_SIZE) {
+    imageCache.clear();
+  }
+  
+  // Clear blob URLs to free memory
+  document.querySelectorAll('img').forEach(img => {
+    if (img.src && img.src.startsWith('blob:')) {
+      // Only revoke if the image is not currently visible
+      const rect = img.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        URL.revokeObjectURL(img.src);
+      }
+    }
+  });
+  
+  // Force garbage collection if available
+  if (window.gc) {
+    window.gc();
+  }
+  
+  // Clear any unused form data
+  window.FormData = class extends FormData {
+    constructor(...args) {
+      super(...args);
+      setTimeout(() => this.delete, 5000); // Clear after 5 seconds
+    }
+  };
+}
+
+// Clear memory every 3 seconds instead of 10
+setInterval(clearImageCache, 3000);
+
+// Clear on page visibility change
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearImageCache();
+  }
+});
