@@ -262,6 +262,9 @@
 
           <div id="tryon-result" class="tryon-result"></div>
       
+          <!-- Fit Information Display (appears after try-on) -->
+          <div id="fit-info-display" class="fit-info-display" style="display: none;"></div>
+      
           <!-- Main Content Area -->
           <div class="content-area">
 
@@ -271,10 +274,10 @@
                     <!-- Avatar upload button will be dynamically created by JavaScript -->
                   </div>
                   <button id="upper-garment-btn" class="avatar-overlay-btn avatar-btn-top-left" data-garment-type="upper">
-                    <img src="add.png" alt="Add Upper Garment" />
+                    <img src="add.png" alt="Add Upper Garment" title="Add Top Garment" />
                   </button>
                   <button id="lower-garment-btn" class="avatar-overlay-btn avatar-btn-bottom-right" data-garment-type="lower">
-                    <img src="add.png" alt="Add Lower Garment" />
+                    <img src="add.png" alt="Add Lower Garment" title="Add Bottom Garment" />
                   </button>
                   <input type="file" id="avatar-upload" accept="image/*" style="display: none;" />
                   <input type="file" id="garment-upload" accept="image/*" style="display: none;" />
@@ -322,6 +325,71 @@
 
         </div>
         
+      </div>
+    </div>
+
+    <!-- Fit Information Modal -->
+    <div id="fit-info-modal" class="fit-modal" style="display: none;">
+      <div class="fit-modal-content">
+        <!-- <div class="fit-modal-header">
+          <h3>Fit Analysis</h3>
+          <button class="fit-modal-close">&times;</button>
+        </div> -->
+        <div class="fit-modal-body">
+          <!-- Upper Garment Fit -->
+          <div id="upper-fit-section" class="fit-section" style="display: none;">
+            <h4>Top Garment Fit</h4>
+            <div class="fit-measurements">
+              <div class="fit-item">
+                <span class="fit-label">Shoulders:</span>
+                <span class="fit-value" id="fit-shoulders">Perfect Fit</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Chest:</span>
+                <span class="fit-value" id="fit-chest">Slightly Loose</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Waist:</span>
+                <span class="fit-value" id="fit-waist">Tight</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Sleeve Length:</span>
+                <span class="fit-value" id="fit-sleeve">Perfect Fit</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Garment Length:</span>
+                <span class="fit-value" id="fit-length">Perfect Fit</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lower Garment Fit -->
+          <div id="lower-fit-section" class="fit-section" style="display: none;">
+            <h4>Bottom Garment Fit</h4>
+            <div class="fit-measurements">
+              <div class="fit-item">
+                <span class="fit-label">Waist:</span>
+                <span class="fit-value" id="fit-lower-waist">Perfect Fit</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Hips:</span>
+                <span class="fit-value" id="fit-hips">Slightly Loose</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Thighs:</span>
+                <span class="fit-value" id="fit-thighs">Perfect Fit</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Leg Length:</span>
+                <span class="fit-value" id="fit-leg-length">Perfect Fit</span>
+              </div>
+              <div class="fit-item">
+                <span class="fit-label">Ankle:</span>
+                <span class="fit-value" id="fit-ankle">Perfect Fit</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

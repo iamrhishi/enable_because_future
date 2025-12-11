@@ -76,8 +76,7 @@ function createGarmentItemHTML(options = {}) {
           <img src="${src}" 
                alt="${alt}" 
                class="garment-item-image"
-               onload="console.log('✅ Image loaded:', '${title}', '${src}');"
-               onerror="console.error('❌ Image failed:', '${title}', '${src}'); this.style.display='none'; this.parentElement.innerHTML += '<div class=\\'garment-image-unavailable\\'>Image<br/>Unavailable</div>';" />
+               data-title="${title}" />
         ` : `
           <div class="garment-placeholder-content">
             <span class="upload-text">${title}</span>
@@ -1422,10 +1421,22 @@ document.addEventListener('DOMContentLoaded', function() {
               resultImg.alt = 'Try-On Result';
               resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
               
+              // Create fit information display
+              const fitInfoContainer = createFitInfoDisplay(garmentType);
+              
               tryonResult.innerHTML = '';
               tryonResult.appendChild(resultCloseBtn);
               tryonResult.appendChild(resultImg);
-              console.log('✅ Background removed from try-on result');
+              
+              // Append fit info to separate display container (outside try-on result)
+              const fitInfoDisplay = document.getElementById('fit-info-display');
+              if (fitInfoDisplay) {
+                fitInfoDisplay.innerHTML = '';
+                fitInfoDisplay.appendChild(fitInfoContainer);
+                fitInfoDisplay.style.display = 'block';
+              }
+              
+              console.log('✅ Background removed from try-on result with fit information');
               
               // Clear selected garments after successful try-on
               if (isMultiGarment) {
@@ -1456,10 +1467,23 @@ document.addEventListener('DOMContentLoaded', function() {
           resultImg.alt = 'Try-On Result';
           resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
           
+          // Create fit information display
+          const fitInfoContainer = createFitInfoDisplay(garmentType);
+          
+          // Append to try-on result
           tryonResult.innerHTML = '';
           tryonResult.appendChild(fallbackCloseBtn);
           tryonResult.appendChild(resultImg);
-          console.log('✅ Try-on completed successfully');
+          
+          // Append fit info to separate display container (outside try-on result)
+          const fitInfoDisplay = document.getElementById('fit-info-display');
+          if (fitInfoDisplay) {
+            fitInfoDisplay.innerHTML = '';
+            fitInfoDisplay.appendChild(fitInfoContainer);
+            fitInfoDisplay.style.display = 'block';
+          }
+          
+          console.log('✅ Try-on completed successfully with fit information');
           
           // Clear selected garments after successful try-on
           if (isMultiGarment) {
@@ -1517,17 +1541,25 @@ document.addEventListener('DOMContentLoaded', function() {
   function showTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
     const tryonBody = document.querySelector('.tryon-body');
+    const modelSelection = document.querySelector('.model-selection');
+    
     if (tryonResult) {
-      tryonResult.style.display = 'block';
+      tryonResult.style.display = 'flex'; // Changed from 'block' to 'flex' to show fit info
     }
     if (tryonBody) {
       tryonBody.style.display = 'flex';
+    }
+    // Hide model selector when try-on result is shown
+    if (modelSelection) {
+      modelSelection.style.display = 'none';
     }
   }
 
   function hideTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
     const tryonBody = document.querySelector('.tryon-body');
+    const fitInfoDisplay = document.getElementById('fit-info-display');
+    const modelSelection = document.querySelector('.model-selection');
     
     // Clean up any blob URLs in the try-on result
     if (tryonResult) {
@@ -1542,6 +1574,163 @@ document.addEventListener('DOMContentLoaded', function() {
     if (tryonBody) {
       tryonBody.style.display = 'none';
     }
+    // Hide fit info display
+    if (fitInfoDisplay) {
+      fitInfoDisplay.style.display = 'none';
+    }
+    // Show model selector again when try-on is closed
+    if (modelSelection) {
+      modelSelection.style.display = 'block';
+    }
+  }
+
+  // Function to create fit information display
+  function createFitInfoDisplay(garmentType) {
+    console.log('📊 Creating fit info display for garment type:', garmentType);
+    
+    // Generate mock fit data (in production, this would come from API)
+    const fitData = generateMockFitData(garmentType);
+    
+    const fitContainer = document.createElement('div');
+    fitContainer.className = 'fit-info-container';
+    
+    // Size Match - inline label and value
+    const sizeMatchItem = document.createElement('div');
+    sizeMatchItem.className = 'fit-info-item';
+    sizeMatchItem.innerHTML = `
+      <span class="fit-info-label">Size Match:</span>
+      <span class="fit-info-value size-match ${fitData.sizeMatch === 'Perfect' ? 'perfect' : 'mismatch'}">${fitData.sizeMatch}</span>
+    `;
+    
+    // Fit Accuracy - inline label and value
+    const fitAccuracyItem = document.createElement('div');
+    fitAccuracyItem.className = 'fit-info-item';
+    fitAccuracyItem.innerHTML = `
+      <span class="fit-info-label">Fit Accuracy:</span>
+      <span class="fit-info-value fit-accuracy">${fitData.accuracy}%</span>
+    `;
+    
+    // Show More Button - link style
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'fit-more-btn';
+    moreBtn.textContent = 'Fit Analysis';
+    moreBtn.addEventListener('click', () => showFitModal(garmentType, fitData));
+    
+    // All in one line
+    fitContainer.appendChild(sizeMatchItem);
+    fitContainer.appendChild(fitAccuracyItem);
+    fitContainer.appendChild(moreBtn);
+    
+    return fitContainer;
+  }
+
+  // Function to generate mock fit data
+  function generateMockFitData(garmentType) {
+    // In production, this would be replaced with actual API response
+    const fitOptions = ['Perfect Fit', 'Slightly Loose', 'Slightly Tight', 'Loose', 'Tight'];
+    const randomFit = () => fitOptions[Math.floor(Math.random() * fitOptions.length)];
+    
+    return {
+      sizeMatch: Math.random() > 0.3 ? 'Perfect' : 'Size Mismatch',
+      accuracy: Math.floor(Math.random() * 15 + 85), // 85-100%
+      upper: {
+        shoulders: randomFit(),
+        chest: randomFit(),
+        waist: randomFit(),
+        sleeve: randomFit(),
+        length: randomFit()
+      },
+      lower: {
+        waist: randomFit(),
+        hips: randomFit(),
+        thighs: randomFit(),
+        legLength: randomFit(),
+        ankle: randomFit()
+      }
+    };
+  }
+
+  // Function to show fit modal
+  function showFitModal(garmentType, fitData) {
+    console.log('📊 Opening fit modal for:', garmentType);
+    
+    const modal = document.getElementById('fit-info-modal');
+    const upperSection = document.getElementById('upper-fit-section');
+    const lowerSection = document.getElementById('lower-fit-section');
+    
+    // Update fit values in modal
+    if (garmentType === 'upper' || garmentType === 'top') {
+      upperSection.style.display = 'block';
+      lowerSection.style.display = 'none';
+      
+      document.getElementById('fit-shoulders').textContent = fitData.upper.shoulders;
+      document.getElementById('fit-chest').textContent = fitData.upper.chest;
+      document.getElementById('fit-waist').textContent = fitData.upper.waist;
+      document.getElementById('fit-sleeve').textContent = fitData.upper.sleeve;
+      document.getElementById('fit-length').textContent = fitData.upper.length;
+      
+      // Add fit classes
+      updateFitClasses('fit-shoulders', fitData.upper.shoulders);
+      updateFitClasses('fit-chest', fitData.upper.chest);
+      updateFitClasses('fit-waist', fitData.upper.waist);
+      updateFitClasses('fit-sleeve', fitData.upper.sleeve);
+      updateFitClasses('fit-length', fitData.upper.length);
+    } else {
+      upperSection.style.display = 'none';
+      lowerSection.style.display = 'block';
+      
+      document.getElementById('fit-lower-waist').textContent = fitData.lower.waist;
+      document.getElementById('fit-hips').textContent = fitData.lower.hips;
+      document.getElementById('fit-thighs').textContent = fitData.lower.thighs;
+      document.getElementById('fit-leg-length').textContent = fitData.lower.legLength;
+      document.getElementById('fit-ankle').textContent = fitData.lower.ankle;
+      
+      // Add fit classes
+      updateFitClasses('fit-lower-waist', fitData.lower.waist);
+      updateFitClasses('fit-hips', fitData.lower.hips);
+      updateFitClasses('fit-thighs', fitData.lower.thighs);
+      updateFitClasses('fit-leg-length', fitData.lower.legLength);
+      updateFitClasses('fit-ankle', fitData.lower.ankle);
+    }
+    
+    modal.style.display = 'flex';
+  }
+
+  // Helper function to add appropriate classes based on fit
+  function updateFitClasses(elementId, fitText) {
+    const element = document.getElementById(elementId);
+    element.className = 'fit-value';
+    
+    if (fitText.includes('Perfect')) {
+      element.classList.add('perfect');
+    } else if (fitText.includes('Loose')) {
+      element.classList.add('loose');
+    } else if (fitText.includes('Tight')) {
+      element.classList.add('tight');
+    }
+  }
+
+  // Function to hide fit modal
+  function hideFitModal() {
+    const modal = document.getElementById('fit-info-modal');
+    modal.style.display = 'none';
+  }
+
+  // Setup fit modal event listeners (add to main DOMContentLoaded section below)
+  const fitModalClose = document.querySelector('.fit-modal-close');
+  const fitModal = document.getElementById('fit-info-modal');
+  
+  if (fitModalClose) {
+    fitModalClose.addEventListener('click', hideFitModal);
+  }
+  
+  // Close modal when clicking outside
+  if (fitModal) {
+    fitModal.addEventListener('click', function(e) {
+      if (e.target === fitModal) {
+        hideFitModal();
+      }
+    });
   }
 
   // Function to display images with pagination
@@ -1661,8 +1850,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <img src="${imgSrc}" 
                  alt="Garment ${imageNumber}" 
                  style="width: 100%; height: 100%; object-fit: cover; border-radius: 15px;" 
-                 onerror="console.error('❌ Failed to load image:', this.src); this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                 onload="console.log('✅ Image loaded successfully:', this.src);" />
+                 data-image-number="${imageNumber}" />
             <span class="upload-text" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,0,0,0.8); color: white; padding: 4px; border-radius: 4px; font-size: 10px;">Failed</span>
             
             <!-- Checkbox for Multi-Selection -->
@@ -1711,6 +1899,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add try-on click listener to the image
         const img = item.querySelector('img');
         if (img) {
+          // Add error and load event listeners
+          img.addEventListener('error', function() {
+            console.error('❌ Failed to load image:', this.src);
+            this.style.display = 'none';
+            const errorText = this.nextElementSibling;
+            if (errorText) {
+              errorText.style.display = 'flex';
+            }
+          });
+          
+          img.addEventListener('load', function() {
+            const imageNumber = this.getAttribute('data-image-number');
+            console.log(`✅ Image ${imageNumber} loaded successfully:`, this.src);
+          });
+          
           img.addEventListener('click', async () => {
             console.log('🎯 Try-on clicked for image:', imgSrc);
             await handleImageTryOn(imgSrc);
@@ -1730,9 +1933,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // No need for direct event listeners here
       }
     });
-    
-    // Update multi-garment try-on button visibility
-    updateMultiTryOnButton();
     
     console.log('✅ Image page rendered successfully with', tryonItems.length, 'try-on items');
     
@@ -1812,6 +2012,22 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Set the grid content
     garmentPreview.innerHTML = gridHtml;
+    
+    // Add image error/load event listeners for CSP compliance
+    const wardrobeImages = garmentPreview.querySelectorAll('.garment-item-image');
+    wardrobeImages.forEach(img => {
+      img.addEventListener('error', function() {
+        const title = this.getAttribute('data-title');
+        console.error('❌ Image failed:', title, this.src);
+        this.style.display = 'none';
+        this.parentElement.innerHTML += '<div class="garment-image-unavailable">Image<br/>Unavailable</div>';
+      });
+      
+      img.addEventListener('load', function() {
+        const title = this.getAttribute('data-title');
+        console.log('✅ Image loaded:', title, this.src);
+      });
+    });
     
     // Add event listeners for wardrobe items
     const wardrobeItemsElements = garmentPreview.querySelectorAll('[data-wardrobe-item]');
@@ -2200,10 +2416,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   async function saveAvatarToDatabase(imageData, userId) {
     try {
-      console.log('💾 Saving avatar to database for user:', userId);
+      console.log('💾 [SAVE-AVATAR-DB] Starting database save for user:', userId);
+      console.log('💾 [SAVE-AVATAR-DB] Image data length:', imageData.length, 'chars');
       
       // Convert data URL to base64
       const base64Data = imageData.split(',')[1];
+      console.log('💾 [SAVE-AVATAR-DB] Base64 data length:', base64Data.length, 'chars');
       
       const response = await fetch(`${API_BASE_URL}/api/update-avatar`, {
         method: 'PUT',
@@ -2216,18 +2434,22 @@ document.addEventListener('DOMContentLoaded', function() {
         })
       });
       
+      console.log('💾 [SAVE-AVATAR-DB] Response status:', response.status, response.statusText);
+      
       const result = await response.json();
+      console.log('💾 [SAVE-AVATAR-DB] Response body:', result);
       
       if (result.success) {
-        console.log('✅ Avatar saved to database successfully');
+        console.log('✅ [SAVE-AVATAR-DB] Avatar saved to database successfully!');
+        console.log('✅ [SAVE-AVATAR-DB] Saved size:', result.avatar_size, 'bytes');
         return true;
       } else {
-        console.error('❌ Failed to save avatar to database:', result.error);
+        console.error('❌ [SAVE-AVATAR-DB] Failed to save avatar to database:', result.error);
         return false;
       }
       
     } catch (error) {
-      console.error('❌ Error saving avatar to database:', error);
+      console.error('❌ [SAVE-AVATAR-DB] Error saving avatar to database:', error);
       return false;
     }
   }
@@ -2527,18 +2749,20 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         });
         
-        // Save processed avatar to database
+        // Save processed avatar to database (with background removed!)
         chrome.storage.local.get(['userId'], async function(result) {
           if (result.userId) {
-            console.log('💾 Saving processed avatar to database');
+            console.log('💾 [AVATAR-DB] Saving PROCESSED avatar (background removed) to database');
+            console.log('💾 [AVATAR-DB] User ID:', result.userId);
+            console.log('💾 [AVATAR-DB] Processed avatar size:', processedAvatarData.length, 'chars');
             const saved = await saveAvatarToDatabase(processedAvatarData, result.userId);
             if (saved) {
-              console.log('✅ Processed avatar saved to database and local storage updated');
+              console.log('✅ [AVATAR-DB] Processed avatar (background removed) saved to database successfully!');
             } else {
-              console.error('❌ Failed to save avatar to database');
+              console.error('❌ [AVATAR-DB] Failed to save processed avatar to database');
             }
           } else {
-            console.log('ℹ️ No user logged in - avatar saved to local storage only');
+            console.log('ℹ️ [AVATAR-DB] No user logged in - avatar saved to local storage only');
           }
         });
       };
@@ -2894,22 +3118,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const reader = new FileReader();
         reader.onload = async function(evt) {
           console.log('File read complete, processing upload...');
+          console.log('📸 [AVATAR] Original image loaded, will process for background removal');
+          
+          // IMPORTANT: Don't save original image to database!
+          // processAvatarUpload will remove background and save the processed version
           await processAvatarUpload(evt.target.result);
           
-          // Also save avatar to database if user is logged in
-          chrome.storage.local.get(['userId'], async function(result) {
-            if (result.userId) {
-              console.log('📁 Saving avatar to database for user:', result.userId);
-              const saved = await saveAvatarToDatabase(evt.target.result, result.userId);
-              if (saved) {
-                console.log('✅ Avatar synchronized with database');
-              } else {
-                console.log('⚠️ Failed to save avatar to database, but local storage succeeded');
-              }
-            } else {
-              console.log('ℹ️ No user ID found, avatar saved locally only');
-            }
-          });
+          // Note: Database save happens inside processAvatarUpload after background removal
+          console.log('✅ [AVATAR] Upload processing complete (background removed version will be saved)');
         };
         reader.readAsDataURL(file);
       }
@@ -3004,6 +3220,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     garmentPreview.innerHTML = html;
+    
+    // Add image error/load event listeners for CSP compliance
+    const uploadedImages = garmentPreview.querySelectorAll('.garment-item-image');
+    uploadedImages.forEach(img => {
+      img.addEventListener('error', function() {
+        const title = this.getAttribute('data-title');
+        console.error('❌ Image failed:', title, this.src);
+        this.style.display = 'none';
+        this.parentElement.innerHTML += '<div class="garment-image-unavailable">Image<br/>Unavailable</div>';
+      });
+      
+      img.addEventListener('load', function() {
+        const title = this.getAttribute('data-title');
+        console.log('✅ Image loaded:', title, this.src);
+      });
+    });
     
     // Add click handlers for garment selection and removal
     const garmentItems = garmentPreview.querySelectorAll('.uploaded-garment');
@@ -3797,6 +4029,22 @@ document.addEventListener('DOMContentLoaded', function() {
     
     garmentPreview.innerHTML = gridHtml;
     
+    // Add image error/load event listeners for CSP compliance
+    const explorerImages = garmentPreview.querySelectorAll('.garment-item-image');
+    explorerImages.forEach(img => {
+      img.addEventListener('error', function() {
+        const title = this.getAttribute('data-title');
+        console.error('❌ Image failed:', title, this.src);
+        this.style.display = 'none';
+        this.parentElement.innerHTML += '<div class="garment-image-unavailable">Image<br/>Unavailable</div>';
+      });
+      
+      img.addEventListener('load', function() {
+        const title = this.getAttribute('data-title');
+        console.log('✅ Image loaded:', title, this.src);
+      });
+    });
+    
     // Add event listeners for explorer items
     const explorerItems = garmentPreview.querySelectorAll('.explorer-item');
     explorerItems.forEach((item, index) => {
@@ -4209,6 +4457,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // Utility functions to manage try-on result display and avatar visibility
   function showTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
+    const modelSelection = document.querySelector('.model-selection');
+    
     if (tryonResult) {
       tryonResult.style.display = 'flex';
       // Add class to hide avatar
@@ -4217,10 +4467,16 @@ document.addEventListener('DOMContentLoaded', function() {
         mainContainer.classList.add('tryon-active');
       }
     }
+    // Hide model selector when try-on result is shown
+    if (modelSelection) {
+      modelSelection.style.display = 'none';
+    }
   }
 
   function hideTryonResult() {
     const tryonResult = document.getElementById('tryon-result');
+    const modelSelection = document.querySelector('.model-selection');
+    
     if (tryonResult) {
       // Clean up any blob URLs in the try-on result
       const images = tryonResult.querySelectorAll('img');
@@ -4235,6 +4491,10 @@ document.addEventListener('DOMContentLoaded', function() {
       if (mainContainer) {
         mainContainer.classList.remove('tryon-active');
       }
+    }
+    // Show model selector again when try-on is closed
+    if (modelSelection) {
+      modelSelection.style.display = 'block';
     }
   }
 
