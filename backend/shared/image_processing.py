@@ -167,8 +167,25 @@ def normalize_image(image_data: bytes, target_format: str = 'PNG') -> bytes:
         # Convert to target format
         output = BytesIO()
         if target_format == 'PNG':
-            img.save(output, format='PNG', optimize=True)
+            # Preserve transparency (RGBA mode) for PNG
+            if img.mode not in ('RGBA', 'LA', 'P'):
+                # If image doesn't have alpha channel, keep as is
+                img.save(output, format='PNG', optimize=True)
+            else:
+                # Ensure RGBA mode for transparency
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                elif img.mode == 'LA':
+                    img = img.convert('RGBA')
+                # Save with transparency preserved
+                img.save(output, format='PNG', optimize=True)
         elif target_format == 'WEBP':
+            # WEBP also supports transparency
+            if img.mode in ('RGBA', 'LA', 'P'):
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                elif img.mode == 'LA':
+                    img = img.convert('RGBA')
             img.save(output, format='WEBP', quality=85)
         else:  # JPEG
             img.save(output, format='JPEG', quality=85, optimize=True)

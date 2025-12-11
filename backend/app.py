@@ -120,9 +120,53 @@ def save_avatar():
         # Per user requirement: Use Nano Banana to remove background and keep only user image
         try:
             from features.tryon.service import remove_background
+            from PIL import Image
+            from io import BytesIO
+            
             logger.info(f"Removing background from avatar using Gemini API (Nano Banana) for user: {user_id}")
             avatar_data = remove_background(avatar_data)
-            logger.info(f"Background removed successfully from avatar for user: {user_id}")
+            
+            # Verify that background removal resulted in transparent image
+            try:
+                img = Image.open(BytesIO(avatar_data))
+                original_mode = img.mode
+                
+                # Check if image has transparency (alpha channel)
+                has_transparency = img.mode in ('RGBA', 'LA', 'P')
+                
+                if not has_transparency:
+                    # If image is RGB (no transparency), background removal didn't work properly
+                    logger.error(f"Avatar from Gemini is {original_mode} mode (no transparency). Background removal failed to create transparent image.")
+                    return error_response_from_string(
+                        'Background removal failed to create transparent image. Please try uploading again with a clearer photo.',
+                        500,
+                        'EXTERNAL_SERVICE_ERROR'
+                    )
+                
+                # Convert to RGBA to ensure proper transparency support
+                if img.mode == 'P':
+                    # Palette mode - convert to RGBA to preserve transparency
+                    img = img.convert('RGBA')
+                elif img.mode == 'LA':
+                    # Grayscale with alpha - convert to RGBA
+                    img = img.convert('RGBA')
+                # If already RGBA, keep as is
+                
+                # Save as PNG with transparency preserved (RGBA mode ensures alpha channel)
+                output = BytesIO()
+                # PIL automatically preserves alpha channel when saving RGBA images as PNG
+                img.save(output, format='PNG')
+                avatar_data = output.getvalue()
+                
+                logger.info(f"Avatar processed with transparency preserved, user: {user_id}, mode: RGBA")
+            except Exception as img_check_error:
+                logger.exception(f"Error processing avatar transparency: {str(img_check_error)}")
+                return error_response_from_string(
+                    'Failed to process avatar image. Please try uploading again.',
+                    500,
+                    'EXTERNAL_SERVICE_ERROR'
+                )
+            
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             # Fail fast - don't save avatar without background removal
@@ -132,7 +176,7 @@ def save_avatar():
                 'EXTERNAL_SERVICE_ERROR'
             )
         
-        logger.info(f"Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes, bg_removed: True")
+        logger.info(f"Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes, bg_removed: True, transparent: True")
         
         # Use User model instead of direct SQL
         from shared.models.user import User

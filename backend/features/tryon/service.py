@@ -197,8 +197,8 @@ def remove_background(image_data: bytes) -> bytes:
         # Convert image to base64
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
-        # Prepare prompt for background removal
-        prompt = "Remove the background from this image, keeping only the person/subject. Return a transparent PNG image with the subject isolated."
+        # Prepare prompt for background removal - explicitly request transparent background
+        prompt = "Remove the background from this image, keeping only the person/subject. Make the background completely transparent (alpha channel). Return a PNG image with RGBA format where the background pixels have alpha=0 (fully transparent) and only the person/subject is visible with alpha=255 (fully opaque)."
         
         # Call Gemini API for image editing
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
