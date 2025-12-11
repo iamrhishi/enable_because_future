@@ -1240,6 +1240,158 @@
 							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"recommended_size\": \"M\",\n        \"confidence\": 0.9,\n        \"reasoning\": \"Based on your measurements (chest: 95cm, waist: 80cm, hips: 95cm), size M provides the best fit.\"\n    }\n}"
 						}
 					]
+				},
+				{
+					"name": "Analyze Fit (AI-Powered)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"wardrobe_item_id\": 1,\n  \"size\": \"M\"\n}"
+						},
+						"description": "Intelligent fit analysis using Gemini AI. Simply provide wardrobe_item_id (or garment_url for external products) and optional size. Backend automatically fetches user measurements, garment details, and size chart from database. Returns fit percentage, fit level, warnings, and detailed analysis for multiple sizes. Uses prompt engineering for comprehensive fit prediction.",
+						"url": {
+							"raw": "{{base_url}}/api/fitting/analyze-fit",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fitting", "analyze-fit"]
+						}
+					},
+					"response": [
+						{
+							"name": "Success - Risky Fit",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"wardrobe_item_id\": 1,\n  \"size\": \"M\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/analyze-fit",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "analyze-fit"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"fit_percentage\": 60,\n        \"fit_level\": \"risky fit\",\n        \"fits\": false,\n        \"recommended_size\": \"M\",\n        \"warnings\": [\"This item might be wide around the waist\"],\n        \"fit_analysis\": {\n            \"M\": {\n                \"waist\": \"wide\",\n                \"hips\": \"perfect\",\n                \"thighs\": \"tight\",\n                \"length\": \"short; 8cm over ankle\"\n            },\n            \"S\": {\n                \"waist\": \"perfect\",\n                \"hips\": \"too tight\",\n                \"thighs\": \"very tight\",\n                \"length\": \"short; 8 cm over ankle\"\n            }\n        },\n        \"reasoning\": \"Based on your measurements (waist: 80cm, hips: 95cm), size M will be wide around the waist but perfect at the hips. The thighs may feel tight, and the length will be 8cm above your ankle. Consider size M for a relaxed fit or size S for a tighter fit, but be aware that size S will be very tight at the thighs.\"\n    }\n}"
+						},
+						{
+							"name": "Success - Good Fit",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"wardrobe_item_id\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/analyze-fit",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "analyze-fit"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"fit_percentage\": 85,\n        \"fit_level\": \"good fit\",\n        \"fits\": true,\n        \"recommended_size\": \"M\",\n        \"warnings\": [],\n        \"fit_analysis\": {\n            \"M\": {\n                \"waist\": \"perfect\",\n                \"hips\": \"perfect\",\n                \"chest\": \"perfect\",\n                \"length\": \"good\"\n            }\n        },\n        \"reasoning\": \"Size M provides an excellent fit based on your measurements. All key areas (waist, hips, chest) align well with the garment measurements.\"\n    }\n}"
+						},
+						{
+							"name": "Wardrobe Item Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"wardrobe_item_id\": 999\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/analyze-fit",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "analyze-fit"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Wardrobe item 999 not found or does not belong to user\",\n    \"error_code\": \"NOT_FOUND\"\n}"
+						},
+						{
+							"name": "Size Chart Not Available",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"wardrobe_item_id\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fitting/analyze-fit",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fitting", "analyze-fit"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Size chart not available for this garment. Size chart data is required for fit analysis.\",\n    \"error_code\": \"VALIDATION_ERROR\"\n}"
+						}
+					]
 				}
 			]
 		},
@@ -1334,7 +1486,7 @@
 					]
 				},
 				{
-					"name": "Create Try-On Job (with garment_image + optional selfie)",
+					"name": "Create Try-On Job (with wardrobe_item_id + optional selfie)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1349,15 +1501,10 @@
 									"description": "Optional: person image file. If omitted, backend will use the authenticated user's saved avatar from /api/save-avatar."
 								},
 								{
-									"key": "garment_image",
-									"type": "file",
-									"src": []
-								},
-								{
-									"key": "garment_type",
-									"value": "upper",
+									"key": "wardrobe_item_id",
+									"value": "1",
 									"type": "text",
-									"description": "Garment type: upper or lower. Defaults to upper."
+									"description": "ID of wardrobe item from /api/wardrobe/items. Backend will load the image and garment details (brand, color, category, etc.) automatically."
 								}
 							]
 						},
@@ -1366,7 +1513,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
 						},
-						"description": "Create try-on job with direct garment image upload. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar."
+						"description": "Create try-on job using wardrobe item ID. Most efficient method - uses already stored images and metadata. Backend automatically loads the garment image from storage and extracts garment details (brand, color, category, fabric, etc.) from the wardrobe item. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar."
 					},
 					"response": [
 						{
@@ -1378,9 +1525,9 @@
 									"mode": "formdata",
 									"formdata": [
 										{
-											"key": "garment_image",
-											"type": "file",
-											"src": []
+											"key": "wardrobe_item_id",
+											"value": "1",
+											"type": "text"
 										}
 									]
 								},
@@ -1401,6 +1548,39 @@
 							],
 							"cookie": [],
 							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"queued\",\n        \"estimated_time\": 15\n    }\n}"
+						},
+						{
+							"name": "Wardrobe Item Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "wardrobe_item_id",
+											"value": "999",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Wardrobe item 999 not found or does not belong to user\",\n    \"error_code\": \"NOT_FOUND\"\n}"
 						}
 					],
 					"event": [
@@ -1997,6 +2177,49 @@
 									],
 									"cookie": [],
 									"body": "{\n    \"success\": true,\n    \"message\": \"Category deleted successfully\"\n}"
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Options",
+					"item": [
+						{
+							"name": "Get Wardrobe Options",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/options",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "options"]
+								},
+								"description": "Get available fabric types and care instructions for wardrobe item forms. Returns lists that frontend can use to populate dropdowns."
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/options",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "options"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"fabric_types\": [\n            {\"name\": \"cotton\", \"display_name\": \"Cotton\"},\n            {\"name\": \"polyester\", \"display_name\": \"Polyester\"},\n            {\"name\": \"elasthan\", \"display_name\": \"Elasthan\"},\n            {\"name\": \"wool\", \"display_name\": \"Wool\"},\n            {\"name\": \"cashmere\", \"display_name\": \"Cashmere\"},\n            {\"name\": \"viscose\", \"display_name\": \"Viscose\"},\n            {\"name\": \"lyocell\", \"display_name\": \"Lyocell\"},\n            {\"name\": \"silk\", \"display_name\": \"Silk\"},\n            {\"name\": \"other\", \"display_name\": \"Other\"}\n        ],\n        \"care_instructions\": [\n            {\"id\": \"machine_wash_30\", \"label\": \"Machine wash at 30°C\", \"icon\": \"washing-machine\", \"category\": \"washing\"},\n            {\"id\": \"machine_wash_40\", \"label\": \"Machine wash at 40°C\", \"icon\": \"washing-machine\", \"category\": \"washing\"},\n            {\"id\": \"machine_wash_60\", \"label\": \"Machine wash at 60°C\", \"icon\": \"washing-machine\", \"category\": \"washing\"},\n            {\"id\": \"machine_wash_95\", \"label\": \"Machine wash at 95°C\", \"icon\": \"washing-machine\", \"category\": \"washing\"},\n            {\"id\": \"hand_wash\", \"label\": \"Hand wash\", \"icon\": \"hand\", \"category\": \"washing\"},\n            {\"id\": \"tumble_dry_low\", \"label\": \"Tumble dry at low temp.\", \"icon\": \"dryer\", \"category\": \"drying\"},\n            {\"id\": \"tumble_dry_medium\", \"label\": \"Tumble dry at medium temp.\", \"icon\": \"dryer\", \"category\": \"drying\"},\n            {\"id\": \"tumble_dry_high\", \"label\": \"Tumble dry at high temp.\", \"icon\": \"dryer\", \"category\": \"drying\"},\n            {\"id\": \"do_not_tumble_dry\", \"label\": \"Do not tumble dry\", \"icon\": \"dryer\", \"category\": \"drying\"},\n            {\"id\": \"do_not_iron\", \"label\": \"Do not iron\", \"icon\": \"iron\", \"category\": \"ironing\"},\n            {\"id\": \"do_not_steam\", \"label\": \"Do not steam\", \"icon\": \"steam\", \"category\": \"ironing\"},\n            {\"id\": \"iron_low\", \"label\": \"Iron at low temp.\", \"icon\": \"iron\", \"category\": \"ironing\"},\n            {\"id\": \"iron_medium\", \"label\": \"Iron at medium temp.\", \"icon\": \"iron\", \"category\": \"ironing\"},\n            {\"id\": \"iron_high\", \"label\": \"Iron at high temp.\", \"icon\": \"iron\", \"category\": \"ironing\"},\n            {\"id\": \"do_not_dry_clean\", \"label\": \"Do not dry clean\", \"icon\": \"dry-clean\", \"category\": \"cleaning\"},\n            {\"id\": \"do_not_bleach\", \"label\": \"Do not bleach\", \"icon\": \"bleach\", \"category\": \"cleaning\"}\n        ]\n    }\n}"
 								}
 							]
 						}

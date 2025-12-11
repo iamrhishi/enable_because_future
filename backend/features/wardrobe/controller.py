@@ -24,6 +24,65 @@ from io import BytesIO
 wardrobe_bp = Blueprint('wardrobe', __name__, url_prefix='/api/wardrobe')
 
 
+# ===== METADATA & OPTIONS =====
+
+@wardrobe_bp.route('/options', methods=['GET'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def get_wardrobe_options():
+    """
+    Get available options for wardrobe item fields
+    Returns fabric types and care instructions that frontend can use for dropdowns
+    user_id is extracted from JWT token by @require_auth decorator
+    """
+    # user_id comes from JWT token via @require_auth decorator
+    user_id = request.user_id
+    logger.info(f"get_wardrobe_options: ENTRY - user_id={user_id} (from JWT)")
+    
+    try:
+        # Available fabric types (based on UI requirements)
+        fabric_types = [
+            {"name": "cotton", "display_name": "Cotton"},
+            {"name": "polyester", "display_name": "Polyester"},
+            {"name": "elasthan", "display_name": "Elasthan"},
+            {"name": "wool", "display_name": "Wool"},
+            {"name": "cashmere", "display_name": "Cashmere"},
+            {"name": "viscose", "display_name": "Viscose"},
+            {"name": "lyocell", "display_name": "Lyocell"},
+            {"name": "silk", "display_name": "Silk"},
+            {"name": "other", "display_name": "Other"}
+        ]
+        
+        # Available care instructions (based on UI requirements)
+        care_instructions = [
+            {"id": "machine_wash_30", "label": "Machine wash at 30°C", "icon": "washing-machine", "category": "washing"},
+            {"id": "machine_wash_40", "label": "Machine wash at 40°C", "icon": "washing-machine", "category": "washing"},
+            {"id": "machine_wash_60", "label": "Machine wash at 60°C", "icon": "washing-machine", "category": "washing"},
+            {"id": "machine_wash_95", "label": "Machine wash at 95°C", "icon": "washing-machine", "category": "washing"},
+            {"id": "hand_wash", "label": "Hand wash", "icon": "hand", "category": "washing"},
+            {"id": "tumble_dry_low", "label": "Tumble dry at low temp.", "icon": "dryer", "category": "drying"},
+            {"id": "tumble_dry_medium", "label": "Tumble dry at medium temp.", "icon": "dryer", "category": "drying"},
+            {"id": "tumble_dry_high", "label": "Tumble dry at high temp.", "icon": "dryer", "category": "drying"},
+            {"id": "do_not_tumble_dry", "label": "Do not tumble dry", "icon": "dryer", "category": "drying"},
+            {"id": "do_not_iron", "label": "Do not iron", "icon": "iron", "category": "ironing"},
+            {"id": "do_not_steam", "label": "Do not steam", "icon": "steam", "category": "ironing"},
+            {"id": "iron_low", "label": "Iron at low temp.", "icon": "iron", "category": "ironing"},
+            {"id": "iron_medium", "label": "Iron at medium temp.", "icon": "iron", "category": "ironing"},
+            {"id": "iron_high", "label": "Iron at high temp.", "icon": "iron", "category": "ironing"},
+            {"id": "do_not_dry_clean", "label": "Do not dry clean", "icon": "dry-clean", "category": "cleaning"},
+            {"id": "do_not_bleach", "label": "Do not bleach", "icon": "bleach", "category": "cleaning"}
+        ]
+        
+        logger.info(f"get_wardrobe_options: EXIT - Returning options for user_id={user_id}")
+        return success_response(data={
+            'fabric_types': fabric_types,
+            'care_instructions': care_instructions
+        })
+        
+    except Exception as e:
+        logger.exception(f"get_wardrobe_options: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
 # ===== CATEGORY MANAGEMENT =====
 
 @wardrobe_bp.route('/categories', methods=['POST'])

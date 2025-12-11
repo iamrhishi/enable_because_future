@@ -109,6 +109,45 @@ class StorageService:
             logger.exception(f"StorageService.delete_image: EXIT - Error: {str(e)}")
             return False
     
+    def get_image(self, file_path: str) -> bytes:
+        """
+        Get image data from storage
+        
+        Args:
+            file_path: Path in storage (e.g., 'wardrobe/user123/item456.png')
+            
+        Returns:
+            Image bytes
+            
+        Raises:
+            ExternalServiceError: If image not found or read fails
+        """
+        logger.info(f"StorageService.get_image: ENTRY - file_path={file_path}")
+        
+        try:
+            # Ensure file_path doesn't start with /
+            file_path = file_path.lstrip('/')
+            
+            # Create full path
+            full_path = self.images_dir / file_path
+            
+            # Check if file exists
+            if not full_path.exists():
+                raise ExternalServiceError(f"Image not found: {file_path}", service='storage')
+            
+            # Read image bytes
+            with open(full_path, 'rb') as f:
+                image_data = f.read()
+            
+            logger.info(f"StorageService.get_image: EXIT - Loaded {len(image_data)} bytes from {full_path}")
+            return image_data
+            
+        except ExternalServiceError:
+            raise
+        except Exception as e:
+            logger.exception(f"StorageService.get_image: EXIT - Error: {str(e)}")
+            raise ExternalServiceError(f"Failed to read image: {str(e)}", service='storage')
+    
     def get_image_path(self, file_path: str) -> Optional[Path]:
         """
         Get full file system path for an image

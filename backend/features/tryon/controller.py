@@ -78,12 +78,89 @@ def create_tryon_job():
         garment_type = 'upper'  # Default
         garment_details = None  # Will be populated from scraping or request
         
-        # Method 1: Direct image file
-        if 'garment_image' in request.files:
+        # Method 1: Wardrobe item ID (most efficient - uses already stored images)
+        if 'wardrobe_item_id' in request.form or 'item_id' in request.form:
+            wardrobe_item_id = request.form.get('wardrobe_item_id') or request.form.get('item_id')
+            try:
+                wardrobe_item_id = int(wardrobe_item_id)
+                from features.wardrobe.model import WardrobeItem
+                from shared.storage import get_storage_service
+                
+                # Fetch wardrobe item (ensures it belongs to the authenticated user)
+                wardrobe_item = WardrobeItem.get_by_id(wardrobe_item_id, user_id)
+                if not wardrobe_item:
+                    return error_response_from_string(
+                        f'Wardrobe item {wardrobe_item_id} not found or does not belong to user',
+                        404,
+                        'NOT_FOUND'
+                    )
+                
+                # Load image from storage
+                if wardrobe_item.image_path:
+                    storage_service = get_storage_service()
+                    # Extract path from image_path (remove /images/ prefix if present)
+                    image_path = wardrobe_item.image_path
+                    if image_path.startswith('/images/'):
+                        image_path = image_path.replace('/images/', '')
+                    
+                    try:
+                        garment_image = storage_service.get_image(image_path)
+                        logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id} image from storage")
+                    except Exception as storage_error:
+                        logger.warning(f"create_tryon_job: Failed to load image from storage: {str(storage_error)}")
+                        return error_response_from_string(
+                            f'Failed to load image for wardrobe item {wardrobe_item_id}: {str(storage_error)}',
+                            404,
+                            'NOT_FOUND'
+                        )
+                else:
+                    return error_response_from_string(
+                        f'Wardrobe item {wardrobe_item_id} has no image',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                
+                # Build garment_details from wardrobe item
+                garment_details = {
+                    'category': wardrobe_item.category,
+                    'brand': wardrobe_item.brand,
+                    'title': wardrobe_item.title,
+                    'color': wardrobe_item.color,
+                    'garment_category_type': wardrobe_item.garment_category_type,
+                }
+                # Add fabric info if available
+                if wardrobe_item.fabric:
+                    try:
+                        import json
+                        fabric_data = json.loads(wardrobe_item.fabric) if isinstance(wardrobe_item.fabric, str) else wardrobe_item.fabric
+                        if fabric_data and isinstance(fabric_data, list) and len(fabric_data) > 0:
+                            garment_details['material_type'] = ', '.join([f.get('name', '') for f in fabric_data if f.get('name')])
+                    except:
+                        pass
+                
+                # Remove None values
+                garment_details = {k: v for k, v in garment_details.items() if v is not None}
+                
+                # Set garment_type from wardrobe item category
+                if wardrobe_item.category:
+                    garment_type = wardrobe_item.category
+                elif wardrobe_item.garment_category_type:
+                    # Infer from garment_category_type if category not set
+                    garment_type = 'upper' if wardrobe_item.garment_category_type in ['t-shirt', 'shirt', 'jacket', 'sweater', 'hoodie'] else 'lower'
+                
+                logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id}, garment_type={garment_type}")
+            except ValueError:
+                return error_response_from_string('wardrobe_item_id must be a valid integer', 400, 'VALIDATION_ERROR')
+            except Exception as e:
+                logger.exception(f"create_tryon_job: Error loading wardrobe item: {str(e)}")
+                return error_response_from_string(f'Error loading wardrobe item: {str(e)}', 500)
+        
+        # Method 2: Direct image file
+        if not garment_image and 'garment_image' in request.files:
             garment_image = request.files['garment_image'].read()
             logger.info(f"create_tryon_job: Using garment_image file")
         
-        # Method 2: item_urls[] array (per context.md line 125) - PRIMARY METHOD
+        # Method 3: item_urls[] array (per context.md line 125) - for external product URLs
         if not garment_image and 'item_urls' in request.form:
             item_urls_str = request.form.get('item_urls')
             try:
@@ -241,7 +318,7 @@ def create_tryon_job():
                 logger.exception(f"create_tryon_job: Error processing item_urls: {str(e)}")
                 return error_response_from_string(f'Error processing item_urls: {str(e)}', 400, 'VALIDATION_ERROR')
         
-        # Method 3: Single garment_url (backward compatibility)
+        # Method 4: Single garment_url (backward compatibility)
         if not garment_image and 'garment_url' in request.form:
             garment_url = request.form.get('garment_url')
             try:
@@ -251,7 +328,7 @@ def create_tryon_job():
                 return error_response_from_string(f'Failed to fetch garment image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
         
         if not garment_image:
-            return error_response_from_string('garment_image, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
+            return error_response_from_string('garment_image, wardrobe_item_id, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
         
         # Preprocess garment image
         try:

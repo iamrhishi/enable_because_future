@@ -282,3 +282,295 @@ def get_size_recommendation():
         logger.exception(f"get_size_recommendation: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
+
+@fitting_bp.route('/analyze-fit', methods=['POST'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def analyze_fit():
+    """
+    Intelligent fit analysis using Gemini AI
+    Analyzes fit based on user measurements and garment data from database
+    Uses prompt engineering for comprehensive fit prediction
+    
+    Request body:
+    {
+        "wardrobe_item_id": 123,  // ID of wardrobe item (if garment is in user's wardrobe)
+        OR
+        "garment_url": "https://www.zara.com/...",  // URL of external product
+        "size": "M"  // Optional, defaults to user's typical size or garment's size
+    }
+    
+    Returns:
+    {
+        "fit_percentage": 60,
+        "fit_level": "risky fit",
+        "fits": false,
+        "recommended_size": "M",
+        "warnings": ["This item might be wide around the waist"],
+        "fit_analysis": {
+            "M": {
+                "waist": "wide",
+                "hips": "perfect",
+                "thighs": "tight",
+                "length": "short; 8cm over ankle"
+            }
+        },
+        "reasoning": "Detailed explanation of fit prediction"
+    }
+    """
+    # user_id comes from JWT token via @require_auth decorator
+    user_id = request.user_id
+    logger.info(f"analyze_fit: ENTRY - user_id={user_id} (from JWT)")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
+        
+        # Get user measurements using BodyMeasurements model
+        measurements_obj = BodyMeasurements.get_by_user(user_id)
+        if not measurements_obj:
+            logger.warning(f"analyze_fit: Body measurements not found for user_id={user_id}")
+            return error_response_from_string('Body measurements not found. Please add measurements first.', 404, 'NOT_FOUND')
+        
+        measurements = measurements_obj.to_dict()
+        
+        # Get garment data from database
+        wardrobe_item_id = data.get('wardrobe_item_id')
+        garment_url = data.get('garment_url')
+        size = data.get('size', 'M')
+        
+        garment_details = {}
+        size_chart = None
+        scraped_fit_info = ''
+        
+        # Fetch from wardrobe if wardrobe_item_id provided
+        if wardrobe_item_id:
+            from features.wardrobe.model import WardrobeItem
+            wardrobe_item = WardrobeItem.get_by_id(int(wardrobe_item_id), user_id)
+            if not wardrobe_item:
+                return error_response_from_string(
+                    f'Wardrobe item {wardrobe_item_id} not found or does not belong to user',
+                    404,
+                    'NOT_FOUND'
+                )
+            
+            # Build garment_details from wardrobe item
+            garment_details = {
+                'brand': wardrobe_item.brand,
+                'category': wardrobe_item.category,
+                'title': wardrobe_item.title,
+                'color': wardrobe_item.color,
+                'garment_category_type': wardrobe_item.garment_category_type,
+            }
+            
+            # Parse fabric if available
+            if wardrobe_item.fabric:
+                try:
+                    fabric_data = json.loads(wardrobe_item.fabric) if isinstance(wardrobe_item.fabric, str) else wardrobe_item.fabric
+                    garment_details['fabric'] = fabric_data
+                except:
+                    pass
+            
+            # Use wardrobe item size if size not provided
+            if not size and wardrobe_item.size:
+                size = wardrobe_item.size
+            
+            # Try to get size chart from garment_metadata if this is an external product
+            if wardrobe_item.is_external and wardrobe_item.title:
+                # Try to find in garment_metadata by title/brand
+                metadata = db_manager.execute_query(
+                    "SELECT size_chart FROM garment_metadata WHERE title LIKE ? OR brand = ?",
+                    (f'%{wardrobe_item.title}%', wardrobe_item.brand or ''),
+                    fetch_one=True
+                )
+                if metadata and metadata.get('size_chart'):
+                    try:
+                        size_chart = json.loads(metadata['size_chart']) if isinstance(metadata['size_chart'], str) else metadata['size_chart']
+                    except:
+                        pass
+        
+        # Fetch from garment_metadata if garment_url provided
+        elif garment_url:
+            metadata = db_manager.execute_query(
+                "SELECT * FROM garment_metadata WHERE url = ?",
+                (garment_url,),
+                fetch_one=True
+            )
+            
+            if metadata:
+                metadata_dict = dict(metadata)
+                garment_details = {
+                    'brand': metadata_dict.get('brand'),
+                    'title': metadata_dict.get('title'),
+                }
+                
+                # Parse size chart
+                if metadata_dict.get('size_chart'):
+                    try:
+                        size_chart = json.loads(metadata_dict['size_chart']) if isinstance(metadata_dict['size_chart'], str) else metadata_dict['size_chart']
+                    except:
+                        pass
+            else:
+                return error_response_from_string(
+                    f'Garment not found. Please scrape the product first using /api/garments/scrape',
+                    404,
+                    'NOT_FOUND'
+                )
+        else:
+            return error_response_from_string('wardrobe_item_id or garment_url is required', 400, 'VALIDATION_ERROR')
+        
+        # If no size chart found, we can't do detailed analysis
+        if not size_chart:
+            logger.warning(f"analyze_fit: No size chart available for garment")
+            return error_response_from_string(
+                'Size chart not available for this garment. Size chart data is required for fit analysis.',
+                400,
+                'VALIDATION_ERROR'
+            )
+        
+        # Use Gemini for intelligent fit analysis
+        try:
+            from config import Config
+            import requests
+            import base64
+            
+            if not Config.GEMINI_API_KEY:
+                logger.error("analyze_fit: Gemini API key not configured")
+                return error_response_from_string(
+                    'Fit analysis service is not configured. Please contact support.',
+                    503,
+                    'SERVICE_UNAVAILABLE'
+                )
+            
+            # Build comprehensive prompt for Gemini
+            prompt_parts = [
+                "You are an expert fashion fit analyst. Analyze how a garment will fit a user based on their body measurements and the garment's size chart.\n\n",
+                "USER BODY MEASUREMENTS (all in cm):\n",
+                f"Height: {measurements.get('height', 'N/A')} cm\n",
+                f"Weight: {measurements.get('weight', 'N/A')} kg\n",
+                f"Chest/Breast: {measurements.get('breast_circumference') or measurements.get('chest', 'N/A')} cm\n",
+                f"Waist: {measurements.get('waist_circumference') or measurements.get('waist', 'N/A')} cm\n",
+                f"Hips: {measurements.get('hip_circumference') or measurements.get('hips', 'N/A')} cm\n",
+                f"Shoulder: {measurements.get('shoulder_circumference', 'N/A')} cm\n",
+                f"Arm Length: {measurements.get('arm_length', 'N/A')} cm\n",
+                f"Inner Leg Length: {measurements.get('inner_leg_length', 'N/A')} cm\n",
+                f"Thigh: {measurements.get('upper_thigh_circumference', 'N/A')} cm\n",
+                "\nGARMENT SIZE CHART:\n",
+                json.dumps(size_chart, indent=2),
+                "\n\nGARMENT DETAILS:\n",
+                json.dumps(garment_details, indent=2),
+            ]
+            
+            if scraped_fit_info:
+                prompt_parts.append(f"\n\nSCRAPED FIT INFO FROM PRODUCT PAGE:\n{scraped_fit_info}")
+            
+            prompt_parts.extend([
+                "\n\nTASK:",
+                f"Analyze how size {size} will fit this user. Provide:",
+                "1. Fit percentage (0-100%)",
+                "2. Fit level: 'perfect fit', 'good fit', 'risky fit', or 'poor fit'",
+                "3. Whether it fits (boolean)",
+                "4. Recommended size if different",
+                "5. Warnings about potential fit issues (array of strings)",
+                "6. Detailed fit analysis for the requested size and 1-2 alternative sizes, describing each body area (waist, hips, thighs, length, chest, etc.)",
+                "7. Concise reasoning explaining the fit prediction",
+                "\n\nReturn your analysis as a JSON object with this exact structure:",
+                '{"fit_percentage": 60, "fit_level": "risky fit", "fits": false, "recommended_size": "M", "warnings": ["This item might be wide around the waist"], "fit_analysis": {"M": {"waist": "wide", "hips": "perfect", "thighs": "tight", "length": "short; 8cm over ankle"}}, "reasoning": "..."}'
+            ])
+            
+            prompt = "".join(prompt_parts)
+            
+            # Call Gemini API
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
+            
+            payload = {
+                "contents": [{
+                    "parts": [{
+                        "text": prompt
+                    }]
+                }]
+            }
+            
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            params = {
+                "key": Config.GEMINI_API_KEY
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            # Extract text from Gemini response
+            if 'candidates' in result and len(result['candidates']) > 0:
+                candidate = result['candidates'][0]
+                if 'content' in candidate and 'parts' in candidate['content']:
+                    text_response = candidate['content']['parts'][0].get('text', '')
+                    
+                    # Try to parse JSON from response
+                    try:
+                        # Extract JSON from markdown code blocks if present
+                        import re
+                        json_match = re.search(r'```json\s*(\{.*?\})\s*```', text_response, re.DOTALL)
+                        if json_match:
+                            text_response = json_match.group(1)
+                        else:
+                            # Try to find JSON object directly
+                            json_match = re.search(r'\{.*\}', text_response, re.DOTALL)
+                            if json_match:
+                                text_response = json_match.group(0)
+                        
+                        fit_analysis = json.loads(text_response)
+                        
+                        # Validate and normalize response
+                        result_data = {
+                            'fit_percentage': fit_analysis.get('fit_percentage', 50),
+                            'fit_level': fit_analysis.get('fit_level', 'risky fit'),
+                            'fits': fit_analysis.get('fits', False),
+                            'recommended_size': fit_analysis.get('recommended_size', size),
+                            'warnings': fit_analysis.get('warnings', []),
+                            'fit_analysis': fit_analysis.get('fit_analysis', {}),
+                            'reasoning': fit_analysis.get('reasoning', 'Fit analysis completed')
+                        }
+                        
+                        logger.info(f"analyze_fit: EXIT - Fit analysis completed for user_id={user_id}, fit_percentage={result_data['fit_percentage']}")
+                        return success_response(data=result_data)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"analyze_fit: Failed to parse Gemini JSON response: {str(e)}, raw response: {text_response[:500]}")
+                        return error_response_from_string(
+                            'Unable to analyze fit at this time. The fit analysis service returned an invalid response. Please try again later.',
+                            503,
+                            'SERVICE_UNAVAILABLE'
+                        )
+            else:
+                logger.error("analyze_fit: No candidates in Gemini response")
+                return error_response_from_string(
+                    'Unable to analyze fit at this time. The fit analysis service is temporarily unavailable. Please try again later.',
+                    503,
+                    'SERVICE_UNAVAILABLE'
+                )
+                
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"analyze_fit: Gemini API request failed: {str(e)}")
+            return error_response_from_string(
+                'Unable to analyze fit at this time. The fit analysis service is temporarily unavailable. Please try again later.',
+                503,
+                'SERVICE_UNAVAILABLE'
+            )
+        except Exception as e:
+            logger.exception(f"analyze_fit: Gemini API error: {str(e)}")
+            return error_response_from_string(
+                'Unable to analyze fit at this time. An error occurred while processing your request. Please try again later.',
+                503,
+                'SERVICE_UNAVAILABLE'
+            )
+        
+    except Exception as e:
+        logger.exception(f"analyze_fit: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+
