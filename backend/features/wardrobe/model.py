@@ -153,6 +153,23 @@ class WardrobeItem:
     def to_dict(self) -> dict:
         """Convert wardrobe item to dictionary"""
         import json
+        # Filter out bytes objects and legacy fields that shouldn't be serialized
+        # Also filter out any non-JSON-serializable types
+        filtered_data = {}
+        if self._data:
+            for k, v in self._data.items():
+                # Skip bytes objects and legacy fields
+                if isinstance(v, bytes):
+                    continue
+                if k in ['garment_image', 'garment_id', 'garment_type', 'garment_url']:
+                    continue
+                # Only include JSON-serializable values
+                try:
+                    json.dumps(v)  # Test if serializable
+                    filtered_data[k] = v
+                except (TypeError, ValueError):
+                    continue  # Skip non-serializable values
+        
         result = {
             'id': self.id,
             'user_id': self.user_id,
@@ -169,7 +186,18 @@ class WardrobeItem:
             'care_instructions': json.loads(self.care_instructions) if self.care_instructions and self.care_instructions.startswith('[') else self.care_instructions,
             'size': self.size,
             'description': self.description,
-            **self._data
         }
+        
+        # Add date_added and updated_at if they exist in _data
+        if self._data:
+            if 'date_added' in self._data and self._data['date_added']:
+                result['date_added'] = str(self._data['date_added'])
+            if 'created_at' in self._data and self._data['created_at']:
+                result['created_at'] = str(self._data['created_at'])
+            if 'updated_at' in self._data and self._data['updated_at']:
+                result['updated_at'] = str(self._data['updated_at'])
+        
+        # Merge filtered additional data
+        result.update(filtered_data)
         return result
 

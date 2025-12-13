@@ -4,8 +4,33 @@ Supports user-created categories for organizing garments
 """
 
 from typing import Optional, List
+import json
 from shared.database import db_manager
 from shared.logger import logger
+
+
+def safe_dict_from_row(row) -> dict:
+    """Safely convert database row to dict, filtering out non-JSON-serializable values"""
+    if not row:
+        return {}
+    
+    result = {}
+    for k, v in dict(row).items():
+        # Skip bytes objects
+        if isinstance(v, bytes):
+            continue
+        # Test if value is JSON-serializable
+        try:
+            json.dumps(v)
+            result[k] = v
+        except (TypeError, ValueError):
+            # Convert datetime/date objects to strings
+            if hasattr(v, 'isoformat'):
+                result[k] = v.isoformat()
+            else:
+                # Skip non-serializable values
+                continue
+    return result
 
 
 class WardrobeCategory:
@@ -157,7 +182,7 @@ class WardrobeCategory:
                 "SELECT * FROM category_sections WHERE user_id IS NULL ORDER BY sort_order ASC",
                 fetch_all=True
             )
-            sections = [dict(row) for row in results] if results else []
+            sections = [safe_dict_from_row(row) for row in results] if results else []
             # Add default icons for platform sections if not set
             for section in sections:
                 if not section.get('icon_name'):
@@ -184,7 +209,7 @@ class WardrobeCategory:
                 (user_id,),
                 fetch_all=True
             )
-            sections = [dict(row) for row in results] if results else []
+            sections = [safe_dict_from_row(row) for row in results] if results else []
             logger.info(f"WardrobeCategory.get_user_sections: EXIT - Found {len(sections)} sections")
             return sections
         except Exception as e:
@@ -219,8 +244,8 @@ class WardrobeCategory:
                     (name, user_id),
                     fetch_one=True
                 )
-                if result:
-                    return dict(result)
+            if result:
+                return safe_dict_from_row(result)
             
             # Check platform section
             result = db_manager.execute_query(
@@ -229,7 +254,7 @@ class WardrobeCategory:
                 fetch_one=True
             )
             if result:
-                section = dict(result)
+                section = safe_dict_from_row(result)
                 if not section.get('icon_name'):
                     section['icon_name'] = cls._get_default_icon(section.get('name'))
                 return section
@@ -307,7 +332,7 @@ class WardrobeCategory:
                     "SELECT * FROM platform_categories ORDER BY category_section ASC, sort_order ASC",
                     fetch_all=True
                 )
-            categories = [dict(row) for row in results] if results else []
+            categories = [safe_dict_from_row(row) for row in results] if results else []
             logger.info(f"WardrobeCategory.get_platform_categories: EXIT - Found {len(categories)} categories")
             return categories
         except Exception as e:

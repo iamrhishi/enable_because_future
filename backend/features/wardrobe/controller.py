@@ -786,7 +786,20 @@ def extract_garment_from_url():
         )
         
         if cached:
-            cached_dict = dict(cached)
+            # Safely convert cached row to dict, filtering out non-serializable values
+            import json
+            cached_dict = {}
+            for k, v in dict(cached).items():
+                if isinstance(v, bytes):
+                    continue
+                try:
+                    json.dumps(v)
+                    cached_dict[k] = v
+                except (TypeError, ValueError):
+                    if hasattr(v, 'isoformat'):
+                        cached_dict[k] = v.isoformat()
+                    else:
+                        continue
             if cached_dict.get('images'):
                 cached_dict['images'] = json.loads(cached_dict['images'])
             if cached_dict.get('sizes'):
