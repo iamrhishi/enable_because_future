@@ -32,3 +32,5 @@ def to_absolute_url(relative_url: str) -> str:
     return f"{base_url}{relative_url}"
 
 
+
+

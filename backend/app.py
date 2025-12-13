@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request, Response, send_from_directory
+from werkzeug.exceptions import BadRequest
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
 import os
@@ -57,12 +58,23 @@ app.register_blueprint(fitting_bp)
 app.register_blueprint(users_bp)
 app.register_blueprint(wardrobe_bp)
 
+# Handle BadRequest (415 Unsupported Media Type) specifically
+@app.errorhandler(BadRequest)
+def handle_bad_request(e):
+    """Handle BadRequest exceptions (including 415 Unsupported Media Type)"""
+    error_msg = str(e)
+    if '415' in error_msg or 'Unsupported Media Type' in error_msg or 'JSON' in error_msg:
+        logger.warning(f"BadRequest (415): {error_msg}")
+        return error_response_from_string(f'Server error: {error_msg}', 415, 'ERROR')
+    logger.error(f"BadRequest: {error_msg}", exc_info=True)
+    return error_response_from_string(f'Bad request: {error_msg}', 400, 'VALIDATION_ERROR')
+
 # Global error handler
 @app.errorhandler(Exception)
 def handle_error(e):
     """Global error handler"""
     logger.error(f"Unhandled error: {str(e)}", exc_info=True)
-    return error_response_from_string(f'Internal server error: {str(e)}', 500, 'INTERNAL_ERROR')
+    return error_response_from_string(f'Server error: {str(e)}', 500, 'ERROR')
 
 # Health check endpoint
 @app.route('/health', methods=['GET'])

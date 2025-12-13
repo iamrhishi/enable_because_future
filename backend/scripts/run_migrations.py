@@ -44,6 +44,7 @@ def main():
         (11, 'seed_platform_categories', load_migration(11, 'seed_platform_categories')),
         (12, 'add_user_category_sections', load_migration(12, 'add_user_category_sections')),
         (13, 'add_hip_circumference', load_migration(13, 'add_hip_circumference')),
+        (14, 'add_image_path', load_migration(14, 'add_image_path')),
     ]
     
     migration_manager.run_migrations(migrations)

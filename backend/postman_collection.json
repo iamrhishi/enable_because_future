@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "becausefuture-v1",
 		"name": "Because Future API - V1",
-		"description": "API collection for Because Future backend - Version 1\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections",
+		"description": "API collection for Because Future backend - Version 1\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections\n\nENVIRONMENT SETUP:\n1. Import postman_environment_local.json for Local Development (http://localhost:8000)\n2. Import postman_environment_remote.json for Remote Production (http://34.32.121.88:5001)\n3. Select environment from dropdown (top-right in Postman)\n4. All requests will use {{base_url}} from the selected environment",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -19,22 +19,26 @@
 		{
 			"key": "base_url",
 			"value": "http://localhost:8000",
-			"type": "string"
+			"type": "string",
+			"description": "Base URL for API. Use environment variables to switch between local (http://localhost:8000) and remote (http://34.32.121.88:5001)"
 		},
 		{
 			"key": "jwt_token",
 			"value": "",
-			"type": "string"
+			"type": "string",
+			"description": "JWT authentication token (auto-set after login)"
 		},
 		{
 			"key": "user_id",
 			"value": "",
-			"type": "string"
+			"type": "string",
+			"description": "User ID (auto-set after login)"
 		},
 		{
 			"key": "job_id",
 			"value": "",
-			"type": "string"
+			"type": "string",
+			"description": "Try-on job ID (auto-set after creating try-on job)"
 		}
 	],
 	"item": [
@@ -56,7 +60,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"confirm_password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\",\n  \"confirm_password\": \"Test123!@#\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"123 Test Street\",\n  \"city\": \"Test City\",\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/create-account",
@@ -77,7 +81,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"confirm_password\": \"password123\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\"\n}"
+									"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\",\n  \"confirm_password\": \"Test123!@#\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\"\n}"
 								},
 								"url": {
 									"raw": "{{base_url}}/api/create-account",
@@ -95,7 +99,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Account created successfully\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJpYXQiOjE3NjQ3NDIwNDIsImV4cCI6MTc2NDgyODQ0Mn0.example\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"user@example.com\",\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Main St\",\n            \"city\": \"New York\",\n            \"is_active\": true,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    }\n}"
+									"body": "{\n    \"success\": true,\n    \"message\": \"Account created successfully\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY0MjI4NDgwLCJleHAiOjE3NjQzMTQ4ODB9.9MtXwAC4QX9wg4eOfn22xzhSWyQihu0q92BDPDsyHAs\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"testuser@example.com\",\n            \"first_name\": \"Test\",\n            \"last_name\": \"User\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Test Street\",\n            \"city\": \"Test City\",\n            \"is_active\": true,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    }\n}"
 						},
 						{
 							"name": "Validation Error",
@@ -162,7 +166,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"test.user@example.com\",\n  \"password\": \"TestPassword123!\"\n}",
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -188,7 +192,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"email\": \"test.user@example.com\",\n  \"password\": \"TestPassword123!\"\n}"
+									"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\"\n}"
 								},
 								"url": {
 									"raw": "{{base_url}}/api/login",
@@ -206,7 +210,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"message\": \"Login successful\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3QudXNlckBleGFtcGxlLmNvbSIsImlhdCI6MTc2NDc0MjA0MiwiZXhwIjoxNzY0ODI4NDQyfQ.example\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"test.user@example.com\",\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Main St\",\n            \"city\": \"New York\",\n            \"is_active\": true\n        }\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"message\": \"Login successful\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY0MjI4NDgwLCJleHAiOjE3NjQzMTQ4ODB9.9MtXwAC4QX9wg4eOfn22xzhSWyQihu0q92BDPDsyHAs\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"testuser@example.com\",\n            \"first_name\": \"Test\",\n            \"last_name\": \"User\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Test Street\",\n            \"city\": \"Test City\",\n            \"is_active\": true\n        }\n    }\n}"
 						},
 						{
 							"name": "Invalid Credentials",

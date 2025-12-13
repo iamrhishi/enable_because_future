@@ -106,13 +106,25 @@ class WardrobeItem:
                 logger.info(f"WardrobeItem.save: EXIT - Item updated")
             else:
                 # Insert
+                # Generate a default garment_id (legacy field, required by schema)
+                import uuid
+                garment_id = f"item_{uuid.uuid4().hex[:8]}"
+                
+                # Map category to garment_type (legacy field, required by schema)
+                # garment_type must be 'upper' or 'lower'
+                garment_type = self.category if self.category in ['upper', 'lower'] else 'upper'
+                
+                # Provide empty blob for garment_image (legacy field, required by schema)
+                # We use image_path instead, but schema still requires garment_image
+                garment_image = b''  # Empty bytes for legacy BLOB field
+                
                 item_id = db_manager.get_lastrowid(
-                    """INSERT INTO wardrobe (user_id, image_path, category, 
+                    """INSERT INTO wardrobe (user_id, garment_id, garment_image, garment_type, image_path, category, 
                        category_id, custom_category_name,
                        garment_category_type, brand, color, is_external, title,
                        fabric, care_instructions, size, description)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (self.user_id, self.image_path, self.category,
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (self.user_id, garment_id, garment_image, garment_type, self.image_path, self.category,
                      self.category_id, self.custom_category_name,
                      self.garment_category_type, self.brand, self.color,
                      self.is_external, self.title, self.fabric, 

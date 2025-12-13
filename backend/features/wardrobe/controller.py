@@ -398,15 +398,24 @@ def add_garment():
         garment_url = None
         product_info = None
         
+        # Get data from form or JSON (handle both multipart/form-data and application/json)
+        # Check content type first to avoid Flask raising 415 error
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        form_data = request.form
+        
         # Method 1: Direct image upload
         if 'garment_image' in request.files:
             garment_image = request.files['garment_image'].read()
             garment_image = preprocess_image(garment_image, resize=True, normalize=True)
         
         # Method 2: Extract from URL
-        elif 'garment_url' in request.form or (request.is_json and request.get_json().get('garment_url')):
+        elif 'garment_url' in form_data or data.get('garment_url'):
             garment_url = validate_url(
-                request.form.get('garment_url') or request.get_json().get('garment_url')
+                form_data.get('garment_url') or data.get('garment_url')
             )
             
             # Use brand-specific extractor
@@ -427,10 +436,29 @@ def add_garment():
         if not garment_image:
             return error_response_from_string('garment_image or garment_url required', 400, 'VALIDATION_ERROR')
         
-        # Get category information
-        category = request.form.get('category') or (request.get_json() or {}).get('category', 'upper')
-        custom_category_name = request.form.get('custom_category_name') or (request.get_json() or {}).get('custom_category_name')
-        category_id = request.form.get('category_id') or (request.get_json() or {}).get('category_id')
+        # Get category information - support both category_section (new) and category (legacy)
+        category_section = form_data.get('category_section') or data.get('category_section')
+        category = form_data.get('category') or data.get('category')
+        custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
+        category_id = form_data.get('category_id') or data.get('category_id')
+        
+        # Map category_section to legacy category if needed
+        if category_section and not category:
+            # Map new category_section to legacy category
+            section_to_category = {
+                'upper_body': 'upper',
+                'lower_body': 'lower',
+                'accessoires': None,  # These don't map to legacy categories
+                'wishlist': None
+            }
+            category = section_to_category.get(category_section)
+            # If category_section is not recognized, default to 'upper'
+            if category is None and category_section not in ['accessoires', 'wishlist']:
+                category = 'upper'
+        
+        # Default to 'upper' if no category specified and not using custom category
+        if not category and not custom_category_name and not category_section:
+            category = 'upper'
         
         # Validate category
         if custom_category_name:
@@ -439,17 +467,17 @@ def add_garment():
                 cat = WardrobeCategory.get_by_id(int(category_id), user_id)
                 if not cat:
                     return error_response_from_string('Category not found', 404, 'NOT_FOUND')
-        elif category not in ['upper', 'lower']:
+        elif category is not None and category not in ['upper', 'lower']:
             return error_response_from_string('Category must be "upper" or "lower" if not using custom category', 400, 'VALIDATION_ERROR')
         
         # Auto-categorize if not provided
-        title = product_info.get('title') if product_info else request.form.get('title') or (request.get_json() or {}).get('title')
+        title = product_info.get('title') if product_info else form_data.get('title') or data.get('title')
         if not category or category == 'upper':  # Default categorization
             categorization = categorize_garment(title=title)
             category = categorization['category']
             garment_type = categorization['type']
         else:
-            garment_type = request.form.get('garment_type') or (request.get_json() or {}).get('garment_type')
+            garment_type = form_data.get('garment_type') or data.get('garment_type')
         
         # Save image to local storage
         import uuid
@@ -462,10 +490,6 @@ def add_garment():
             storage_path,
             content_type='image/png'
         )
-        
-        # Get new fields from request
-        data = request.get_json() if request.is_json else {}
-        form_data = request.form
         
         # Parse fabric (JSON array or string)
         fabric = None
@@ -623,7 +647,13 @@ def update_wardrobe_item(item_id: int):
     logger.info(f"update_wardrobe_item: ENTRY - item_id={item_id}, user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
