@@ -159,6 +159,28 @@ class User:
     
     def to_dict(self, include_avatar: bool = False, include_password: bool = False) -> dict:
         """Convert user to dictionary"""
+        # Filter out bytes objects and non-serializable values from _data
+        import json
+        filtered_data = {}
+        if self._data:
+            for k, v in self._data.items():
+                # Skip bytes objects (like avatar BLOB)
+                if isinstance(v, bytes):
+                    continue
+                # Skip password field unless explicitly requested
+                if k == 'password' and not include_password:
+                    continue
+                # Test if value is JSON-serializable
+                try:
+                    json.dumps(v)
+                    filtered_data[k] = v
+                except (TypeError, ValueError):
+                    # Convert datetime objects to strings
+                    if hasattr(v, 'isoformat'):
+                        filtered_data[k] = v.isoformat()
+                    else:
+                        continue
+        
         data = {
             'id': self.id,
             'userid': self.userid,
@@ -172,7 +194,7 @@ class User:
             'is_active': self.is_active,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
-            **self._data
+            **filtered_data
         }
         
         if include_password and self.password:

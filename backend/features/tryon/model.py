@@ -77,6 +77,25 @@ class TryOnJob:
     
     def to_dict(self) -> dict:
         """Convert try-on job to dictionary"""
+        # Filter out bytes objects and non-serializable values from _data
+        import json
+        filtered_data = {}
+        if self._data:
+            for k, v in self._data.items():
+                # Skip bytes objects
+                if isinstance(v, bytes):
+                    continue
+                # Test if value is JSON-serializable
+                try:
+                    json.dumps(v)
+                    filtered_data[k] = v
+                except (TypeError, ValueError):
+                    # Convert datetime objects to strings
+                    if hasattr(v, 'isoformat'):
+                        filtered_data[k] = v.isoformat()
+                    else:
+                        continue
+        
         return {
             'job_id': self.job_id,
             'user_id': self.user_id,
@@ -86,6 +105,6 @@ class TryOnJob:
             'error_message': self.error_message,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
-            **self._data
+            **filtered_data
         }
 

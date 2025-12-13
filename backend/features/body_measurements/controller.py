@@ -28,7 +28,13 @@ def create_or_update_measurements():
     logger.info(f"create_or_update_measurements: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -152,7 +158,13 @@ def update_measurements():
     logger.info(f"update_measurements: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         

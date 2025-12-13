@@ -98,7 +98,13 @@ def create_category():
     logger.info(f"create_category: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -241,7 +247,13 @@ def create_category_section():
     logger.info(f"create_category_section: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -318,7 +330,13 @@ def update_category(category_id: int):
     logger.info(f"update_category: ENTRY - category_id={category_id}, user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         

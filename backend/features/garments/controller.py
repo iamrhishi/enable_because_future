@@ -117,7 +117,12 @@ def scrape_product():
     user_id = getattr(request, 'user_id', None)
     logger.info(f"scrape_product: ENTRY - user_id={user_id if user_id else 'anonymous'}")
     try:
-        data = request.get_json() or request.form
+        # Handle both JSON and form-data safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = request.form
         url = validate_url(data.get('url', '').strip())
         
         # Check for force_refresh parameter
@@ -146,7 +151,20 @@ def scrape_product():
             )
             
             if cached:
-                cached_dict = dict(cached)
+                # Safely convert cached row to dict, filtering out non-serializable values
+                cached_dict = {}
+                for k, v in dict(cached).items():
+                    if isinstance(v, bytes):
+                        continue
+                    try:
+                        json.dumps(v)
+                        cached_dict[k] = v
+                    except (TypeError, ValueError):
+                        if hasattr(v, 'isoformat'):
+                            cached_dict[k] = v.isoformat()
+                        else:
+                            continue
+                
                 # Parse JSON fields
                 if cached_dict.get('images'):
                     try:
@@ -211,7 +229,12 @@ def refresh_product():
     user_id = getattr(request, 'user_id', None)
     logger.info(f"refresh_product: ENTRY - user_id={user_id if user_id else 'anonymous'}")
     try:
-        data = request.get_json() or request.form
+        # Handle both JSON and form-data safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = request.form
         url = validate_url(data.get('url', '').strip())
         
         # Always delete existing cache and re-scrape
@@ -244,7 +267,12 @@ def categorize():
     """Categorize a garment from image or metadata"""
     logger.info("categorize: ENTRY")
     try:
-        data = request.get_json() or request.form
+        # Handle both JSON and form-data safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = request.form
         
         image_url = data.get('image_url')
         image_data = None
@@ -278,7 +306,12 @@ def extract_images():
     user_id = getattr(request, 'user_id', None)
     logger.info(f"extract_images: ENTRY - user_id={user_id if user_id else 'anonymous'}")
     try:
-        data = request.get_json() or request.form
+        # Handle both JSON and form-data safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = request.form
         url = validate_url(data.get('url', '').strip())
         
         # Use brand-specific extractor (same as /scrape endpoint)

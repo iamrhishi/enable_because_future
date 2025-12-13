@@ -175,6 +175,25 @@ class BodyMeasurements:
     
     def to_dict(self) -> dict:
         """Convert body measurements to dictionary"""
+        # Filter out bytes objects and non-serializable values from _data
+        import json
+        filtered_data = {}
+        if self._data:
+            for k, v in self._data.items():
+                # Skip bytes objects
+                if isinstance(v, bytes):
+                    continue
+                # Test if value is JSON-serializable
+                try:
+                    json.dumps(v)
+                    filtered_data[k] = v
+                except (TypeError, ValueError):
+                    # Convert datetime objects to strings
+                    if hasattr(v, 'isoformat'):
+                        filtered_data[k] = v.isoformat()
+                    else:
+                        continue
+        
         return {
             'id': self.id,
             'user_id': self.user_id,
@@ -208,6 +227,6 @@ class BodyMeasurements:
             'shoulder_width': self.shoulder_width,
             # Unit
             'unit': self.unit,
-            **self._data
+            **filtered_data
         }
 

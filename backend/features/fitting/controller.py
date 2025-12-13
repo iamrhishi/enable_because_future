@@ -150,7 +150,13 @@ def check_fit():
     logger.info(f"check_fit: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -322,7 +328,13 @@ def analyze_fit():
     logger.info(f"analyze_fit: ENTRY - user_id={user_id} (from JWT)")
     
     try:
-        data = request.get_json()
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' in content_type:
+            data = request.get_json(silent=True, force=False) or {}
+        else:
+            data = {}
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -398,7 +410,20 @@ def analyze_fit():
             )
             
             if metadata:
-                metadata_dict = dict(metadata)
+                # Safely convert metadata row to dict, filtering out non-serializable values
+                metadata_dict = {}
+                for k, v in dict(metadata).items():
+                    if isinstance(v, bytes):
+                        continue
+                    try:
+                        json.dumps(v)
+                        metadata_dict[k] = v
+                    except (TypeError, ValueError):
+                        if hasattr(v, 'isoformat'):
+                            metadata_dict[k] = v.isoformat()
+                        else:
+                            continue
+                
                 garment_details = {
                     'brand': metadata_dict.get('brand'),
                     'title': metadata_dict.get('title'),

@@ -132,7 +132,8 @@ def create_tryon_job():
                 if wardrobe_item.fabric:
                     try:
                         import json
-                        fabric_data = json.loads(wardrobe_item.fabric) if isinstance(wardrobe_item.fabric, str) else wardrobe_item.fabric
+                        import json as json_module  # Ensure json is available
+                        fabric_data = json_module.loads(wardrobe_item.fabric) if isinstance(wardrobe_item.fabric, str) else wardrobe_item.fabric
                         if fabric_data and isinstance(fabric_data, list) and len(fabric_data) > 0:
                             garment_details['material_type'] = ', '.join([f.get('name', '') for f in fabric_data if f.get('name')])
                     except:
@@ -164,7 +165,8 @@ def create_tryon_job():
         if not garment_image and 'item_urls' in request.form:
             item_urls_str = request.form.get('item_urls')
             try:
-                item_urls = json.loads(item_urls_str) if isinstance(item_urls_str, str) else item_urls_str
+                import json as json_module  # Ensure json is available in this scope
+                item_urls = json_module.loads(item_urls_str) if isinstance(item_urls_str, str) else item_urls_str
                 if not isinstance(item_urls, list):
                     return error_response_from_string('item_urls must be a JSON array', 400, 'VALIDATION_ERROR')
                 
@@ -175,7 +177,8 @@ def create_tryon_job():
                 options = {}
                 if 'options' in request.form:
                     try:
-                        options = json.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
+                        import json as json_module  # Ensure json is available in this scope
+                        options = json_module.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
                     except:
                         options = {}
                 
@@ -207,21 +210,35 @@ def create_tryon_job():
                             )
                             
                             if cached:
-                                cached_dict = dict(cached)
+                                # Safely convert cached row to dict, filtering out non-serializable values
+                                import json as json_module  # Ensure json is available in this scope
+                                cached_dict = {}
+                                for k, v in dict(cached).items():
+                                    if isinstance(v, bytes):
+                                        continue
+                                    try:
+                                        json_module.dumps(v)
+                                        cached_dict[k] = v
+                                    except (TypeError, ValueError):
+                                        if hasattr(v, 'isoformat'):
+                                            cached_dict[k] = v.isoformat()
+                                        else:
+                                            continue
+                                
                                 # Parse JSON fields
                                 if cached_dict.get('images'):
                                     try:
-                                        cached_dict['images'] = json.loads(cached_dict['images'])
+                                        cached_dict['images'] = json_module.loads(cached_dict['images'])
                                     except:
                                         cached_dict['images'] = []
                                 if cached_dict.get('sizes'):
                                     try:
-                                        cached_dict['sizes'] = json.loads(cached_dict['sizes'])
+                                        cached_dict['sizes'] = json_module.loads(cached_dict['sizes'])
                                     except:
                                         cached_dict['sizes'] = []
                                 if cached_dict.get('colors'):
                                     try:
-                                        cached_dict['colors'] = json.loads(cached_dict['colors'])
+                                        cached_dict['colors'] = json_module.loads(cached_dict['colors'])
                                     except:
                                         cached_dict['colors'] = []
                                 
@@ -342,7 +359,8 @@ def create_tryon_job():
             garment_type = request.form.get('garment_type')
         elif 'options' in request.form:
             try:
-                options = json.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
+                import json as json_module  # Ensure json is available
+                options = json_module.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
                 if isinstance(options, dict) and 'garment_type' in options:
                     garment_type = options['garment_type']
             except:
@@ -355,7 +373,8 @@ def create_tryon_job():
         options = {}
         if 'options' in request.form:
             try:
-                options = json.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
+                import json as json_module  # Ensure json is available
+                options = json_module.loads(request.form.get('options')) if isinstance(request.form.get('options'), str) else request.form.get('options')
                 if not isinstance(options, dict):
                     options = {}
             except:
@@ -369,7 +388,8 @@ def create_tryon_job():
             garment_details = options.get('garment_details')
             if isinstance(garment_details, str):
                 try:
-                    garment_details = json.loads(garment_details)
+                    import json as json_module  # Ensure json is available
+                    garment_details = json_module.loads(garment_details)
                 except:
                     garment_details = None
         
