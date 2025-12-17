@@ -239,8 +239,7 @@ def save_avatar():
 @require_auth
 def save_avatar_local():
     """
-    Save avatar with PIL-based local background removal (no Gemini API)
-    This endpoint uses edge-detection and flood-fill algorithm for background removal
+    Save avatar with rembg-based local background removal (no Gemini API)
     """
     try:
         # Check if file is provided
@@ -271,51 +270,12 @@ def save_avatar_local():
         
         user_id = request.user_id
         
-        # Remove background using PIL-based local algorithm
+        # Remove background using rembg-based local algorithm
         try:
             from features.tryon.service import _remove_background_local
-            from PIL import Image
-            from io import BytesIO
-            
-            logger.info(f"Removing background from avatar using PIL (local) for user: {user_id}")
+
+            logger.info(f"Removing background from avatar using rembg (local) for user: {user_id}")
             avatar_data = _remove_background_local(avatar_data)
-            
-            # Verify that background removal resulted in transparent image
-            try:
-                img = Image.open(BytesIO(avatar_data))
-                original_mode = img.mode
-                
-                # Check if image has transparency (alpha channel)
-                has_transparency = img.mode in ('RGBA', 'LA', 'P')
-                
-                if not has_transparency:
-                    logger.error(f"Avatar from PIL is {original_mode} mode (no transparency). Background removal failed.")
-                    return error_response_from_string(
-                        'Background removal failed to create transparent image. Please try uploading again with a clearer photo.',
-                        500,
-                        'EXTERNAL_SERVICE_ERROR'
-                    )
-                
-                # Convert to RGBA to ensure proper transparency support
-                if img.mode == 'P':
-                    img = img.convert('RGBA')
-                elif img.mode == 'LA':
-                    img = img.convert('RGBA')
-                
-                # Save as PNG with transparency preserved
-                output = BytesIO()
-                img.save(output, format='PNG')
-                avatar_data = output.getvalue()
-                
-                logger.info(f"Avatar processed with transparency preserved, user: {user_id}, mode: RGBA")
-            except Exception as img_check_error:
-                logger.exception(f"Error processing avatar transparency: {str(img_check_error)}")
-                return error_response_from_string(
-                    'Failed to process avatar image. Please try uploading again.',
-                    500,
-                    'EXTERNAL_SERVICE_ERROR'
-                )
-            
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
@@ -358,9 +318,9 @@ def save_avatar_local():
         
         return success_response(
             data={
-                'message': 'Avatar saved successfully (PIL-based background removal)',
+                'message': 'Avatar saved successfully (rembg-based background removal)',
                 'background_removed': True,
-                'method': 'PIL',
+                'method': 'rembg',
                 'avatar_url': absolute_avatar_url
             },
             message='Avatar saved successfully'

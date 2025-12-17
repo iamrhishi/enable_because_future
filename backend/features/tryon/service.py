@@ -357,7 +357,7 @@ Return ONLY a PNG image with RGBA format where:
 
 def _remove_background_local(image_data: bytes) -> bytes:
     """
-    Local background removal using PIL (fallback when Gemini API fails)
+    Local background removal using rembg (fallback when Gemini API fails)
     
     Args:
         image_data: Image bytes
@@ -365,140 +365,14 @@ def _remove_background_local(image_data: bytes) -> bytes:
     Returns:
         Image bytes with background removed (transparent PNG in RGBA format)
     """
-    logger.info("_remove_background_local: ENTRY - Using local background removal")
-    
+    logger.info("_remove_background_local: ENTRY - Using rembg for local background removal")
+
     try:
-        from PIL import Image
-        from io import BytesIO
-        
-        img = Image.open(BytesIO(image_data))
-        original_mode = img.mode
-        logger.info(f"_remove_background_local: Image opened, mode={original_mode}, size={img.size}")
-        
-        # Convert to RGBA if not already
-        if img.mode not in ('RGBA', 'LA', 'P'):
-            img = img.convert('RGBA')
-        elif img.mode == 'P':
-            img = img.convert('RGBA')
-        elif img.mode == 'LA':
-            img = img.convert('RGBA')
-        
-        # Process the image to remove background
-        # Strategy: Use edge-based flood fill approach - start from edges and remove similar colors
-        pixels = img.load()
-        width, height = img.size
-        
-        # Sample edge pixels more comprehensively to determine background color range
-        edge_samples = []
-        # Sample all 4 edges more densely
-        sample_step = max(1, min(width, height) // 20)  # Sample every 5% of the smaller dimension
-        
-        # Top and bottom edges
-        for x in range(0, width, sample_step):
-            edge_samples.append(pixels[x, 0][:3])  # Top
-            edge_samples.append(pixels[x, height - 1][:3])  # Bottom
-        # Left and right edges
-        for y in range(0, height, sample_step):
-            edge_samples.append(pixels[0, y][:3])  # Left
-            edge_samples.append(pixels[width - 1, y][:3])  # Right
-        
-        # Calculate background color statistics (mean and std dev for better threshold)
-        if edge_samples:
-            avg_r = sum(s[0] for s in edge_samples) // len(edge_samples)
-            avg_g = sum(s[1] for s in edge_samples) // len(edge_samples)
-            avg_b = sum(s[2] for s in edge_samples) // len(edge_samples)
-            bg_color = (avg_r, avg_g, avg_b)
-            
-            # Calculate standard deviation to determine threshold dynamically
-            import math
-            variances = [
-                sum((s[0] - avg_r) ** 2 for s in edge_samples),
-                sum((s[1] - avg_g) ** 2 for s in edge_samples),
-                sum((s[2] - avg_b) ** 2 for s in edge_samples)
-            ]
-            std_dev = math.sqrt(sum(variances) / (len(edge_samples) * 3))
-            # Use 3.0 * std_dev as threshold for more aggressive removal, but cap between 30 and 80
-            threshold_distance = max(30, min(80, int(3.0 * std_dev + 20)))
-            
-            logger.info(f"_remove_background_local: Detected background color: RGB({avg_r}, {avg_g}, {avg_b}), threshold: {threshold_distance}, std_dev: {std_dev:.2f}")
-        else:
-            bg_color = (240, 240, 240)
-            threshold_distance = 50  # Increased default threshold
-            logger.warning(f"_remove_background_local: Could not detect background color, using fallback: {bg_color}, threshold: {threshold_distance}")
-        
-        # Create a mask for pixels to remove (start from edges)
-        # Use a more sophisticated approach: flood fill from edges
-        transparent_count = 0
-        
-        # First pass: mark edge pixels as background
-        edge_mask = set()
-        for x in range(width):
-            edge_mask.add((x, 0))
-            edge_mask.add((x, height - 1))
-        for y in range(height):
-            edge_mask.add((0, y))
-            edge_mask.add((width - 1, y))
-        
-        # Flood fill from edges - mark pixels similar to background
-        to_process = list(edge_mask)
-        processed = set()
-        background_pixels = set()
-        
-        while to_process:
-            x, y = to_process.pop(0)
-            if (x, y) in processed:
-                continue
-            processed.add((x, y))
-            
-            r, g, b, a = pixels[x, y]
-            
-            # Calculate color distance from background
-            color_distance = (
-                abs(r - bg_color[0]) +
-                abs(g - bg_color[1]) +
-                abs(b - bg_color[2])
-            ) / 3.0
-            
-            # If pixel is similar to background, mark it and check neighbors
-            if color_distance <= threshold_distance:
-                background_pixels.add((x, y))
-                
-                # Check 4-connected neighbors
-                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in processed:
-                        to_process.append((nx, ny))
-        
-        # Second pass: make background pixels transparent
-        for x, y in background_pixels:
-            r, g, b, a = pixels[x, y]
-            color_distance = (
-                abs(r - bg_color[0]) +
-                abs(g - bg_color[1]) +
-                abs(b - bg_color[2])
-            ) / 3.0
-            
-            # Gradually reduce alpha based on similarity - more aggressive removal
-            similarity = 1.0 - (color_distance / threshold_distance)
-            # Make pixels fully transparent if very similar, gradually fade for less similar
-            if similarity > 0.8:  # Very similar to background
-                new_alpha = 0  # Fully transparent
-            else:
-                new_alpha = int(a * (1.0 - similarity * 0.95))  # Gradually fade
-            pixels[x, y] = (r, g, b, new_alpha)
-            if new_alpha < 10:
-                transparent_count += 1
-        
-        logger.info(f"_remove_background_local: Applied background removal. Made {transparent_count} pixels transparent out of {len(background_pixels)} background pixels.")
-        
-        # Save as PNG with transparency preserved
-        output = BytesIO()
-        img.save(output, format='PNG')
-        image_bytes = output.getvalue()
-        
-        logger.info(f"_remove_background_local: EXIT - Success, result size={len(image_bytes)} bytes, mode=RGBA")
-        return image_bytes
-        
+        from rembg import remove
+
+        result = remove(image_data)
+        logger.info(f"_remove_background_local: EXIT - Success, result size={len(result)} bytes")
+        return result
     except Exception as e:
         logger.exception(f"_remove_background_local: EXIT - Error: {str(e)}")
         raise ExternalServiceError(f"Local background removal failed: {str(e)}", service='local')

@@ -244,7 +244,7 @@ class WardrobeCategory:
                     (name, user_id),
                     fetch_one=True
                 )
-            if result:
+                if result:
                 return safe_dict_from_row(result)
             
             # Check platform section
