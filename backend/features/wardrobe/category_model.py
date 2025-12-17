@@ -435,8 +435,6 @@ class WardrobeCategory:
                 'caps',
                 'accessoires',
                 'wishlist',
-                'others',
-                'other',
             }
             if category_section:
                 results = db_manager.execute_query(
@@ -450,6 +448,46 @@ class WardrobeCategory:
                     fetch_all=True
                 )
             categories = [safe_dict_from_row(row) for row in results] if results else []
+            # If no platform categories exist in DB, synthesize defaults from allowed/icon map
+            if not categories:
+                defaults = [
+                    # Upper body
+                    ('upper_body', 'blazers', 'Blazers', 1),
+                    ('upper_body', 'jackets', 'Jackets', 2),
+                    ('upper_body', 'pullover_cardigans', 'Pullover & Cardigans', 3),
+                    ('upper_body', 'shirts', 'Shirts', 4),
+                    ('upper_body', 'tops', 'Tops', 5),
+                    ('upper_body', 't_shirts', 'T-shirts', 6),
+                    # Lower body
+                    ('lower_body', 'jeans', 'Jeans', 1),
+                    ('lower_body', 'trousers', 'Trousers', 2),
+                    ('lower_body', 'shorts', 'Shorts', 3),
+                    ('lower_body', 'skirts', 'Skirts', 4),
+                    ('lower_body', 'legging & joggers', 'Legging & Joggers', 5),
+                    # Accessories / footwear
+                    ('accessoires', 'sneakers', 'Sneakers', 1),
+                    ('accessoires', 'sandals', 'Sandals', 2),
+                    ('accessoires', 'bags', 'Bags', 3),
+                    ('accessoires', 'caps', 'Caps', 4),
+                    # Misc
+                    ('wishlist', 'wishlist', 'Wishlist', 99),
+                ]
+                categories = [
+                    {
+                        'category_section': sec,
+                        'name': name,
+                        'display_name': disp,
+                        'description': None,
+                        'sort_order': sort,
+                        'user_id': None,
+                        'id': None,
+                        'created_at': None,
+                        'updated_at': None,
+                    }
+                    for sec, name, disp, sort in defaults
+                    if (category_section is None or sec == category_section)
+                ]
+
             # Add/override icon for platform categories
             filtered = []
             for cat in categories:
