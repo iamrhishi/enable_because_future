@@ -183,20 +183,74 @@ class WardrobeCategory:
                 fetch_all=True
             )
             sections = [safe_dict_from_row(row) for row in results] if results else []
-            # Add default icons for platform sections if not set
+            # If none exist in DB, use fallback defaults
+            if not sections:
+                sections = [
+                    {
+                        'name': 'upper_body',
+                        'display_name': 'Upper body',
+                        'description': 'Clothing items for upper body',
+                        'sort_order': 1
+                    },
+                    {
+                        'name': 'lower_body',
+                        'display_name': 'Lower body',
+                        'description': 'Clothing items for lower body',
+                        'sort_order': 2
+                    },
+                    {
+                        'name': 'accessoires',
+                        'display_name': 'Accessoires',
+                        'description': 'Accessories and other items',
+                        'sort_order': 3
+                    },
+                    {
+                        'name': 'wishlist',
+                        'display_name': 'Wishlist',
+                        'description': 'Items saved for later',
+                        'sort_order': 4
+                    }
+                ]
+
+            # Add/override icons for platform sections
             for section in sections:
-                if not section.get('icon_name'):
-                    section['icon_name'] = cls._get_default_icon(section.get('name'))
+                computed_icon = cls._get_icon_name_for_section(section.get('name'))
+                section['icon_name'] = computed_icon
+                section['icon_url'] = cls._get_default_icon_url(computed_icon)
             logger.info(f"WardrobeCategory.get_platform_sections: EXIT - Found {len(sections)} sections")
             return sections
         except Exception as e:
             logger.exception(f"WardrobeCategory.get_platform_sections: EXIT - Error: {str(e)}")
             # Return default sections if table doesn't exist yet
             return [
-                {'name': 'upper_body', 'display_name': 'Upper body', 'description': 'Clothing items for upper body', 'icon_name': 'upper_body'},
-                {'name': 'lower_body', 'display_name': 'Lower body', 'description': 'Clothing items for lower body', 'icon_name': 'lower_body'},
-                {'name': 'accessoires', 'display_name': 'Accessoires', 'description': 'Accessories and other items', 'icon_name': 'accessoires'},
-                {'name': 'wishlist', 'display_name': 'Wishlist', 'description': 'Items saved for later', 'icon_name': 'wishlist'}
+                {
+                    'name': 'upper_body',
+                    'display_name': 'Upper body',
+                    'description': 'Clothing items for upper body',
+                    'icon_name': cls._get_icon_name_for_section('upper_body'),
+                    'icon_url': cls._get_default_icon_url(cls._get_icon_name_for_section('upper_body'))
+                },
+                {
+                    'name': 'lower_body',
+                    'display_name': 'Lower body',
+                    'description': 'Clothing items for lower body',
+                    'icon_name': cls._get_icon_name_for_section('lower_body'),
+                    'icon_url': cls._get_default_icon_url(cls._get_icon_name_for_section('lower_body'))
+                },
+                {
+                    'name': 'accessoires',
+                    'display_name': 'Accessoires',
+                    'description': 'Accessories and other items',
+                    'icon_name': cls._get_icon_name_for_section('accessoires'),
+                    'icon_url': cls._get_default_icon_url(cls._get_icon_name_for_section('accessoires'))
+                },
+                {
+                    'name': 'wishlist',
+                    'display_name': 'Wishlist',
+                    'description': 'Items saved for later',
+                    'icon_name': cls._get_icon_name_for_section('wishlist'),
+                    'icon_url': cls._get_default_icon_url(cls._get_icon_name_for_section('wishlist'))
+                }
             ]
     
     @classmethod
@@ -226,6 +280,9 @@ class WardrobeCategory:
             all_sections = platform_sections + user_sections
             # Sort by sort_order
             all_sections.sort(key=lambda x: x.get('sort_order', 999))
+            # If still empty, fallback to platform defaults
+            if not all_sections:
+                all_sections = cls.get_platform_sections()
             logger.info(f"WardrobeCategory.get_all_sections: EXIT - Found {len(all_sections)} total sections")
             return all_sections
         except Exception as e:
@@ -255,8 +312,9 @@ class WardrobeCategory:
             )
             if result:
                 section = safe_dict_from_row(result)
-                if not section.get('icon_name'):
-                    section['icon_name'] = cls._get_default_icon(section.get('name'))
+                computed_icon = cls._get_icon_name_for_section(section.get('name'))
+                section['icon_name'] = computed_icon
+                section['icon_url'] = cls._get_default_icon_url(computed_icon)
                 return section
             
             logger.info(f"WardrobeCategory.get_section_by_name: EXIT - Section not found")
@@ -306,15 +364,66 @@ class WardrobeCategory:
             raise
     
     @staticmethod
-    def _get_default_icon(section_name: str) -> str:
-        """Get default icon name for platform sections"""
+    def _get_icon_name_for_section(section_name: str) -> str:
+        """Get default icon name for a section (unisex)"""
         icon_map = {
-            'upper_body': 'upper_body',
-            'lower_body': 'lower_body',
-            'accessoires': 'accessoires',
-            'wishlist': 'wishlist'
+            'upper_body': 'Tshirt.jpeg',
+            'lower_body': 'Jeans.jpeg',
+            'accessoires': 'Bags.jpeg',
+            'wishlist': 'Other.jpeg'
         }
-        return icon_map.get(section_name, 'default')
+        return icon_map.get(section_name, 'Other.jpeg')
+
+    @staticmethod
+    def _get_icon_name_for_category(category_name: str) -> str:
+        """Get default icon name for a platform category (unisex)"""
+        name = (category_name or '').strip().lower()
+        category_map = {
+            'blazer': 'Blazer.jpeg',
+            'blazers': 'Blazer.jpeg',
+            'jackets': 'Jackets.jpeg',
+            'jacket': 'Jackets.jpeg',
+            'pullover': 'Pullover & Cardigans.jpeg',
+            'pullover & cardigans': 'Pullover & Cardigans.jpeg',
+            'pullovers': 'Pullover & Cardigans.jpeg',
+            'cardigans': 'Pullover & Cardigans.jpeg',
+            'shirts': 'Shirts.jpeg',
+            'shirt': 'Shirts.jpeg',
+            'tops': 'Tops.jpeg',
+            'top': 'Tops.jpeg',
+            'tshirts': 'Tshirt.jpeg',
+            'tshirt': 'Tshirt.jpeg',
+            't-shirt': 'Tshirt.jpeg',
+            't-shirts': 'Tshirt.jpeg',
+            'jeans': 'Jeans.jpeg',
+            'trousers': 'Trousers.jpeg',
+            'pants': 'Trousers.jpeg',
+            'shorts': 'Shorts.jpeg',
+            'skirts': 'Skirts.jpeg',
+            'skirt': 'Skirts.jpeg',
+            'legging & joggers': 'Legging & Joggers.jpeg',
+            'leggings': 'Legging & Joggers.jpeg',
+            'joggers': 'Legging & Joggers.jpeg',
+            'sneakers': 'Sneakers.jpeg',
+            'sandals': 'Sandals.jpeg',
+            'bags': 'Bags.jpeg',
+            'caps': 'Caps & Hats.jpeg',
+            'caps & hats': 'Caps & Hats.jpeg',
+            'hats': 'Caps & Hats.jpeg',
+            'accessories': 'Bags.jpeg',
+            'accessoires': 'Bags.jpeg',
+            'other': 'Other.jpeg',
+            'wishlist': 'Other.jpeg'
+        }
+        return category_map.get(name, 'Other.jpeg')
+
+    @staticmethod
+    def _get_default_icon_url(icon_name: str) -> str:
+        """Build default icon URL for platform sections"""
+        from shared.url_utils import to_absolute_url
+        if not icon_name:
+            return None
+        return to_absolute_url(f'/icons/{icon_name}')
     
     @classmethod
     def get_platform_categories(cls, category_section: str = None) -> List[dict]:
@@ -333,6 +442,11 @@ class WardrobeCategory:
                     fetch_all=True
                 )
             categories = [safe_dict_from_row(row) for row in results] if results else []
+            # Add/override icon for platform categories
+            for cat in categories:
+                computed_icon = cls._get_icon_name_for_category(cat.get('name'))
+                cat['icon_name'] = computed_icon
+                cat['icon_url'] = cls._get_default_icon_url(computed_icon)
             logger.info(f"WardrobeCategory.get_platform_categories: EXIT - Found {len(categories)} categories")
             return categories
         except Exception as e:

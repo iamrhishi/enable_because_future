@@ -49,6 +49,25 @@ def serve_image(filename):
         logger.exception(f"serve_image: Error serving image {filename}: {str(e)}")
         return jsonify({"error": "Failed to serve image"}), 500
 
+# Serve icons from backend/icons for platform/user categories
+@app.route('/icons/<path:filename>')
+def serve_icon(filename):
+    """Serve icon assets from backend/icons"""
+    try:
+        from pathlib import Path
+        icons_dir = Path(__file__).resolve().parent / 'icons'
+        file_path = icons_dir / filename
+        # Security: Ensure file is within icons directory
+        if not str(file_path.resolve()).startswith(str(icons_dir.resolve())):
+            return jsonify({"error": "Invalid path"}), 403
+        if file_path.exists():
+            return send_from_directory(str(icons_dir), filename)
+        else:
+            return jsonify({"error": "Icon not found"}), 404
+    except Exception as e:
+        logger.exception(f"serve_icon: Error serving icon {filename}: {str(e)}")
+        return jsonify({"error": "Failed to serve icon"}), 500
+
 # Register blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(body_measurements_bp)
