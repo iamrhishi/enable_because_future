@@ -379,41 +379,27 @@ class WardrobeCategory:
         """Get default icon name for a platform category (unisex)"""
         name = (category_name or '').strip().lower()
         category_map = {
-            'blazer': 'Blazer.jpeg',
+            # Upper body
             'blazers': 'Blazer.jpeg',
             'jackets': 'Jackets.jpeg',
-            'jacket': 'Jackets.jpeg',
-            'pullover': 'Pullover & Cardigans.jpeg',
-            'pullover & cardigans': 'Pullover & Cardigans.jpeg',
-            'pullovers': 'Pullover & Cardigans.jpeg',
-            'cardigans': 'Pullover & Cardigans.jpeg',
+            'pullover_cardigans': 'Pullover & Cardigans.jpeg',
             'shirts': 'Shirts.jpeg',
-            'shirt': 'Shirts.jpeg',
             'tops': 'Tops.jpeg',
-            'top': 'Tops.jpeg',
-            'tshirts': 'Tshirt.jpeg',
-            'tshirt': 'Tshirt.jpeg',
-            't-shirt': 'Tshirt.jpeg',
-            't-shirts': 'Tshirt.jpeg',
+            't_shirts': 'Tshirt.jpeg',
+            # Lower body
             'jeans': 'Jeans.jpeg',
             'trousers': 'Trousers.jpeg',
-            'pants': 'Trousers.jpeg',
             'shorts': 'Shorts.jpeg',
             'skirts': 'Skirts.jpeg',
-            'skirt': 'Skirts.jpeg',
             'legging & joggers': 'Legging & Joggers.jpeg',
-            'leggings': 'Legging & Joggers.jpeg',
-            'joggers': 'Legging & Joggers.jpeg',
+            # Accessories / footwear
             'sneakers': 'Sneakers.jpeg',
             'sandals': 'Sandals.jpeg',
             'bags': 'Bags.jpeg',
             'caps': 'Caps & Hats.jpeg',
-            'caps & hats': 'Caps & Hats.jpeg',
-            'hats': 'Caps & Hats.jpeg',
-            'accessories': 'Bags.jpeg',
-            'accessoires': 'Bags.jpeg',
-            'other': 'Other.jpeg',
-            'wishlist': 'Other.jpeg'
+            # Misc
+            'accessoires': 'Other.jpeg',
+            'wishlist': 'Other.jpeg',
         }
         return category_map.get(name, 'Other.jpeg')
 
@@ -430,6 +416,28 @@ class WardrobeCategory:
         """Get platform-defined categories, optionally filtered by section"""
         logger.info(f"WardrobeCategory.get_platform_categories: ENTRY - section={category_section}")
         try:
+            # Allowed platform categories (only those we have icons for)
+            allowed = {
+                'blazers',
+                'jackets',
+                'pullover_cardigans',
+                'shirts',
+                'tops',
+                't_shirts',
+                'jeans',
+                'trousers',
+                'shorts',
+                'skirts',
+                'legging & joggers',
+                'sneakers',
+                'sandals',
+                'bags',
+                'caps',
+                'accessoires',
+                'wishlist',
+                'others',
+                'other',
+            }
             if category_section:
                 results = db_manager.execute_query(
                     "SELECT * FROM platform_categories WHERE category_section = ? ORDER BY sort_order ASC",
@@ -443,12 +451,17 @@ class WardrobeCategory:
                 )
             categories = [safe_dict_from_row(row) for row in results] if results else []
             # Add/override icon for platform categories
+            filtered = []
             for cat in categories:
+                cat_name = (cat.get('name') or '').lower()
+                if cat_name not in allowed:
+                    continue
                 computed_icon = cls._get_icon_name_for_category(cat.get('name'))
                 cat['icon_name'] = computed_icon
                 cat['icon_url'] = cls._get_default_icon_url(computed_icon)
+                filtered.append(cat)
             logger.info(f"WardrobeCategory.get_platform_categories: EXIT - Found {len(categories)} categories")
-            return categories
+            return filtered
         except Exception as e:
             logger.exception(f"WardrobeCategory.get_platform_categories: EXIT - Error: {str(e)}")
             return []
