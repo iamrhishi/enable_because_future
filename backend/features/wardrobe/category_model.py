@@ -245,7 +245,7 @@ class WardrobeCategory:
                     fetch_one=True
                 )
                 if result:
-                return safe_dict_from_row(result)
+                    return safe_dict_from_row(result)
             
             # Check platform section
             result = db_manager.execute_query(
