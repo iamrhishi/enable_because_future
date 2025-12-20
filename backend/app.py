@@ -183,13 +183,28 @@ def save_avatar():
                     img = img.convert('RGBA')
                 # If already RGBA, keep as is
                 
+                # Trim transparent padding to make person fill more of the frame
+                # This removes any transparent edges that might make the person appear small
+                try:
+                    # Get bounding box of non-transparent pixels
+                    bbox = img.getbbox()
+                    if bbox:
+                        # Crop to bounding box to remove transparent padding
+                        original_size = img.size
+                        img = img.crop(bbox)
+                        logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding)")
+                    else:
+                        logger.warning(f"Avatar has no visible content (all transparent)")
+                except Exception as trim_error:
+                    logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
+                
                 # Save as PNG with transparency preserved (RGBA mode ensures alpha channel)
                 output = BytesIO()
                 # PIL automatically preserves alpha channel when saving RGBA images as PNG
                 img.save(output, format='PNG')
                 avatar_data = output.getvalue()
                 
-                logger.info(f"Avatar processed with transparency preserved, user: {user_id}, mode: RGBA")
+                logger.info(f"Avatar processed with transparency preserved, user: {user_id}, mode: RGBA, size: {img.size}")
             except Exception as img_check_error:
                 logger.exception(f"Error processing avatar transparency: {str(img_check_error)}")
                 return error_response_from_string(
@@ -292,9 +307,36 @@ def save_avatar_local():
         # Remove background using rembg-based local algorithm
         try:
             from features.tryon.service import _remove_background_local
+            from PIL import Image
+            from io import BytesIO
 
             logger.info(f"Removing background from avatar using rembg (local) for user: {user_id}")
             avatar_data = _remove_background_local(avatar_data)
+            
+            # Trim transparent padding to make person fill more of the frame
+            try:
+                img = Image.open(BytesIO(avatar_data))
+                # Ensure RGBA mode
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+                
+                # Get bounding box of non-transparent pixels
+                bbox = img.getbbox()
+                if bbox:
+                    # Crop to bounding box to remove transparent padding
+                    original_size = img.size
+                    img = img.crop(bbox)
+                    logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding)")
+                    
+                    # Save trimmed image
+                    output = BytesIO()
+                    img.save(output, format='PNG')
+                    avatar_data = output.getvalue()
+                else:
+                    logger.warning(f"Avatar has no visible content (all transparent)")
+            except Exception as trim_error:
+                logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
+                
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
