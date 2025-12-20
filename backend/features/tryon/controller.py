@@ -128,6 +128,25 @@ def create_tryon_job():
                     'color': wardrobe_item.color,
                     'garment_category_type': wardrobe_item.garment_category_type,
                 }
+                
+                # Extract category_section and category_name from wardrobe item
+                # category_section might be in _data or as attribute
+                category_section = getattr(wardrobe_item, 'category_section', None) or wardrobe_item._data.get('category_section') if hasattr(wardrobe_item, '_data') else None
+                if category_section:
+                    garment_details['category_section'] = category_section
+                elif wardrobe_item.category:
+                    # Map category to category_section
+                    if wardrobe_item.category in ['upper']:
+                        garment_details['category_section'] = 'upper_body'
+                    elif wardrobe_item.category in ['lower']:
+                        garment_details['category_section'] = 'lower_body'
+                
+                # Get category name - use custom_category_name or garment_category_type
+                if wardrobe_item.custom_category_name:
+                    garment_details['category_name'] = wardrobe_item.custom_category_name
+                elif wardrobe_item.garment_category_type:
+                    garment_details['category_name'] = wardrobe_item.garment_category_type
+                
                 # Add fabric info if available
                 if wardrobe_item.fabric:
                     try:
@@ -148,6 +167,12 @@ def create_tryon_job():
                 elif wardrobe_item.garment_category_type:
                     # Infer from garment_category_type if category not set
                     garment_type = 'upper' if wardrobe_item.garment_category_type in ['t-shirt', 'shirt', 'jacket', 'sweater', 'hoodie'] else 'lower'
+                elif garment_details.get('category_section'):
+                    # Map category_section to garment_type
+                    if garment_details['category_section'] == 'upper_body':
+                        garment_type = 'upper'
+                    elif garment_details['category_section'] == 'lower_body':
+                        garment_type = 'lower'
                 
                 logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id}, garment_type={garment_type}")
             except ValueError:
@@ -298,6 +323,11 @@ def create_tryon_job():
                                         garment_image = fetch_image_from_url(img_url)
                                         logger.info(f"create_tryon_job: Successfully fetched image: {img_url[:100]}")
                                         
+                                        # Get categorization from product title
+                                        categorization = None
+                                        if product_info.get('title'):
+                                            categorization = categorize_garment(title=product_info.get('title'))
+                                        
                                         # Build garment_details from product_info for Gemini
                                         garment_details = {
                                             'category': product_info.get('category'),
@@ -308,14 +338,29 @@ def create_tryon_job():
                                             'style': product_info.get('style'),
                                             'material_type': product_info.get('material_type')
                                         }
+                                        
+                                        # Add category_section and category_name from categorization
+                                        if categorization:
+                                            cat_type = categorization.get('category')  # 'upper' or 'lower'
+                                            cat_name = categorization.get('type')  # 'jacket', 'shirt', etc.
+                                            
+                                            # Map category to category_section
+                                            if cat_type == 'upper':
+                                                garment_details['category_section'] = 'upper_body'
+                                            elif cat_type == 'lower':
+                                                garment_details['category_section'] = 'lower_body'
+                                            
+                                            # Add category name
+                                            if cat_name:
+                                                garment_details['category_name'] = cat_name
+                                        
                                         # Remove None values
                                         garment_details = {k: v for k, v in garment_details.items() if v is not None}
                                         
                                         # Get garment_type from categorization
-                                        if product_info.get('title'):
-                                            categorization = categorize_garment(title=product_info.get('title'))
+                                        if categorization:
                                             garment_type = categorization.get('category', 'upper')
-                                            logger.info(f"create_tryon_job: Detected garment_type={garment_type} from product info")
+                                            logger.info(f"create_tryon_job: Detected garment_type={garment_type}, category_name={garment_details.get('category_name')} from product info")
                                         
                                         break  # Successfully got image and details
                                     except Exception as img_fetch_error:

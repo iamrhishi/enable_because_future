@@ -59,3 +59,6 @@ chrome-extension/*.zip
 *.tmp
 *.temp
 
+# Images
+backend/images/
+
