@@ -388,16 +388,32 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             result_image_bytes = remove(result_image_bytes)
             logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
             
-            # Verify the result has transparency
+            # Verify the result has transparency and trim padding
             try:
                 processed_img = Image.open(BytesIO(result_image_bytes))
                 logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={processed_img.size}")
                 if processed_img.mode != 'RGBA':
                     logger.warning(f"process_tryon: rembg result is {processed_img.mode}, converting to RGBA")
                     processed_img = processed_img.convert('RGBA')
-                    output = BytesIO()
-                    processed_img.save(output, format='PNG')
-                    result_image_bytes = output.getvalue()
+                
+                # Trim transparent padding to make person fill more of the frame (same as avatar processing)
+                try:
+                    # Get bounding box of non-transparent pixels
+                    bbox = processed_img.getbbox()
+                    if bbox:
+                        # Crop to bounding box to remove transparent padding
+                        original_size = processed_img.size
+                        processed_img = processed_img.crop(bbox)
+                        logger.info(f"process_tryon: Trimmed result from {original_size} to {processed_img.size} (removed transparent padding)")
+                    else:
+                        logger.warning(f"process_tryon: Result has no visible content (all transparent)")
+                except Exception as trim_error:
+                    logger.warning(f"process_tryon: Could not trim padding: {str(trim_error)}, using original size")
+                
+                # Save trimmed image
+                output = BytesIO()
+                processed_img.save(output, format='PNG')
+                result_image_bytes = output.getvalue()
             except Exception as img_verify_error:
                 logger.warning(f"process_tryon: Could not verify rembg result image: {str(img_verify_error)}")
         except Exception as rembg_error:
