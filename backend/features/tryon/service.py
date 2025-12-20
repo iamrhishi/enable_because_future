@@ -49,6 +49,11 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         garment_size_mb = len(garment_image) / (1024 * 1024)
         logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
         
+        # Capture original avatar dimensions to ensure result matches (prevents size mismatch)
+        person_img = Image.open(BytesIO(person_image))
+        original_avatar_size = person_img.size  # (width, height)
+        logger.info(f"process_tryon: Original avatar dimensions: {original_avatar_size}")
+        
         # Convert images to base64
         person_base64 = base64.b64encode(person_image).decode('utf-8')
         garment_base64 = base64.b64encode(garment_image).decode('utf-8')
@@ -101,16 +106,42 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "",
             garment_category_text,
             "",
-            "REQUIREMENTS:",
-            "1. Background: Copy image 1's background exactly - do not change any background pixels. ",
-            "2. Person: Keep image 1's person COMPLETELY unchanged - preserve the ENTIRE person including face, head, body, torso, arms, hands, legs, feet, and all body parts. DO NOT crop or cut off any part of the person. The output must show the FULL person from head to toe, exactly as in image 1. ",
-            f"3. Garment: Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}. ",
+            "ABSOLUTE REQUIREMENTS (MUST FOLLOW EXACTLY):",
+            "",
+            "1. OUTPUT DIMENSIONS (CRITICAL - MUST MATCH): ",
+            f"   - The output image MUST be EXACTLY {original_avatar_size[0]} pixels wide and {original_avatar_size[1]} pixels tall. ",
+            "   - This is the EXACT same size as image 1. DO NOT change these dimensions. ",
+            "   - DO NOT add padding, borders, or resize. Output must be {original_avatar_size[0]}x{original_avatar_size[1]}. ",
+            "",
+            "2. PERSON (MANDATORY - HIGHEST PRIORITY): ",
+            "   - Keep image 1's person COMPLETELY unchanged and FULLY visible in the output. ",
+            "   - Preserve the ENTIRE person: face, head, neck, shoulders, torso, arms, hands, waist, legs, knees, ankles, feet - EVERY body part. ",
+            "   - DO NOT crop, cut off, zoom in, or hide ANY part of the person. ",
+            "   - DO NOT focus on just the garment area - show the FULL person from head to toe. ",
+            "   - The person's complete body must be visible in the output, exactly as shown in image 1. ",
+            "   - If image 1 shows the person's feet, the output MUST show feet. If image 1 shows full legs, the output MUST show full legs. ",
+            "   - The person must appear at the SAME scale and position as in image 1. ",
+            "",
+            "3. BACKGROUND (MANDATORY): ",
+            "   - Copy image 1's background EXACTLY pixel-by-pixel. ",
+            "   - DO NOT add any padding, borders, or extra space. ",
+            "   - DO NOT change background dimensions. ",
+            "   - Background must be IDENTICAL to image 1 - same size, same pixels. ",
+            "",
+            f"4. GARMENT: ",
+            "   - Extract only the clothing fabric from image 2 (no body parts, no models, no people). ",
+            "   - Fit the garment onto the person at {body_location} ONLY. ",
             "   - Apply 3D transformation to wrap the garment around the body naturally. ",
             "   - The garment should follow body contours, pose, and perspective. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
-            "   - Only modify pixels in the garment area, not the background or any other part of the person. ",
+            "   - Only modify pixels in the garment area - do NOT touch the person, background, or any other area. ",
             "",
-            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly. The output image must have the SAME dimensions as image 1 and show the COMPLETE person from head to toe."
+            "FINAL OUTPUT CHECKLIST:",
+            f"- Image dimensions: EXACTLY {original_avatar_size[0]}x{original_avatar_size[1]} pixels (same as image 1). ",
+            "- Full person visible: head to toe, all body parts, same scale as image 1. ",
+            "- Background: identical to image 1, pixel-by-pixel. ",
+            "- Format: PNG with RGBA channels. ",
+            "- NO padding, NO borders, NO cropping, NO compression. "
         ]
         
         # Add garment details to prompt if provided
@@ -374,40 +405,74 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 service='gemini'
             )
         
-        # Log result image info for debugging
+        # Log result image info - DO NOT resize to avoid compression
         try:
             result_img = Image.open(BytesIO(result_image_bytes))
-            logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={result_img.size}")
+            gemini_result_size = result_img.size
+            logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={gemini_result_size}")
+            logger.info(f"process_tryon: Avatar dimensions: {original_avatar_size}, Gemini returned: {gemini_result_size}")
+            
+            # Note: We don't resize Gemini's result to avoid compression/distortion
+            # The prompt should ensure Gemini returns the same dimensions as the input
         except Exception as img_check_error:
             logger.warning(f"process_tryon: Could not verify result image: {str(img_check_error)}")
         
-        # Post-process with rembg to remove background and make it transparent
-        logger.info("process_tryon: Processing Gemini result with rembg to remove background")
+        # Check if Gemini already provided transparency - if so, skip rembg to avoid cropping/padding issues
         try:
-            from rembg import remove  # type: ignore
-            result_image_bytes = remove(result_image_bytes)
-            logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
+            result_img_check = Image.open(BytesIO(result_image_bytes))
+            has_transparency = result_img_check.mode in ('RGBA', 'LA', 'P')
+            logger.info(f"process_tryon: Gemini result has transparency: {has_transparency}, mode: {result_img_check.mode}")
             
-            # Verify the result has transparency (keep original size to avoid compression/distortion)
-            try:
-                processed_img = Image.open(BytesIO(result_image_bytes))
-                logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={processed_img.size}")
-                if processed_img.mode != 'RGBA':
-                    logger.warning(f"process_tryon: rembg result is {processed_img.mode}, converting to RGBA")
-                    processed_img = processed_img.convert('RGBA')
-                
-                # Note: We don't resize to avoid compressing/distorting the person's image
-                # Keep the result at its natural size to preserve the person intact
-                
-                # Save image (keep original size)
+            # If Gemini already has transparency, use it as-is to avoid rembg cropping/padding issues
+            if has_transparency:
+                logger.info("process_tryon: Gemini result already has transparency - skipping rembg to preserve full person")
+                # Just ensure it's RGBA and save
+                if result_img_check.mode != 'RGBA':
+                    result_img_check = result_img_check.convert('RGBA')
                 output = BytesIO()
-                processed_img.save(output, format='PNG')
+                result_img_check.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
-            except Exception as img_verify_error:
-                logger.warning(f"process_tryon: Could not verify rembg result image: {str(img_verify_error)}")
-        except Exception as rembg_error:
-            logger.warning(f"process_tryon: rembg processing failed: {str(rembg_error)}, using Gemini result as-is")
-            # Continue with Gemini's result if rembg fails
+            else:
+                # Only use rembg if Gemini didn't provide transparency
+                logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
+                from rembg import remove  # type: ignore
+                
+                # Store dimensions before rembg
+                original_dimensions = result_img_check.size
+                logger.info(f"process_tryon: Image dimensions before rembg: {original_dimensions}")
+                
+                result_image_bytes = remove(result_image_bytes)
+                logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
+                
+                # Verify rembg result and restore dimensions if cropped
+                try:
+                    processed_img = Image.open(BytesIO(result_image_bytes))
+                    rembg_size = processed_img.size
+                    logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={rembg_size}")
+                    
+                    # If rembg cropped, restore original dimensions
+                    if rembg_size != original_dimensions:
+                        logger.warning(f"process_tryon: rembg cropped from {original_dimensions} to {rembg_size} - restoring")
+                        restored_img = Image.new('RGBA', original_dimensions, (0, 0, 0, 0))
+                        if processed_img.mode != 'RGBA':
+                            processed_img = processed_img.convert('RGBA')
+                        paste_x = (original_dimensions[0] - rembg_size[0]) // 2
+                        paste_y = (original_dimensions[1] - rembg_size[1]) // 2
+                        restored_img.paste(processed_img, (paste_x, paste_y), processed_img)
+                        processed_img = restored_img
+                        logger.info(f"process_tryon: Restored to {original_dimensions}")
+                    else:
+                        if processed_img.mode != 'RGBA':
+                            processed_img = processed_img.convert('RGBA')
+                    
+                    output = BytesIO()
+                    processed_img.save(output, format='PNG')
+                    result_image_bytes = output.getvalue()
+                except Exception as img_verify_error:
+                    logger.warning(f"process_tryon: Could not verify rembg result: {str(img_verify_error)}")
+        except Exception as processing_error:
+            logger.warning(f"process_tryon: Background removal processing failed: {str(processing_error)}, using Gemini result as-is")
+            # Continue with Gemini's result if processing fails
         
         # Convert to base64 data URL
         result_base64 = base64.b64encode(result_image_bytes).decode('utf-8')
