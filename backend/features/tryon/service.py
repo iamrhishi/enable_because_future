@@ -102,26 +102,38 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         # Build prompt based on number of garment images
         if len(garment_images) == 1:
-            garment_instruction = "Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}."
+            garment_instruction = f"Extract ONLY the clothing fabric/textile from image 2 (DO NOT include any body parts, models, or people from image 2). Then fit and wrap this extracted garment fabric onto the person in image 1 at {body_location}."
         else:
             garment_image_refs = ", ".join([f"image {i+2}" for i in range(len(garment_images))])
-            garment_instruction = f"Use images {garment_image_refs} to understand the garment from different angles. Extract only the clothing fabric from these images (no body parts) and fit it onto the person at {body_location}. Use all garment images to better understand the garment's shape, texture, and details."
+            garment_instruction = f"Use images {garment_image_refs} as REFERENCE to understand the garment from different angles. Extract ONLY the clothing fabric/textile from these reference images (DO NOT include any body parts, models, or people). Then fit and wrap this extracted garment fabric onto the person in image 1 at {body_location}. Use all reference images to better understand the garment's shape, texture, and details, but the OUTPUT must be the person from image 1 wearing the garment."
+        
+        # Build explicit image reference text
+        image_refs_text = "IMAGE 1 is the person/avatar. "
+        if len(garment_images) == 1:
+            image_refs_text += "IMAGE 2 is a product photo showing the garment. "
+        else:
+            image_refs_text += f"IMAGES 2 through {len(garment_images) + 1} are product photos showing the garment from different angles. "
         
         prompt_parts = [
-            f"TASK: Virtual try-on - Make the person in image 1 wear the garment from {'image 2' if len(garment_images) == 1 else 'images 2-' + str(len(garment_images) + 1)}. ",
+            f"TASK: Virtual try-on - Composite the garment onto the person. ",
+            "",
+            f"IMAGE REFERENCE: {image_refs_text}",
+            "",
+            "CRITICAL: You must return image 1's person wearing the garment. DO NOT return a product photo. DO NOT return just the garment. The output MUST show the person from image 1 with the garment fitted onto them. ",
             "",
             garment_category_text,
             "",
-            "REQUIREMENTS:",
-            "1. Background: Copy image 1's background exactly - do not change any background pixels. ",
-            "2. Person: Keep image 1's person unchanged (face, body, pose, hands, arms, legs). ",
+            "CRITICAL REQUIREMENTS:",
+            "1. Background: Copy image 1's background EXACTLY - do not change any background pixels. ",
+            "2. Person: Keep image 1's person EXACTLY as they are (face, body, pose, hands, arms, legs - all unchanged). ",
             f"3. Garment: {garment_instruction} ",
             "   - Apply 3D transformation to wrap the garment around the body naturally. ",
             "   - The garment should follow body contours, pose, and perspective. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
             "   - Only modify pixels in the garment area, not the background. ",
+            "4. OUTPUT MUST BE: Image 1's person wearing the garment, NOT a product photo. ",
             "",
-            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly."
+            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly. The result must show the person from image 1 wearing the garment."
         ]
         
         # Add garment details to prompt if provided
