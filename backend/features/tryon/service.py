@@ -103,14 +103,14 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "",
             "REQUIREMENTS:",
             "1. Background: Copy image 1's background exactly - do not change any background pixels. ",
-            "2. Person: Keep image 1's person unchanged (face, body, pose, hands, arms, legs). ",
+            "2. Person: Keep image 1's person COMPLETELY unchanged - preserve the ENTIRE person including face, head, body, torso, arms, hands, legs, feet, and all body parts. DO NOT crop or cut off any part of the person. The output must show the FULL person from head to toe, exactly as in image 1. ",
             f"3. Garment: Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}. ",
             "   - Apply 3D transformation to wrap the garment around the body naturally. ",
             "   - The garment should follow body contours, pose, and perspective. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
-            "   - Only modify pixels in the garment area, not the background. ",
+            "   - Only modify pixels in the garment area, not the background or any other part of the person. ",
             "",
-            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly."
+            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly. The output image must have the SAME dimensions as image 1 and show the COMPLETE person from head to toe."
         ]
         
         # Add garment details to prompt if provided
@@ -388,7 +388,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             result_image_bytes = remove(result_image_bytes)
             logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
             
-            # Verify the result has transparency and trim padding
+            # Verify the result has transparency (keep original size to avoid compression/distortion)
             try:
                 processed_img = Image.open(BytesIO(result_image_bytes))
                 logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={processed_img.size}")
@@ -396,21 +396,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                     logger.warning(f"process_tryon: rembg result is {processed_img.mode}, converting to RGBA")
                     processed_img = processed_img.convert('RGBA')
                 
-                # Trim transparent padding to make person fill more of the frame (same as avatar processing)
-                try:
-                    # Get bounding box of non-transparent pixels
-                    bbox = processed_img.getbbox()
-                    if bbox:
-                        # Crop to bounding box to remove transparent padding
-                        original_size = processed_img.size
-                        processed_img = processed_img.crop(bbox)
-                        logger.info(f"process_tryon: Trimmed result from {original_size} to {processed_img.size} (removed transparent padding)")
-                    else:
-                        logger.warning(f"process_tryon: Result has no visible content (all transparent)")
-                except Exception as trim_error:
-                    logger.warning(f"process_tryon: Could not trim padding: {str(trim_error)}, using original size")
+                # Note: We don't resize to avoid compressing/distorting the person's image
+                # Keep the result at its natural size to preserve the person intact
                 
-                # Save trimmed image
+                # Save image (keep original size)
                 output = BytesIO()
                 processed_img.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
