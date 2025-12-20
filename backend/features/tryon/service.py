@@ -22,7 +22,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
     
     Args:
         person_image: Person image bytes (avatar or selfie with background removed)
-        garment_image: Garment image bytes
+        garment_image: Garment image bytes (can be single image or list of images)
         garment_type: 'upper' or 'lower'
         garment_details: Dict with garment info (category, material_type, brand, color, style, etc.)
         options: Additional options (not currently used, kept for compatibility)
@@ -39,19 +39,28 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         if not Config.GEMINI_API_KEY:
             raise ExternalServiceError("Gemini API key not configured", service='gemini')
         
+        # Handle both single image and list of images (backward compatibility)
+        if isinstance(garment_image, list):
+            garment_images = garment_image
+        else:
+            garment_images = [garment_image]
+        
+        # Limit to max 3 images to avoid payload size issues
+        garment_images = garment_images[:3]
+        
         # Log image sizes for debugging
         person_size_mb = len(person_image) / (1024 * 1024)
-        garment_size_mb = len(garment_image) / (1024 * 1024)
-        logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
+        garment_sizes_mb = [len(img) / (1024 * 1024) for img in garment_images]
+        logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garments: {[f'{s:.2f}MB' for s in garment_sizes_mb]} ({len(garment_images)} images)")
         
         # Convert images to base64
         person_base64 = base64.b64encode(person_image).decode('utf-8')
-        garment_base64 = base64.b64encode(garment_image).decode('utf-8')
+        garment_base64_list = [base64.b64encode(img).decode('utf-8') for img in garment_images]
         
         # Log base64 sizes
         person_b64_size_mb = len(person_base64) / (1024 * 1024)
-        garment_b64_size_mb = len(garment_base64) / (1024 * 1024)
-        logger.info(f"process_tryon: Base64 sizes - person: {person_b64_size_mb:.2f}MB, garment: {garment_b64_size_mb:.2f}MB")
+        garment_b64_sizes_mb = [len(b64) / (1024 * 1024) for b64 in garment_base64_list]
+        logger.info(f"process_tryon: Base64 sizes - person: {person_b64_size_mb:.2f}MB, garments: {[f'{s:.2f}MB' for s in garment_b64_sizes_mb]} ({len(garment_base64_list)} images)")
         
         # Build prompt with garment details - direct and technical approach
         # Extract category information from garment_details
@@ -91,15 +100,22 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         elif garment_type == 'lower':
             body_location = "lower body/legs"
         
+        # Build prompt based on number of garment images
+        if len(garment_images) == 1:
+            garment_instruction = "Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}."
+        else:
+            garment_image_refs = ", ".join([f"image {i+2}" for i in range(len(garment_images))])
+            garment_instruction = f"Use images {garment_image_refs} to understand the garment from different angles. Extract only the clothing fabric from these images (no body parts) and fit it onto the person at {body_location}. Use all garment images to better understand the garment's shape, texture, and details."
+        
         prompt_parts = [
-            "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
+            f"TASK: Virtual try-on - Make the person in image 1 wear the garment from {'image 2' if len(garment_images) == 1 else 'images 2-' + str(len(garment_images) + 1)}. ",
             "",
             garment_category_text,
             "",
             "REQUIREMENTS:",
             "1. Background: Copy image 1's background exactly - do not change any background pixels. ",
             "2. Person: Keep image 1's person unchanged (face, body, pose, hands, arms, legs). ",
-            f"3. Garment: Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}. ",
+            f"3. Garment: {garment_instruction} ",
             "   - Apply 3D transformation to wrap the garment around the body naturally. ",
             "   - The garment should follow body contours, pose, and perspective. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
@@ -144,10 +160,30 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         else:
             logger.info("process_tryon: No garment_details provided")
         
+        # Build payload parts: prompt + person image + all garment images
+        payload_parts = [
+            {"text": prompt},
+            {
+                "inline_data": {
+                    "mime_type": "image/png",
+                    "data": person_base64
+                }
+            }
+        ]
+        
+        # Add all garment images
+        for garment_b64 in garment_base64_list:
+            payload_parts.append({
+                "inline_data": {
+                    "mime_type": "image/png",
+                    "data": garment_b64
+                }
+            })
+        
         # Check if payload might be too large (Gemini has limits)
-        total_payload_size = len(person_base64) + len(garment_base64) + len(prompt)
+        total_payload_size = len(person_base64) + sum(len(b64) for b64 in garment_base64_list) + len(prompt)
         total_payload_size_mb = total_payload_size / (1024 * 1024)
-        logger.info(f"process_tryon: Total payload size: {total_payload_size_mb:.2f}MB")
+        logger.info(f"process_tryon: Total payload size: {total_payload_size_mb:.2f}MB ({len(garment_images)} garment images)")
         
         if total_payload_size_mb > 20:  # Gemini typically has ~20MB limit
             logger.warning(f"process_tryon: Payload size ({total_payload_size_mb:.2f}MB) may exceed Gemini limits")
@@ -157,21 +193,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         payload = {
             "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": person_base64
-                        }
-                    },
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": garment_base64
-                        }
-                    }
-                ]
+                "parts": payload_parts
             }]
         }
         
@@ -191,7 +213,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         logger.info(f"  - Payload structure:")
         logger.info(f"    - contents[0].parts[0]: text prompt ({len(prompt)} chars)")
         logger.info(f"    - contents[0].parts[1]: person image (base64, {len(person_base64)} chars)")
-        logger.info(f"    - contents[0].parts[2]: garment image (base64, {len(garment_base64)} chars)")
+        for i, garment_b64 in enumerate(garment_base64_list):
+            logger.info(f"    - contents[0].parts[{i+2}]: garment image {i+1} (base64, {len(garment_b64)} chars)")
+        logger.info(f"  - Total garment images: {len(garment_images)}")
         logger.info("=" * 80)
         
         logger.info(f"process_tryon: Calling Gemini API - model={Config.GEMINI_MODEL_NAME}")
@@ -204,7 +228,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         for attempt in range(max_retries):
             try:
                 response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
-                
+        
                 # Success
                 if response.status_code == 200:
                     break
@@ -224,10 +248,11 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                     f"process_tryon: Gemini API error - status={response.status_code}, "
                     f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
                 )
-                raise ExternalServiceError(
-                    f"Gemini API error: {response.status_code} - {response.text[:200]}",
-                    service='gemini'
-                )
+                if attempt == max_retries - 1:
+                    raise ExternalServiceError(
+                        f"Gemini API error: {response.status_code} - {response.text[:200]}",
+                        service='gemini'
+                    )
             except requests.Timeout:
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (attempt + 1)
@@ -570,7 +595,7 @@ Return ONLY a PNG image with RGBA format where:
             
             logger.info(f"remove_background: EXIT - Success, result size={len(image_bytes)} bytes, mode=RGBA")
             return image_bytes
-            
+        
         except Exception as img_error:
             logger.exception(f"remove_background: Error processing Gemini image: {str(img_error)}")
             # If image processing fails, return the original bytes

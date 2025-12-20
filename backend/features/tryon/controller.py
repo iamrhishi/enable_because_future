@@ -314,58 +314,65 @@ def create_tryon_job():
                                         'title': extract_title_from_html(html_content)
                                     }
                         
-                        # Extract garment image from product info (cached or fresh)
+                        # Extract garment images from product info (cached or fresh)
+                        # Fetch up to 3 images to send to Gemini for better results
+                        garment_images = []
                         if product_info:
                             images = product_info.get('images', [])
                             if images:
-                                for img_url in images[:3]:  # Try top 3 images
+                                # Try to fetch up to 3 images (or as many as available)
+                                for img_url in images[:3]:
                                     try:
-                                        garment_image = fetch_image_from_url(img_url)
-                                        logger.info(f"create_tryon_job: Successfully fetched image: {img_url[:100]}")
-                                        
-                                        # Get categorization from product title
-                                        categorization = None
-                                        if product_info.get('title'):
-                                            categorization = categorize_garment(title=product_info.get('title'))
-                                        
-                                        # Build garment_details from product_info for Gemini
-                                        garment_details = {
-                                            'category': product_info.get('category'),
-                                            'brand': product_info.get('brand'),
-                                            'title': product_info.get('title'),
-                                            'color': product_info.get('color') or (product_info.get('colors', [])[0] if product_info.get('colors') else None),
-                                            'price': product_info.get('price'),
-                                            'style': product_info.get('style'),
-                                            'material_type': product_info.get('material_type')
-                                        }
-                                        
-                                        # Add category_section and category_name from categorization
-                                        if categorization:
-                                            cat_type = categorization.get('category')  # 'upper' or 'lower'
-                                            cat_name = categorization.get('type')  # 'jacket', 'shirt', etc.
-                                            
-                                            # Map category to category_section
-                                            if cat_type == 'upper':
-                                                garment_details['category_section'] = 'upper_body'
-                                            elif cat_type == 'lower':
-                                                garment_details['category_section'] = 'lower_body'
-                                            
-                                            # Add category name
-                                            if cat_name:
-                                                garment_details['category_name'] = cat_name
-                                        
-                                        # Remove None values
-                                        garment_details = {k: v for k, v in garment_details.items() if v is not None}
-                                        
-                                        # Get garment_type from categorization
-                                        if categorization:
-                                            garment_type = categorization.get('category', 'upper')
-                                            logger.info(f"create_tryon_job: Detected garment_type={garment_type}, category_name={garment_details.get('category_name')} from product info")
-                                        
-                                        break  # Successfully got image and details
+                                        garment_img = fetch_image_from_url(img_url)
+                                        garment_images.append(garment_img)
+                                        logger.info(f"create_tryon_job: Successfully fetched image {len(garment_images)}/{min(3, len(images))}: {img_url[:100]}")
                                     except Exception as img_fetch_error:
                                         logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
                                         continue
+                                
+                                # If we got at least one image, use it
+                                if garment_images:
+                                    garment_image = garment_images[0] if len(garment_images) == 1 else garment_images
+                                    logger.info(f"create_tryon_job: Fetched {len(garment_images)} garment image(s) for try-on")
+                                    
+                                    # Get categorization from product title
+                                    categorization = None
+                                    if product_info.get('title'):
+                                        categorization = categorize_garment(title=product_info.get('title'))
+                                    
+                                    # Build garment_details from product_info for Gemini
+                                    garment_details = {
+                                        'category': product_info.get('category'),
+                                        'brand': product_info.get('brand'),
+                                        'title': product_info.get('title'),
+                                        'color': product_info.get('color') or (product_info.get('colors', [])[0] if product_info.get('colors') else None),
+                                        'price': product_info.get('price'),
+                                        'style': product_info.get('style'),
+                                        'material_type': product_info.get('material_type')
+                                    }
+                                    
+                                    # Add category_section and category_name from categorization
+                                    if categorization:
+                                        cat_type = categorization.get('category')  # 'upper' or 'lower'
+                                        cat_name = categorization.get('type')  # 'jacket', 'shirt', etc.
+                                        
+                                        # Map category to category_section
+                                        if cat_type == 'upper':
+                                            garment_details['category_section'] = 'upper_body'
+                                        elif cat_type == 'lower':
+                                            garment_details['category_section'] = 'lower_body'
+                                        
+                                        # Add category name
+                                        if cat_name:
+                                            garment_details['category_name'] = cat_name
+                                    
+                                    # Remove None values
+                                    garment_details = {k: v for k, v in garment_details.items() if v is not None}
+                                    
+                                    # Get garment_type from categorization
+                                    if categorization:
+                                        garment_type = categorization.get('category', 'upper')
+                                        logger.info(f"create_tryon_job: Detected garment_type={garment_type}, category_name={garment_details.get('category_name')} from product info")
                 except Exception as scrape_error:
                     logger.warning(f"create_tryon_job: Scraping failed: {str(scrape_error)}, trying direct URL")
                 
@@ -392,9 +399,15 @@ def create_tryon_job():
         if not garment_image:
             return error_response_from_string('garment_image, wardrobe_item_id, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
         
-        # Preprocess garment image
+        # Preprocess garment image(s) - handle both single image and list
         try:
-            garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+            if isinstance(garment_image, list):
+                # Preprocess each image in the list
+                garment_image = [preprocess_image(img, resize=True, normalize=True) for img in garment_image]
+                logger.info(f"create_tryon_job: Preprocessed {len(garment_image)} garment images")
+            else:
+                # Single image
+                garment_image = preprocess_image(garment_image, resize=True, normalize=True)
         except Exception as e:
             logger.exception(f"create_tryon_job: Garment image preprocessing failed: {str(e)}")
             return error_response_from_string(f'Garment image validation failed: {str(e)}', 400, 'VALIDATION_ERROR')
