@@ -330,10 +330,10 @@ def create_tryon_job():
                                         logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
                                         continue
                                 
-                                # If we got at least one image, use it
+                                # If we got at least one image, use the first one (revert to single image approach)
                                 if garment_images:
-                                    garment_image = garment_images[0] if len(garment_images) == 1 else garment_images
-                                    logger.info(f"create_tryon_job: Fetched {len(garment_images)} garment image(s) for try-on")
+                                    garment_image = garment_images[0]  # Use first image only
+                                    logger.info(f"create_tryon_job: Fetched {len(garment_images)} garment image(s), using first one for try-on")
                                     
                                     # Get categorization from product title
                                     categorization = None

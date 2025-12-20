@@ -39,28 +39,24 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         if not Config.GEMINI_API_KEY:
             raise ExternalServiceError("Gemini API key not configured", service='gemini')
         
-        # Handle both single image and list of images (backward compatibility)
+        # Handle list of images - use only the first one (revert to single image approach that was working)
         if isinstance(garment_image, list):
-            garment_images = garment_image
-        else:
-            garment_images = [garment_image]
-        
-        # Limit to max 3 images to avoid payload size issues
-        garment_images = garment_images[:3]
+            garment_image = garment_image[0]  # Use first image only
+            logger.info(f"process_tryon: Received list of {len(garment_image)} images, using first one only")
         
         # Log image sizes for debugging
         person_size_mb = len(person_image) / (1024 * 1024)
-        garment_sizes_mb = [len(img) / (1024 * 1024) for img in garment_images]
-        logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garments: {[f'{s:.2f}MB' for s in garment_sizes_mb]} ({len(garment_images)} images)")
+        garment_size_mb = len(garment_image) / (1024 * 1024)
+        logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
         
         # Convert images to base64
         person_base64 = base64.b64encode(person_image).decode('utf-8')
-        garment_base64_list = [base64.b64encode(img).decode('utf-8') for img in garment_images]
+        garment_base64 = base64.b64encode(garment_image).decode('utf-8')
         
         # Log base64 sizes
         person_b64_size_mb = len(person_base64) / (1024 * 1024)
-        garment_b64_sizes_mb = [len(b64) / (1024 * 1024) for b64 in garment_base64_list]
-        logger.info(f"process_tryon: Base64 sizes - person: {person_b64_size_mb:.2f}MB, garments: {[f'{s:.2f}MB' for s in garment_b64_sizes_mb]} ({len(garment_base64_list)} images)")
+        garment_b64_size_mb = len(garment_base64) / (1024 * 1024)
+        logger.info(f"process_tryon: Base64 sizes - person: {person_b64_size_mb:.2f}MB, garment: {garment_b64_size_mb:.2f}MB")
         
         # Build prompt with garment details - direct and technical approach
         # Extract category information from garment_details
@@ -100,40 +96,21 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         elif garment_type == 'lower':
             body_location = "lower body/legs"
         
-        # Build prompt based on number of garment images
-        if len(garment_images) == 1:
-            garment_instruction = f"Extract ONLY the clothing fabric/textile from image 2 (DO NOT include any body parts, models, or people from image 2). Then fit and wrap this extracted garment fabric onto the person in image 1 at {body_location}."
-        else:
-            garment_image_refs = ", ".join([f"image {i+2}" for i in range(len(garment_images))])
-            garment_instruction = f"Use images {garment_image_refs} as REFERENCE to understand the garment from different angles. Extract ONLY the clothing fabric/textile from these reference images (DO NOT include any body parts, models, or people). Then fit and wrap this extracted garment fabric onto the person in image 1 at {body_location}. Use all reference images to better understand the garment's shape, texture, and details, but the OUTPUT must be the person from image 1 wearing the garment."
-        
-        # Build explicit image reference text
-        image_refs_text = "IMAGE 1 is the person/avatar. "
-        if len(garment_images) == 1:
-            image_refs_text += "IMAGE 2 is a product photo showing the garment. "
-        else:
-            image_refs_text += f"IMAGES 2 through {len(garment_images) + 1} are product photos showing the garment from different angles. "
-        
         prompt_parts = [
-            f"TASK: Virtual try-on - Composite the garment onto the person. ",
-            "",
-            f"IMAGE REFERENCE: {image_refs_text}",
-            "",
-            "CRITICAL: You must return image 1's person wearing the garment. DO NOT return a product photo. DO NOT return just the garment. The output MUST show the person from image 1 with the garment fitted onto them. ",
+            "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
             "",
             garment_category_text,
             "",
-            "CRITICAL REQUIREMENTS:",
-            "1. Background: Copy image 1's background EXACTLY - do not change any background pixels. ",
-            "2. Person: Keep image 1's person EXACTLY as they are (face, body, pose, hands, arms, legs - all unchanged). ",
-            f"3. Garment: {garment_instruction} ",
+            "REQUIREMENTS:",
+            "1. Background: Copy image 1's background exactly - do not change any background pixels. ",
+            "2. Person: Keep image 1's person unchanged (face, body, pose, hands, arms, legs). ",
+            f"3. Garment: Extract only the clothing fabric from image 2 (no body parts) and fit it onto the person at {body_location}. ",
             "   - Apply 3D transformation to wrap the garment around the body naturally. ",
             "   - The garment should follow body contours, pose, and perspective. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
             "   - Only modify pixels in the garment area, not the background. ",
-            "4. OUTPUT MUST BE: Image 1's person wearing the garment, NOT a product photo. ",
             "",
-            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly. The result must show the person from image 1 wearing the garment."
+            "OUTPUT: PNG with RGBA channels. Background must match image 1 exactly."
         ]
         
         # Add garment details to prompt if provided
@@ -172,30 +149,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         else:
             logger.info("process_tryon: No garment_details provided")
         
-        # Build payload parts: prompt + person image + all garment images
-        payload_parts = [
-            {"text": prompt},
-            {
-                "inline_data": {
-                    "mime_type": "image/png",
-                    "data": person_base64
-                }
-            }
-        ]
-        
-        # Add all garment images
-        for garment_b64 in garment_base64_list:
-            payload_parts.append({
-                "inline_data": {
-                    "mime_type": "image/png",
-                    "data": garment_b64
-                }
-            })
-        
         # Check if payload might be too large (Gemini has limits)
-        total_payload_size = len(person_base64) + sum(len(b64) for b64 in garment_base64_list) + len(prompt)
+        total_payload_size = len(person_base64) + len(garment_base64) + len(prompt)
         total_payload_size_mb = total_payload_size / (1024 * 1024)
-        logger.info(f"process_tryon: Total payload size: {total_payload_size_mb:.2f}MB ({len(garment_images)} garment images)")
+        logger.info(f"process_tryon: Total payload size: {total_payload_size_mb:.2f}MB")
         
         if total_payload_size_mb > 20:  # Gemini typically has ~20MB limit
             logger.warning(f"process_tryon: Payload size ({total_payload_size_mb:.2f}MB) may exceed Gemini limits")
@@ -205,7 +162,21 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         payload = {
             "contents": [{
-                "parts": payload_parts
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": person_base64
+                        }
+                    },
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": garment_base64
+                        }
+                    }
+                ]
             }]
         }
         
@@ -225,9 +196,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         logger.info(f"  - Payload structure:")
         logger.info(f"    - contents[0].parts[0]: text prompt ({len(prompt)} chars)")
         logger.info(f"    - contents[0].parts[1]: person image (base64, {len(person_base64)} chars)")
-        for i, garment_b64 in enumerate(garment_base64_list):
-            logger.info(f"    - contents[0].parts[{i+2}]: garment image {i+1} (base64, {len(garment_b64)} chars)")
-        logger.info(f"  - Total garment images: {len(garment_images)}")
+        logger.info(f"    - contents[0].parts[2]: garment image (base64, {len(garment_base64)} chars)")
         logger.info("=" * 80)
         
         logger.info(f"process_tryon: Calling Gemini API - model={Config.GEMINI_MODEL_NAME}")
