@@ -7,6 +7,7 @@ import requests  # type: ignore
 import base64
 import time
 import re
+import json
 from PIL import Image  # type: ignore
 from io import BytesIO
 from config import Config
@@ -379,9 +380,44 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             result_image_bytes = base64.b64decode(image_data_b64)
             logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
         
+        # Format 3: Check for error in response
+        if result_image_bytes is None and 'error' in result:
+            error_info = result.get('error', {})
+            error_message = error_info.get('message', 'Unknown error')
+            error_code = error_info.get('code', 'UNKNOWN')
+            logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
+            raise ExternalServiceError(
+                f"Gemini API error: {error_code} - {error_message}",
+                service='gemini'
+            )
+        
+        # Format 4: Check if candidates exist but are empty or have finishReason
+        if result_image_bytes is None and 'candidates' in result:
+            if len(result['candidates']) == 0:
+                logger.error(f"process_tryon: Gemini returned empty candidates array")
+            else:
+                candidate = result['candidates'][0]
+                finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                if finish_reason != 'STOP':
+                    logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
+                    if 'safetyRatings' in candidate:
+                        logger.error(f"process_tryon: Safety ratings: {candidate['safetyRatings']}")
+        
         if result_image_bytes is None:
-            logger.warning(f"process_tryon: Unexpected response structure. Full response: {str(result)[:500]}")
-            raise ExternalServiceError("Unexpected response format from Gemini API", service='gemini')
+            # Log full response structure for debugging (up to 2000 chars)
+            try:
+                response_str = json.dumps(result, indent=2)
+                logger.error(f"process_tryon: Unexpected response structure. Full response ({len(response_str)} chars):")
+                logger.error(response_str[:2000])
+                if len(response_str) > 2000:
+                    logger.error(f"... (truncated, total length: {len(response_str)} chars)")
+            except Exception:
+                logger.error(f"process_tryon: Unexpected response structure. Full response: {str(result)[:2000]}")
+            
+            raise ExternalServiceError(
+                "Unexpected response format from Gemini API. Please check logs for full response structure.",
+                service='gemini'
+            )
         
         # Log result image info for debugging
         try:
