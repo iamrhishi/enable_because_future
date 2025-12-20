@@ -405,73 +405,62 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 service='gemini'
             )
         
-        # Log result image info - DO NOT resize to avoid compression
+        # Log result image info and process for transparency
         try:
             result_img = Image.open(BytesIO(result_image_bytes))
             gemini_result_size = result_img.size
             logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={gemini_result_size}")
             logger.info(f"process_tryon: Avatar dimensions: {original_avatar_size}, Gemini returned: {gemini_result_size}")
             
-            # Note: We don't resize Gemini's result to avoid compression/distortion
-            # The prompt should ensure Gemini returns the same dimensions as the input
-        except Exception as img_check_error:
-            logger.warning(f"process_tryon: Could not verify result image: {str(img_check_error)}")
-        
-        # Check if Gemini already provided transparency - if so, skip rembg to avoid cropping/padding issues
-        try:
-            result_img_check = Image.open(BytesIO(result_image_bytes))
-            has_transparency = result_img_check.mode in ('RGBA', 'LA', 'P')
-            logger.info(f"process_tryon: Gemini result has transparency: {has_transparency}, mode: {result_img_check.mode}")
+            # Check if Gemini already provided transparency
+            has_transparency = result_img.mode in ('RGBA', 'LA', 'P')
+            logger.info(f"process_tryon: Gemini result has transparency: {has_transparency}, mode: {result_img.mode}")
             
-            # If Gemini already has transparency, use it as-is to avoid rembg cropping/padding issues
+            # If Gemini already has transparency, resize and use as-is
             if has_transparency:
-                logger.info("process_tryon: Gemini result already has transparency - skipping rembg to preserve full person")
-                # Just ensure it's RGBA and save
-                if result_img_check.mode != 'RGBA':
-                    result_img_check = result_img_check.convert('RGBA')
+                logger.info("process_tryon: Gemini result already has transparency - resizing to match avatar, then using as-is")
+                if gemini_result_size != original_avatar_size:
+                    logger.info(f"process_tryon: Resizing from {gemini_result_size} to {original_avatar_size}")
+                    result_img = result_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
+                if result_img.mode != 'RGBA':
+                    result_img = result_img.convert('RGBA')
                 output = BytesIO()
-                result_img_check.save(output, format='PNG')
+                result_img.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
             else:
-                # Only use rembg if Gemini didn't provide transparency
+                # Gemini has no transparency - use rembg first, then resize
                 logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
                 from rembg import remove  # type: ignore
                 
                 # Store dimensions before rembg
-                original_dimensions = result_img_check.size
+                original_dimensions = result_img.size
                 logger.info(f"process_tryon: Image dimensions before rembg: {original_dimensions}")
                 
                 result_image_bytes = remove(result_image_bytes)
                 logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
                 
-                # Verify rembg result and restore dimensions if cropped
+                # Process rembg result
                 try:
                     processed_img = Image.open(BytesIO(result_image_bytes))
                     rembg_size = processed_img.size
                     logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={rembg_size}")
                     
-                    # If rembg cropped, restore original dimensions
-                    if rembg_size != original_dimensions:
-                        logger.warning(f"process_tryon: rembg cropped from {original_dimensions} to {rembg_size} - restoring")
-                        restored_img = Image.new('RGBA', original_dimensions, (0, 0, 0, 0))
-                        if processed_img.mode != 'RGBA':
-                            processed_img = processed_img.convert('RGBA')
-                        paste_x = (original_dimensions[0] - rembg_size[0]) // 2
-                        paste_y = (original_dimensions[1] - rembg_size[1]) // 2
-                        restored_img.paste(processed_img, (paste_x, paste_y), processed_img)
-                        processed_img = restored_img
-                        logger.info(f"process_tryon: Restored to {original_dimensions}")
-                    else:
-                        if processed_img.mode != 'RGBA':
-                            processed_img = processed_img.convert('RGBA')
+                    if processed_img.mode != 'RGBA':
+                        processed_img = processed_img.convert('RGBA')
                     
+                    # Resize rembg result to match avatar dimensions
+                    if rembg_size != original_avatar_size:
+                        logger.info(f"process_tryon: Resizing rembg result from {rembg_size} to {original_avatar_size} to match avatar")
+                        processed_img = processed_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
+                    
+                    # Save resized image with transparency
                     output = BytesIO()
                     processed_img.save(output, format='PNG')
                     result_image_bytes = output.getvalue()
                 except Exception as img_verify_error:
                     logger.warning(f"process_tryon: Could not verify rembg result: {str(img_verify_error)}")
         except Exception as processing_error:
-            logger.warning(f"process_tryon: Background removal processing failed: {str(processing_error)}, using Gemini result as-is")
+            logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails
         
         # Convert to base64 data URL
