@@ -8,11 +8,151 @@ import base64
 import time
 import re
 import json
+import numpy as np  # type: ignore
 from PIL import Image  # type: ignore
 from io import BytesIO
 from config import Config
 from shared.logger import logger
 from shared.errors import ExternalServiceError
+
+
+def _crop_to_aspect_ratio(img: Image.Image, target_ratio: float, person_center_x: float = None) -> Image.Image:
+    """
+    Crop image to match target aspect ratio using center crop (or person-aware crop if person_center_x provided)
+    
+    Args:
+        img: PIL Image to crop
+        target_ratio: Target aspect ratio (width / height)
+        person_center_x: Optional person center X coordinate for person-aware cropping
+        
+    Returns:
+        Cropped PIL Image matching target aspect ratio
+    """
+    w, h = img.size
+    current_ratio = w / h if h > 0 else 1.0
+    
+    if abs(current_ratio - target_ratio) < 0.001:  # Already matches (within 0.1% tolerance)
+        return img
+    
+    if current_ratio > target_ratio:
+        # Crop width (image is wider than target)
+        new_w = int(h * target_ratio)
+        crop_amount = w - new_w
+        
+        # Use person center if provided, otherwise center crop
+        if person_center_x is not None:
+            # Person-aware cropping: try to keep person centered
+            # Calculate crop position to keep person as centered as possible
+            ideal_left = person_center_x - new_w / 2
+            # Clamp to valid range
+            left = max(0, min(int(ideal_left), crop_amount))
+            logger.info(f"_crop_to_aspect_ratio: Person-aware cropping width from {w} to {new_w} (person center: {person_center_x:.1f}, crop left: {left})")
+        else:
+            # Center crop
+            left = crop_amount // 2
+            logger.info(f"_crop_to_aspect_ratio: Center cropping width from {w} to {new_w} (target ratio: {target_ratio:.3f}, current: {current_ratio:.3f})")
+        
+        right = left + new_w
+        return img.crop((left, 0, right, h))
+    else:
+        # Crop height (image is taller than target) - always center crop vertically
+        new_h = int(w / target_ratio)
+        crop_amount = h - new_h
+        top = crop_amount // 2
+        bottom = top + new_h
+        logger.info(f"_crop_to_aspect_ratio: Center cropping height from {h} to {new_h} (target ratio: {target_ratio:.3f}, current: {current_ratio:.3f})")
+        return img.crop((0, top, w, bottom))
+
+
+def _detect_person_boundaries(person_image: bytes) -> dict:
+    """
+    Detect person boundaries using rembg to get person mask, then extract bounding box
+    
+    Args:
+        person_image: Person image bytes
+        
+    Returns:
+        dict with person info: {
+            'bbox': (x, y, width, height),
+            'center': (cx, cy),
+            'scale': (width_ratio, height_ratio),
+            'aspect_ratio': float
+        }
+    """
+    try:
+        from rembg import remove  # type: ignore
+        
+        # Remove background to get person mask
+        person_with_bg_removed = remove(person_image)
+        
+        # Convert to PIL Image
+        img = Image.open(BytesIO(person_with_bg_removed))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # Get alpha channel as mask
+        alpha = np.array(img.split()[3])  # Get alpha channel
+        
+        # Find bounding box of non-transparent pixels (person)
+        rows = np.any(alpha > 0, axis=1)
+        cols = np.any(alpha > 0, axis=0)
+        
+        if not (np.any(rows) and np.any(cols)):
+            # If no person detected, assume person fills most of image
+            img_width, img_height = img.size
+            logger.warning("_detect_person_boundaries: No person pixels detected in mask, using full image bounds")
+            return {
+                'bbox': (0, 0, img_width, img_height),
+                'center': (img_width // 2, img_height // 2),
+                'scale': (1.0, 1.0),
+                'aspect_ratio': img_width / img_height,
+                'image_size': (img_width, img_height)
+            }
+        
+        y_min, y_max = np.where(rows)[0][[0, -1]]
+        x_min, x_max = np.where(cols)[0][[0, -1]]
+        
+        bbox_x = x_min
+        bbox_y = y_min
+        bbox_width = x_max - x_min + 1
+        bbox_height = y_max - y_min + 1
+        
+        # Calculate center
+        center_x = bbox_x + bbox_width // 2
+        center_y = bbox_y + bbox_height // 2
+        
+        # Get image dimensions
+        img_width, img_height = img.size
+        
+        # Calculate scale ratios
+        width_ratio = bbox_width / img_width
+        height_ratio = bbox_height / img_height
+        
+        # Calculate aspect ratio
+        aspect_ratio = bbox_width / bbox_height if bbox_height > 0 else 1.0
+        
+        logger.info(f"_detect_person_boundaries: Person bbox: ({bbox_x}, {bbox_y}, {bbox_width}, {bbox_height}), "
+                  f"center: ({center_x}, {center_y}), scale: ({width_ratio:.3f}, {height_ratio:.3f}), aspect_ratio: {aspect_ratio:.3f}")
+        
+        return {
+            'bbox': (bbox_x, bbox_y, bbox_width, bbox_height),
+            'center': (center_x, center_y),
+            'scale': (width_ratio, height_ratio),
+            'aspect_ratio': aspect_ratio,
+            'image_size': (img_width, img_height)
+        }
+    except Exception as e:
+        logger.error(f"_detect_person_boundaries: Error detecting person boundaries: {str(e)}")
+        # Fallback: assume person fills most of image
+        img = Image.open(BytesIO(person_image))
+        img_width, img_height = img.size
+        return {
+            'bbox': (0, 0, img_width, img_height),
+            'center': (img_width // 2, img_height // 2),
+            'scale': (1.0, 1.0),
+            'aspect_ratio': img_width / img_height,
+            'image_size': (img_width, img_height)
+        }
 
 
 def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper', 
@@ -52,7 +192,13 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         # Capture original avatar dimensions to ensure result matches (prevents size mismatch)
         person_img = Image.open(BytesIO(person_image))
         original_avatar_size = person_img.size  # (width, height)
-        logger.info(f"process_tryon: Original avatar dimensions: {original_avatar_size}")
+        original_avatar_aspect = original_avatar_size[0] / original_avatar_size[1]
+        logger.info(f"process_tryon: Original avatar dimensions: {original_avatar_size}, aspect_ratio: {original_avatar_aspect:.3f}")
+        
+        # Detect person boundaries using rembg
+        person_info = _detect_person_boundaries(person_image)
+        logger.info(f"process_tryon: Person boundaries - bbox: {person_info['bbox']}, center: {person_info['center']}, "
+                  f"scale: {person_info['scale']}, aspect_ratio: {person_info['aspect_ratio']:.3f}")
         
         # Convert images to base64
         person_base64 = base64.b64encode(person_image).decode('utf-8')
@@ -101,26 +247,56 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         elif garment_type == 'lower':
             body_location = "lower body/legs"
         
+        # Build person positioning info for prompt
+        person_position_text = ""
+        if person_info:
+            bbox_x, bbox_y, bbox_w, bbox_h = person_info['bbox']
+            center_x, center_y = person_info['center']
+            width_ratio, height_ratio = person_info['scale']
+            aspect_ratio = person_info['aspect_ratio']
+            person_position_text = (
+                f"PERSON POSITIONING INFO: The person in image 1 is centered at ({center_x}, {center_y}) pixels, "
+                f"with bounding box ({bbox_x}, {bbox_y}, {bbox_w}, {bbox_h}) pixels. "
+                f"The person occupies {width_ratio*100:.1f}% of image width and {height_ratio*100:.1f}% of image height. "
+                f"The person's aspect ratio is {aspect_ratio:.3f}. "
+                f"Maintain this exact positioning, scale, and aspect ratio in the output. "
+            )
+        
         prompt_parts = [
+            "CRITICAL INSTRUCTIONS - READ FIRST:",
+            "",
+            f"OUTPUT IMAGE SIZE: EXACTLY {original_avatar_size[0]} pixels wide × {original_avatar_size[1]} pixels tall (same as image 1).",
+            f"PERSON VISIBILITY: Show the COMPLETE person from head to toe - ALL body parts including legs and feet must be visible.",
+            "",
             "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
             "",
             garment_category_text,
             "",
+            person_position_text,
+            "",
             "ABSOLUTE REQUIREMENTS (MUST FOLLOW EXACTLY):",
             "",
-            "1. OUTPUT DIMENSIONS (CRITICAL - MUST MATCH): ",
+            "1. OUTPUT DIMENSIONS (CRITICAL - MUST MATCH - NO EXCEPTIONS): ",
             f"   - The output image MUST be EXACTLY {original_avatar_size[0]} pixels wide and {original_avatar_size[1]} pixels tall. ",
-            "   - This is the EXACT same size as image 1. DO NOT change these dimensions. ",
-            "   - DO NOT add padding, borders, or resize. Output must be {original_avatar_size[0]}x{original_avatar_size[1]}. ",
+            f"   - This is the EXACT same size as image 1. DO NOT change these dimensions. ",
+            f"   - DO NOT add padding, borders, or resize. Output must be {original_avatar_size[0]}x{original_avatar_size[1]}. ",
+            f"   - Width: {original_avatar_size[0]} pixels. Height: {original_avatar_size[1]} pixels. ",
+            "   - If you return any other dimensions, the output will be REJECTED. ",
             "",
-            "2. PERSON (MANDATORY - HIGHEST PRIORITY): ",
+            "2. PERSON (MANDATORY - HIGHEST PRIORITY - DO NOT CROP OR ZOOM): ",
             "   - Keep image 1's person COMPLETELY unchanged and FULLY visible in the output. ",
             "   - Preserve the ENTIRE person: face, head, neck, shoulders, torso, arms, hands, waist, legs, knees, ankles, feet - EVERY body part. ",
             "   - DO NOT crop, cut off, zoom in, or hide ANY part of the person. ",
             "   - DO NOT focus on just the garment area - show the FULL person from head to toe. ",
             "   - The person's complete body must be visible in the output, exactly as shown in image 1. ",
-            "   - If image 1 shows the person's feet, the output MUST show feet. If image 1 shows full legs, the output MUST show full legs. ",
+            "   - CRITICAL: If image 1 shows the person's feet, the output MUST show feet. If image 1 shows full legs, the output MUST show full legs. ",
+            "   - CRITICAL: The person's legs and feet are visible in image 1 - they MUST be fully visible in the output. DO NOT crop or cut off the legs. ",
             "   - The person must appear at the SAME scale and position as in image 1. ",
+            f"   - The person in image 1 occupies {person_info['scale'][0]*100:.1f}% width and {person_info['scale'][1]*100:.1f}% height. Maintain this exact scale. ",
+            f"   - The person's bounding box is ({person_info['bbox'][0]}, {person_info['bbox'][1]}, {person_info['bbox'][2]}, {person_info['bbox'][3]}). Keep the person in the same position. ",
+            f"   - The person's height in image 1 is {person_info['bbox'][3]} pixels. The output must show the full {person_info['bbox'][3]} pixels of the person's height. ",
+            "   - DO NOT zoom in on the upper body or garment area - the full person from head to toe must be visible. ",
+            "   - WARNING: If you crop or zoom the person, the output will be REJECTED. The full person must be visible. ",
             "",
             "3. BACKGROUND (MANDATORY): ",
             "   - Copy image 1's background EXACTLY pixel-by-pixel. ",
@@ -409,56 +585,83 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         try:
             result_img = Image.open(BytesIO(result_image_bytes))
             gemini_result_size = result_img.size
-            logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={gemini_result_size}")
-            logger.info(f"process_tryon: Avatar dimensions: {original_avatar_size}, Gemini returned: {gemini_result_size}")
+            gemini_aspect = gemini_result_size[0] / gemini_result_size[1] if gemini_result_size[1] > 0 else 1.0
+            logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={gemini_result_size}, aspect_ratio: {gemini_aspect:.3f}")
+            logger.info(f"process_tryon: Avatar dimensions: {original_avatar_size}, aspect_ratio: {original_avatar_aspect:.3f}")
+            logger.info(f"process_tryon: Gemini returned: {gemini_result_size}, aspect_ratio: {gemini_aspect:.3f}")
+            
+            # Verify aspect ratio matches avatar
+            aspect_ratio_diff = abs(gemini_aspect - original_avatar_aspect)
+            if aspect_ratio_diff > 0.1:  # Allow 10% tolerance
+                logger.warning(f"process_tryon: Aspect ratio mismatch! Avatar: {original_avatar_aspect:.3f}, Gemini: {gemini_aspect:.3f}, diff: {aspect_ratio_diff:.3f}")
+            else:
+                logger.info(f"process_tryon: Aspect ratio matches avatar (diff: {aspect_ratio_diff:.3f})")
             
             # Check if Gemini already provided transparency
             has_transparency = result_img.mode in ('RGBA', 'LA', 'P')
             logger.info(f"process_tryon: Gemini result has transparency: {has_transparency}, mode: {result_img.mode}")
             
-            # If Gemini already has transparency, resize and use as-is
+            # Process Gemini result: background removal + aspect ratio matching
             if has_transparency:
-                logger.info("process_tryon: Gemini result already has transparency - resizing to match avatar, then using as-is")
-                if gemini_result_size != original_avatar_size:
-                    logger.info(f"process_tryon: Resizing from {gemini_result_size} to {original_avatar_size}")
-                    result_img = result_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
+                logger.info("process_tryon: Gemini result already has transparency - processing aspect ratio")
                 if result_img.mode != 'RGBA':
                     result_img = result_img.convert('RGBA')
-                output = BytesIO()
-                result_img.save(output, format='PNG')
-                result_image_bytes = output.getvalue()
             else:
-                # Gemini has no transparency - use rembg first, then resize
+                # Gemini has no transparency - use rembg to remove background
                 logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
                 from rembg import remove  # type: ignore
                 
-                # Store dimensions before rembg
-                original_dimensions = result_img.size
-                logger.info(f"process_tryon: Image dimensions before rembg: {original_dimensions}")
+                logger.info(f"process_tryon: Image dimensions before rembg: {gemini_result_size}")
                 
                 result_image_bytes = remove(result_image_bytes)
                 logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
                 
                 # Process rembg result
                 try:
-                    processed_img = Image.open(BytesIO(result_image_bytes))
-                    rembg_size = processed_img.size
-                    logger.info(f"process_tryon: rembg result image, mode={processed_img.mode}, size={rembg_size}")
+                    result_img = Image.open(BytesIO(result_image_bytes))
+                    rembg_size = result_img.size
+                    logger.info(f"process_tryon: rembg result image, mode={result_img.mode}, size={rembg_size}")
                     
-                    if processed_img.mode != 'RGBA':
-                        processed_img = processed_img.convert('RGBA')
-                    
-                    # Resize rembg result to match avatar dimensions
-                    if rembg_size != original_avatar_size:
-                        logger.info(f"process_tryon: Resizing rembg result from {rembg_size} to {original_avatar_size} to match avatar")
-                        processed_img = processed_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
-                    
-                    # Save resized image with transparency
-                    output = BytesIO()
-                    processed_img.save(output, format='PNG')
-                    result_image_bytes = output.getvalue()
+                    if result_img.mode != 'RGBA':
+                        result_img = result_img.convert('RGBA')
                 except Exception as img_verify_error:
                     logger.warning(f"process_tryon: Could not verify rembg result: {str(img_verify_error)}")
+                    # Fallback to original Gemini result
+                    result_img = Image.open(BytesIO(result_image_bytes))
+                    if result_img.mode != 'RGBA':
+                        result_img = result_img.convert('RGBA')
+            
+            # Step 1: Detect person in Gemini result for accurate cropping
+            avatar_ratio = original_avatar_aspect
+            
+            # Detect person boundaries in the result image (more accurate than using avatar info)
+            logger.info("process_tryon: Detecting person boundaries in Gemini result for accurate cropping")
+            result_img_bytes = BytesIO()
+            result_img.save(result_img_bytes, format='PNG')
+            result_img_bytes.seek(0)
+            
+            result_person_info = _detect_person_boundaries(result_img_bytes.getvalue())
+            result_person_center_x = result_person_info['center'][0] if result_person_info else None
+            
+            if result_person_center_x:
+                logger.info(f"process_tryon: Detected person center in result: ({result_person_center_x}, {result_person_info['center'][1]}), bbox: {result_person_info['bbox']}")
+            else:
+                logger.warning("process_tryon: Could not detect person in result, using center crop")
+            
+            # Crop to match avatar aspect ratio using person center from result
+            result_img = _crop_to_aspect_ratio(result_img, avatar_ratio, person_center_x=result_person_center_x)
+            logger.info(f"process_tryon: Cropped to avatar aspect ratio: {avatar_ratio:.3f}, new size: {result_img.size}")
+            
+            # Step 2: Resize to exact avatar dimensions
+            if result_img.size != original_avatar_size:
+                logger.info(f"process_tryon: Resizing from {result_img.size} to {original_avatar_size} to match avatar dimensions")
+                result_img = result_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
+            
+            # Save final result
+            output = BytesIO()
+            result_img.save(output, format='PNG')
+            result_image_bytes = output.getvalue()
+            logger.info(f"process_tryon: Final result size: {result_img.size}, matches avatar: {result_img.size == original_avatar_size}, aspect_ratio: {result_img.size[0]/result_img.size[1]:.3f}")
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails

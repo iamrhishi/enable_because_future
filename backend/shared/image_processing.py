@@ -46,12 +46,19 @@ def validate_image(image_data: bytes, filename: str = None) -> dict:
         if file_size == 0:
             raise ValidationError("Image file is empty")
         
+        # Check if data looks like HTML (common mistake when fetching product pages instead of images)
+        if image_data.startswith(b'<') or image_data.startswith(b'<!DOCTYPE') or image_data.startswith(b'<!doctype'):
+            raise ValidationError("Invalid image format: Received HTML content instead of image. Please provide a direct image URL, not a product page URL.")
+        
         # Open and validate image
         try:
             img = Image.open(BytesIO(image_data))
             img_format = img.format
             img_size = img.size  # (width, height)
         except Exception as e:
+            # Check if it might be HTML or other non-image content
+            if b'<html' in image_data[:500].lower() or b'<!doctype' in image_data[:500].lower():
+                raise ValidationError("Invalid image format: Received HTML content instead of image. Please provide a direct image URL, not a product page URL.")
             raise ValidationError(f"Invalid image format: {str(e)}")
         
         # Check format

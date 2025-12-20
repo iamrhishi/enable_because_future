@@ -306,13 +306,25 @@ def create_tryon_job():
                                 logger.warning(f"create_tryon_job: Brand extractor failed: {str(extractor_error)}, trying simple scraping")
                                 # Fallback to simple scraping
                                 from features.garments.scraper import fetch_html, extract_images_from_html, extract_title_from_html
-                                html_content = fetch_html(item_url)
-                                if html_content:
-                                    image_urls = extract_images_from_html(html_content, item_url, max_images=10)
-                                    product_info = {
-                                        'images': image_urls,
-                                        'title': extract_title_from_html(html_content)
-                                    }
+                                try:
+                                    html_content = fetch_html(item_url)
+                                    if html_content:
+                                        image_urls = extract_images_from_html(html_content, item_url, max_images=10)
+                                        logger.info(f"create_tryon_job: Simple scraping found {len(image_urls)} image URLs")
+                                        if image_urls:
+                                            product_info = {
+                                                'images': image_urls,
+                                                'title': extract_title_from_html(html_content)
+                                            }
+                                        else:
+                                            logger.warning(f"create_tryon_job: Simple scraping found no images from HTML")
+                                            product_info = None
+                                    else:
+                                        logger.warning(f"create_tryon_job: Simple scraping failed to fetch HTML")
+                                        product_info = None
+                                except Exception as simple_scrape_error:
+                                    logger.warning(f"create_tryon_job: Simple scraping also failed: {str(simple_scrape_error)}")
+                                    product_info = None
                         
                         # Extract garment images from product info (cached or fresh)
                         # Fetch up to 3 images to send to Gemini for better results
@@ -376,13 +388,31 @@ def create_tryon_job():
                 except Exception as scrape_error:
                     logger.warning(f"create_tryon_job: Scraping failed: {str(scrape_error)}, trying direct URL")
                 
-                # If scraping didn't work, try direct image URL
+                # If scraping didn't work, try direct image URL (only if it's actually an image URL)
                 if not garment_image:
-                    try:
-                        garment_image = fetch_image_from_url(item_url)
-                    except Exception as e:
-                        logger.exception(f"create_tryon_job: Failed to fetch image from URL: {str(e)}")
-                        return error_response_from_string(f'Failed to fetch garment image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+                    # Check if item_url is actually an image URL, not a product page
+                    from features.garments.scraper import is_image_url
+                    if is_image_url(item_url):
+                        try:
+                            garment_image = fetch_image_from_url(item_url)
+                        except Exception as e:
+                            logger.exception(f"create_tryon_job: Failed to fetch image from URL: {str(e)}")
+                            return error_response_from_string(f'Failed to fetch garment image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+                    else:
+                        logger.warning(f"create_tryon_job: Could not extract images from product URL: {item_url[:100]}")
+                        # Provide more helpful error message
+                        error_msg = (
+                            'Failed to extract garment images from product URL. '
+                            'This could be due to:\n'
+                            '1. The product page requires JavaScript to load images (try using a direct image URL instead)\n'
+                            '2. The scraping service is temporarily unavailable\n'
+                            '3. The product page structure has changed\n\n'
+                            'Please try:\n'
+                            '- Providing a direct image URL (ending in .jpg, .png, etc.)\n'
+                            '- Using the /api/garments/scrape endpoint first to extract images\n'
+                            '- Checking if the product page is accessible'
+                        )
+                        return error_response_from_string(error_msg, 400, 'VALIDATION_ERROR')
             except Exception as e:
                 logger.exception(f"create_tryon_job: Error processing item_urls: {str(e)}")
                 return error_response_from_string(f'Error processing item_urls: {str(e)}', 400, 'VALIDATION_ERROR')
