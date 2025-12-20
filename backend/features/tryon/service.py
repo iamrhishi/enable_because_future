@@ -398,10 +398,37 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             else:
                 candidate = result['candidates'][0]
                 finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                finish_message = candidate.get('finishMessage', '')
+                
                 if finish_reason != 'STOP':
                     logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
+                    if finish_message:
+                        logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
                     if 'safetyRatings' in candidate:
                         logger.error(f"process_tryon: Safety ratings: {candidate['safetyRatings']}")
+                    
+                    # Handle specific finish reasons with helpful error messages
+                    if finish_reason == 'IMAGE_OTHER':
+                        error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
+                        raise ExternalServiceError(
+                            f"Gemini image generation failed: {error_msg}",
+                            service='gemini'
+                        )
+                    elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
+                        error_msg = "Gemini blocked the request due to safety filters."
+                        if finish_message:
+                            error_msg += f" {finish_message}"
+                        raise ExternalServiceError(error_msg, service='gemini')
+                    elif finish_reason == 'MAX_TOKENS':
+                        raise ExternalServiceError(
+                            "Gemini response was truncated due to token limit. The prompt or images may be too large.",
+                            service='gemini'
+                        )
+                    elif finish_reason == 'RECITATION':
+                        raise ExternalServiceError(
+                            "Gemini detected recitation of copyrighted content.",
+                            service='gemini'
+                        )
         
         if result_image_bytes is None:
             # Log full response structure for debugging (up to 2000 chars)
