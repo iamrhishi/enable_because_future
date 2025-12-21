@@ -56,6 +56,9 @@ class Config:
     SCRAPE_DO_API_KEY = os.environ.get('SCRAPE_DO_API_KEY', '')
     SCRAPE_DO_ENABLED = os.environ.get('SCRAPE_DO_ENABLED', 'False').lower() == 'true'
     
+    # Remote Try-On API Configuration
+    REMOTE_TRYON_API_URL = os.environ.get('REMOTE_TRYON_API_URL', 'http://35.198.124.100:5000/api/tryon-gemini')
+    
     @staticmethod
     def validate():
         """Validate that all required configuration is present"""

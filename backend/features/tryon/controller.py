@@ -4,11 +4,12 @@ Uses User model for avatar operations
 JWT authentication via @require_auth decorator extracts user_id from token
 """
 
-from flask import Blueprint, request, send_file
+from flask import Blueprint, request, send_file, Response
 from io import BytesIO
 import base64
 import json
 import requests
+from config import Config
 from features.tryon.job_queue import get_job_queue
 from shared.database import db_manager
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
@@ -678,4 +679,355 @@ def create_multi_tryon_job():
     except Exception as e:
         logger.exception(f"create_multi_tryon_job: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+@tryon_bp.route('/tryon-gemini', methods=['POST'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def tryon_gemini_remote():
+    """
+    Synchronous try-on using remote Gemini API
+    Forwards request to remote API and returns result directly
+    
+    Optional:
+    - avatar_image: File (PNG/JPG/JPEG) - The person's photo to dress (if not provided, uses user's saved avatar)
+    
+    Optional (at least one required):
+    - garment_image: File (PNG/JPG/JPEG) - Direct garment image file
+    - garment_url: String - Product URL to scrape for garment images
+    - garment_images[]: Array of Files - Multiple direct garment images
+    - garment_urls[]: Array of Strings - Multiple product URLs to scrape
+    
+    Optional Parameters:
+    - ai_model: String (default "gemini") - "gemini" or "gemini3"
+    - num_inference_steps: Integer (default 50) - Number of inference steps
+    
+    Returns:
+    - PNG image directly with headers
+    """
+    logger.info("tryon_gemini_remote: ENTRY")
+    
+    try:
+        # Get avatar image - use provided file or user's saved avatar
+        avatar_file = None
+        avatar_bytes = None
+        
+        if 'avatar_image' in request.files:
+            avatar_file = request.files['avatar_image']
+            if avatar_file and avatar_file.filename:
+                logger.info("tryon_gemini_remote: Using provided avatar_image file")
+                avatar_file.seek(0)
+                avatar_bytes = avatar_file.read()
+                avatar_file.seek(0)
+            else:
+                avatar_file = None
+        
+        # If no avatar file provided, use user's saved avatar
+        if not avatar_bytes:
+            # user_id is extracted from JWT token by @require_auth decorator
+            user_id = request.user_id
+            current_user = User.get_by_id(user_id)
+            if current_user and current_user.avatar:
+                avatar_bytes = current_user.avatar
+                logger.info(f"tryon_gemini_remote: Using user's saved avatar (user_id={user_id})")
+            else:
+                logger.warning(f"tryon_gemini_remote: No avatar_image provided and user has no saved avatar (user_id={user_id})")
+                return error_response_from_string(
+                    'No avatar image provided. Please upload an avatar_image file or save an avatar first using /api/save-avatar',
+                    400,
+                    'INVALID_INPUT'
+                )
+        
+        # Create file-like object from avatar bytes for remote API
+        from io import BytesIO
+        avatar_file_obj = BytesIO(avatar_bytes)
+        avatar_filename = avatar_file.filename if avatar_file else 'avatar.png'
+        avatar_content_type = avatar_file.content_type if avatar_file else 'image/png'
+        
+        # Collect garment images from multiple sources
+        garment_images = []
+        
+        # 1. Handle direct garment image files (single or multiple)
+        if 'garment_image' in request.files:
+            garment_file = request.files['garment_image']
+            if garment_file and garment_file.filename:
+                garment_file.seek(0)
+                garment_images.append(('file', garment_file))
+                logger.info("tryon_gemini_remote: Found single garment_image file")
+        
+        # Handle multiple garment images
+        if 'garment_images[]' in request.files:
+            garment_files = request.files.getlist('garment_images[]')
+            for garment_file in garment_files:
+                if garment_file and garment_file.filename:
+                    garment_file.seek(0)
+                    garment_images.append(('file', garment_file))
+            logger.info(f"tryon_gemini_remote: Found {len(garment_files)} garment_images[] files")
+        
+        # 2. Handle product URLs (single or multiple) - scrape to get images
+        garment_urls = []
+        if 'garment_url' in request.form:
+            garment_url = request.form.get('garment_url')
+            if garment_url:
+                garment_urls.append(garment_url)
+                logger.info(f"tryon_gemini_remote: Found single garment_url: {garment_url[:100]}")
+        
+        if 'garment_urls[]' in request.form:
+            urls = request.form.getlist('garment_urls[]')
+            garment_urls.extend([url for url in urls if url])
+            logger.info(f"tryon_gemini_remote: Found {len(urls)} garment_urls[]")
+        
+        # Scrape product URLs to get garment images - reuse existing scraping logic
+        if garment_urls:
+            from features.garments.scraper import is_image_url
+            from features.wardrobe.extractors import BrandExtractorFactory
+            from io import BytesIO
+            # fetch_image_from_url is already imported from shared.image_processing at the top
+            
+            for garment_url in garment_urls:
+                try:
+                    # Check if it's a direct image URL
+                    if is_image_url(garment_url):
+                        logger.info(f"tryon_gemini_remote: Fetching direct image from URL: {garment_url[:100]}")
+                        garment_img_bytes = fetch_image_from_url(garment_url)
+                        garment_file_obj = BytesIO(garment_img_bytes)
+                        garment_images.append(('bytes', (garment_url.split('/')[-1] or 'garment.png', garment_file_obj, 'image/png')))
+                        logger.info(f"tryon_gemini_remote: Successfully fetched image from URL")
+                    else:
+                        # Product page - use same scraping logic as create_tryon_job
+                        logger.info(f"tryon_gemini_remote: Scraping product page: {garment_url[:100]}")
+                        product_info = None
+                        
+                        # Try brand extractor first (same as create_tryon_job)
+                        try:
+                            extractor = BrandExtractorFactory.get_extractor(garment_url)
+                            product_info = extractor.extract_product_info(garment_url)
+                        except Exception as extractor_error:
+                            logger.warning(f"tryon_gemini_remote: Brand extractor failed: {str(extractor_error)}, trying simple scraping")
+                            # Fallback to simple scraping (same as create_tryon_job)
+                            from features.garments.scraper import fetch_html, extract_images_from_html, extract_title_from_html
+                            try:
+                                html_content = fetch_html(garment_url)
+                                if html_content:
+                                    image_urls = extract_images_from_html(html_content, garment_url, max_images=10)
+                                    logger.info(f"tryon_gemini_remote: Simple scraping found {len(image_urls)} image URLs")
+                                    if image_urls:
+                                        product_info = {
+                                            'images': image_urls,
+                                            'title': extract_title_from_html(html_content)
+                                        }
+                                    else:
+                                        logger.warning(f"tryon_gemini_remote: Simple scraping found no images from HTML")
+                                        product_info = None
+                                else:
+                                    logger.warning(f"tryon_gemini_remote: Simple scraping failed to fetch HTML")
+                                    product_info = None
+                            except Exception as simple_scrape_error:
+                                logger.warning(f"tryon_gemini_remote: Simple scraping also failed: {str(simple_scrape_error)}")
+                                product_info = None
+                        
+                        # Extract garment images from product info (same as create_tryon_job)
+                        if product_info and product_info.get('images'):
+                            images = product_info.get('images', [])
+                            # Fetch only the first image from each URL (as requested)
+                            if images:
+                                try:
+                                    img_url = images[0]  # Get only the first image
+                                    garment_img_bytes = fetch_image_from_url(img_url)
+                                    garment_file_obj = BytesIO(garment_img_bytes)
+                                    garment_images.append(('bytes', (img_url.split('/')[-1] or 'garment.png', garment_file_obj, 'image/png')))
+                                    logger.info(f"tryon_gemini_remote: Successfully scraped and fetched garment image from URL: {img_url[:100]}")
+                                except Exception as img_fetch_error:
+                                    logger.warning(f"tryon_gemini_remote: Failed to fetch first image {images[0]}: {str(img_fetch_error)}")
+                                    continue
+                        else:
+                            logger.warning(f"tryon_gemini_remote: No images found in product URL: {garment_url[:100]}")
+                except Exception as url_error:
+                    logger.warning(f"tryon_gemini_remote: Failed to process garment_url {garment_url[:100]}: {str(url_error)}")
+                    continue
+        
+        # Check if we have at least one garment
+        if not garment_images:
+            logger.warning("tryon_gemini_remote: No garment images found - need garment_image, garment_url, garment_images[], or garment_urls[]")
+            return error_response_from_string(
+                'At least one garment image or URL is required. Provide garment_image, garment_url, garment_images[], or garment_urls[]',
+                400,
+                'INVALID_INPUT'
+            )
+        
+        logger.info(f"tryon_gemini_remote: Collected {len(garment_images)} garment image(s)")
+        
+        # Get optional parameters
+        ai_model = request.form.get('ai_model', 'gemini')
+        num_inference_steps = request.form.get('num_inference_steps', '50')
+        
+        # Validate ai_model
+        if ai_model not in ['gemini', 'gemini3']:
+            logger.warning(f"tryon_gemini_remote: Invalid ai_model: {ai_model}, using default 'gemini'")
+            ai_model = 'gemini'
+        
+        # Validate num_inference_steps
+        try:
+            num_inference_steps = int(num_inference_steps)
+            if num_inference_steps < 1 or num_inference_steps > 100:
+                logger.warning(f"tryon_gemini_remote: num_inference_steps out of range: {num_inference_steps}, using default 50")
+                num_inference_steps = 50
+        except (ValueError, TypeError):
+            logger.warning(f"tryon_gemini_remote: Invalid num_inference_steps: {num_inference_steps}, using default 50")
+            num_inference_steps = 50
+        
+        logger.info(f"tryon_gemini_remote: Forwarding to remote API - ai_model={ai_model}, num_inference_steps={num_inference_steps}, garment_count={len(garment_images)}")
+        
+        # Prepare files and data for remote API
+        files = {
+            'avatar_image': (avatar_filename, avatar_file_obj, avatar_content_type)
+        }
+        
+        # Add garment images (support multiple)
+        # Remote API format: single garment uses 'garment_image', multiple use 'garment_images[]'
+        garment_file_list = []
+        
+        for idx, (img_type, img_data) in enumerate(garment_images):
+            if img_type == 'file':
+                # Direct file upload - read into bytes
+                img_file = img_data
+                img_file.seek(0)
+                img_bytes = img_file.read()
+                img_file.seek(0)
+                
+                garment_file_list.append((img_file.filename, BytesIO(img_bytes), img_file.content_type))
+            else:
+                # Bytes from URL scraping
+                filename, file_obj, content_type = img_data
+                file_obj.seek(0)
+                img_bytes = file_obj.read()
+                file_obj.seek(0)
+                
+                garment_file_list.append((filename, BytesIO(img_bytes), content_type))
+        
+        # Add to files dict - single vs multiple
+        # The requests library handles multiple files with the same field name by accepting a list
+        # But we need to ensure the BytesIO objects are fresh (position 0)
+        if len(garment_file_list) == 1:
+            files['garment_image'] = garment_file_list[0]
+        else:
+            # For multiple files, pass as a list - requests will handle it correctly
+            # Each tuple in the list should be (filename, fileobj, content_type)
+            files['garment_images[]'] = garment_file_list
+        
+        data = {
+            'ai_model': ai_model,
+            'num_inference_steps': str(num_inference_steps)
+        }
+        
+        # Forward request to remote API
+        remote_url = Config.REMOTE_TRYON_API_URL
+        logger.info(f"tryon_gemini_remote: Calling remote API: {remote_url}")
+        
+        try:
+            response = requests.post(
+                remote_url,
+                files=files,
+                data=data,
+                timeout=120  # 2 minute timeout for image generation
+            )
+        except requests.Timeout:
+            logger.error("tryon_gemini_remote: Remote API timeout")
+            return error_response_from_string(
+                'Remote API request timed out',
+                500,
+                'GENERATION_ERROR'
+            )
+        except requests.RequestException as e:
+            logger.exception(f"tryon_gemini_remote: Remote API request failed: {str(e)}")
+            return error_response_from_string(
+                f'Remote API request failed: {str(e)}',
+                500,
+                'GENERATION_ERROR'
+            )
+        
+        # Handle response
+        if response.status_code == 200:
+            # Success - return image directly
+            logger.info(f"tryon_gemini_remote: Success - received image, size: {len(response.content)} bytes")
+            
+            # Extract headers from remote response if available
+            headers = {}
+            if 'X-AI-Model' in response.headers:
+                headers['X-AI-Model'] = response.headers['X-AI-Model']
+            if 'X-Generation-Method' in response.headers:
+                headers['X-Generation-Method'] = response.headers['X-Generation-Method']
+            if 'X-Garment-Count' in response.headers:
+                headers['X-Garment-Count'] = response.headers['X-Garment-Count']
+            if 'X-Total-Reference-Images' in response.headers:
+                headers['X-Total-Reference-Images'] = response.headers['X-Total-Reference-Images']
+            
+            # Return PNG image with headers
+            return Response(
+                response.content,
+                mimetype='image/png',
+                headers=headers
+            )
+        
+        elif response.status_code == 400:
+            # Bad request - try to parse error message
+            try:
+                error_data = response.json()
+                error_code = error_data.get('code', 'INVALID_INPUT')
+                error_message = error_data.get('message', 'Bad request')
+                
+                # Handle content blocked case
+                if error_code == 'CONTENT_BLOCKED':
+                    logger.warning(f"tryon_gemini_remote: Content blocked - {error_message}")
+                    return error_response_from_string(
+                        error_message,
+                        400,
+                        error_code
+                    )
+                else:
+                    logger.warning(f"tryon_gemini_remote: Invalid input - {error_message}")
+                    return error_response_from_string(
+                        error_message,
+                        400,
+                        error_code
+                    )
+            except (ValueError, json.JSONDecodeError):
+                # If response is not JSON, return raw text
+                logger.warning(f"tryon_gemini_remote: Invalid input - {response.text}")
+                return error_response_from_string(
+                    response.text or 'Invalid input',
+                    400,
+                    'INVALID_INPUT'
+                )
+        
+        elif response.status_code == 500:
+            # Server error
+            try:
+                error_data = response.json()
+                error_message = error_data.get('message', 'Generation failed')
+                logger.error(f"tryon_gemini_remote: Generation error - {error_message}")
+                return error_response_from_string(
+                    f'Gemini generation failed: {error_message}',
+                    500,
+                    'GENERATION_ERROR'
+                )
+            except (ValueError, json.JSONDecodeError):
+                logger.error(f"tryon_gemini_remote: Generation error - {response.text}")
+                return error_response_from_string(
+                    f'Gemini generation failed: {response.text or "Unknown error"}',
+                    500,
+                    'GENERATION_ERROR'
+                )
+        
+        else:
+            # Other status codes
+            logger.error(f"tryon_gemini_remote: Unexpected status code: {response.status_code}")
+            return error_response_from_string(
+                f'Remote API returned unexpected status: {response.status_code}',
+                500,
+                'GENERATION_ERROR'
+            )
+    
+    except Exception as e:
+        logger.exception(f"tryon_gemini_remote: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500, 'GENERATION_ERROR')
 

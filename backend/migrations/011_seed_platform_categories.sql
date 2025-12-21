@@ -24,7 +24,7 @@ INSERT OR IGNORE INTO platform_categories (category_section, name, display_name,
 ('upper_body', 't_shirts', 'T-shirts', 1),
 ('upper_body', 'shirts', 'Shirts', 2),
 ('upper_body', 'tops', 'Tops', 3),
-('upper_body', 'pullover_cardigans', 'Pullover & Cardigans', 4),
+('upper_body', 'pullover_cardigans', 'Pullover', 4),
 ('upper_body', 'jackets', 'Jackets', 5),
 ('upper_body', 'others', 'Others', 99);
 

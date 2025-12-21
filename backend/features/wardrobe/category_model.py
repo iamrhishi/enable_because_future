@@ -382,7 +382,7 @@ class WardrobeCategory:
             # Upper body
             'blazers': 'Blazer.jpeg',
             'jackets': 'Jackets.jpeg',
-            'pullover_cardigans': 'Pullover & Cardigans.jpeg',
+            'pullover_cardigans': 'Pullover.jpeg',
             'shirts': 'Shirts.jpeg',
             'tops': 'Tops.jpeg',
             't_shirts': 'Tshirt.jpeg',
@@ -454,7 +454,7 @@ class WardrobeCategory:
                     # Upper body
                     ('upper_body', 'blazers', 'Blazers', 1),
                     ('upper_body', 'jackets', 'Jackets', 2),
-                    ('upper_body', 'pullover_cardigans', 'Pullover & Cardigans', 3),
+                    ('upper_body', 'pullover_cardigans', 'Pullover', 3),
                     ('upper_body', 'shirts', 'Shirts', 4),
                     ('upper_body', 'tops', 'Tops', 5),
                     ('upper_body', 't_shirts', 'T-shirts', 6),

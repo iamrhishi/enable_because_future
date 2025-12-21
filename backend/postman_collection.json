@@ -1843,6 +1843,254 @@
 							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"a1b2c3d4-5678-90ef-ghij-klmnopqrstuv\",\n        \"status\": \"queued\",\n        \"estimated_time\": 20\n    }\n}"
 						}
 					]
+				},
+				{
+					"name": "Try-On Gemini (Synchronous - Remote API)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar_image",
+									"type": "file",
+									"src": [],
+									"disabled": true,
+									"description": "Optional: Avatar image file (PNG/JPG/JPEG). If omitted, backend uses the authenticated user's saved avatar from /api/save-avatar."
+								},
+								{
+									"key": "garment_image",
+									"type": "file",
+									"src": [],
+									"disabled": true,
+									"description": "Optional: Direct garment image file (PNG/JPG/JPEG). At least one garment input is required (garment_image, garment_images[], garment_url, or garment_urls[])."
+								},
+								{
+									"key": "garment_images[]",
+									"type": "file",
+									"src": [],
+									"disabled": true,
+									"description": "Optional: Multiple direct garment image files. Supports multiple garments for try-on."
+								},
+								{
+									"key": "garment_url",
+									"value": "https://www.zara.com/in/en/basic-heavyweight-hoodie-p00761810.html",
+									"type": "text",
+									"disabled": true,
+									"description": "Optional: Single product URL. Backend will scrape images from the product page. At least one garment input is required."
+								},
+								{
+									"key": "garment_urls[]",
+									"value": "[\"https://www.zara.com/in/en/basic-heavyweight-hoodie-p00761810.html\"]",
+									"type": "text",
+									"disabled": true,
+									"description": "Optional: JSON array of product URLs. Backend will scrape images from each product page. Supports multiple garments for try-on."
+								},
+								{
+									"key": "ai_model",
+									"value": "gemini",
+									"type": "text",
+									"disabled": true,
+									"description": "Optional: AI model to use. Options: \"gemini\" (default) or \"gemini3\"."
+								},
+								{
+									"key": "num_inference_steps",
+									"value": "50",
+									"type": "text",
+									"disabled": true,
+									"description": "Optional: Number of inference steps (integer 1-100). Default: 50."
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tryon-gemini",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tryon-gemini"]
+						},
+						"description": "Synchronous try-on using remote Gemini API. Forwards request to remote API (http://35.198.124.100:5000/api/tryon-gemini) and returns PNG image directly. No job ID - response is immediate. Supports multiple garments (via garment_images[] or garment_urls[]). Avatar is optional - uses user's saved avatar if not provided. Garment can be provided as: direct image file(s), product URL(s) that will be scraped, or a mix of both."
+					},
+					"response": [
+						{
+							"name": "Success - PNG Image",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_url",
+											"value": "https://www.zara.com/in/en/basic-heavyweight-hoodie-p00761810.html",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon-gemini",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon-gemini"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "image",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "image/png"
+								},
+								{
+									"key": "X-AI-Model",
+									"value": "gemini"
+								},
+								{
+									"key": "X-Generation-Method",
+									"value": "gemini-image-generation"
+								},
+								{
+									"key": "X-Garment-Count",
+									"value": "1"
+								},
+								{
+									"key": "X-Total-Reference-Images",
+									"value": "3"
+								}
+							],
+							"cookie": [],
+							"body": "[Binary PNG image data]"
+						},
+						{
+							"name": "Bad Request - Missing Garment",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": []
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon-gemini",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon-gemini"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"At least one garment input is required: garment_image, garment_images[], garment_url, or garment_urls[]\",\n    \"error_code\": \"INVALID_INPUT\"\n}"
+						},
+						{
+							"name": "Bad Request - No Avatar",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_url",
+											"value": "https://www.zara.com/in/en/product/12345",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon-gemini",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon-gemini"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"No avatar image provided. Please upload an avatar_image file or save an avatar first using /api/save-avatar\",\n    \"error_code\": \"INVALID_INPUT\"\n}"
+						},
+						{
+							"name": "Bad Request - Content Blocked",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_url",
+											"value": "https://example.com/product",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon-gemini",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon-gemini"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-Error-Type",
+									"value": "content_blocked"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Content blocked by safety filters\",\n    \"error_code\": \"CONTENT_BLOCKED\"\n}"
+						},
+						{
+							"name": "Internal Server Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_url",
+											"value": "https://www.zara.com/in/en/product/12345",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon-gemini",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon-gemini"]
+								}
+							},
+							"status": "Internal Server Error",
+							"code": 500,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Remote try-on API error: Internal Server Error\",\n    \"error_code\": \"INTERNAL_ERROR\"\n}"
+						}
+					]
 				}
 			]
 		},
