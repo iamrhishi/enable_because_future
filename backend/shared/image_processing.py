@@ -228,13 +228,25 @@ def preprocess_image(image_data: bytes, filename: str = None,
     logger.info("preprocess_image: ENTRY")
     
     try:
-        # Validate first
+        # Quick dimension check first - if image exceeds MAX_DIMENSION, resize immediately
+        # This prevents validation errors for large images that will be resized anyway
+        try:
+            img = Image.open(BytesIO(image_data))
+            max_dim = max(img.size)
+            if max_dim > MAX_DIMENSION and resize:
+                logger.info(f"preprocess_image: Image dimension {max_dim}px exceeds {MAX_DIMENSION}px, resizing first")
+                image_data = resize_image(image_data, max_dimension=MAX_DIMENSION_RESIZE)
+        except Exception as e:
+            # If we can't open the image, let validation handle it
+            logger.debug(f"preprocess_image: Could not check dimensions: {str(e)}, proceeding to validation")
+        
+        # Validate (after potential initial resize)
         validation = validate_image(image_data, filename)
         logger.info(f"preprocess_image: Image validated - {validation['format']}, {validation['size']}")
         
         processed = image_data
         
-        # Resize if needed
+        # Resize if needed (for images that are within MAX_DIMENSION but larger than MAX_DIMENSION_RESIZE)
         if resize:
             processed = resize_image(processed, max_dimension=MAX_DIMENSION_RESIZE)
         

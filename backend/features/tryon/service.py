@@ -363,9 +363,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "   - CRITICAL: If image 1 shows the person's feet, the output MUST show feet. If image 1 shows full legs, the output MUST show full legs. ",
             "   - CRITICAL: The person's legs and feet are visible in image 1 - they MUST be fully visible in the output. DO NOT crop or cut off the legs. ",
             "   - The person must appear at the SAME scale and position as in image 1. ",
-            f"   - The person in image 1 occupies {person_info['scale'][0]*100:.1f}% width and {person_info['scale'][1]*100:.1f}% height. Maintain this exact scale. ",
-            f"   - The person's bounding box is ({person_info['bbox'][0]}, {person_info['bbox'][1]}, {person_info['bbox'][2]}, {person_info['bbox'][3]}). Keep the person in the same position. ",
-            f"   - The person's height in image 1 is {person_info['bbox'][3]} pixels. The output must show the full {person_info['bbox'][3]} pixels of the person's height. ",
+            f"   - The person in image 1 occupies {person_info['scale'][0]*100:.1f}% width and {person_info['scale'][1]*100:.1f}% height. Maintain this exact scale. " if person_info else "",
+            f"   - The person's bounding box is ({person_info['bbox'][0]}, {person_info['bbox'][1]}, {person_info['bbox'][2]}, {person_info['bbox'][3]}). Keep the person in the same position. " if person_info else "",
+            f"   - The person's height in image 1 is {person_info['bbox'][3]} pixels. The output must show the full {person_info['bbox'][3]} pixels of the person's height. " if person_info else "",
             "   - DO NOT zoom in on the upper body or garment area - the full person from head to toe must be visible. ",
             "   - WARNING: If you crop or zoom the person, the output will be REJECTED. The full person must be visible. ",
             "",
@@ -416,6 +416,18 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         prompt = "".join(prompt_parts)
         
+        # Create a simpler fallback prompt in case the main one fails with IMAGE_OTHER
+        # Keep critical requirements but more concise
+        fallback_prompt = (
+            f"Virtual try-on: Make the person in image 1 wear the garment from image 2. "
+            f"Output size: EXACTLY {original_avatar_size[0]}x{original_avatar_size[1]} pixels (same as image 1). "
+            f"Show COMPLETE person from head to toe - all body parts including legs and feet must be visible. "
+            f"Preserve background exactly as in image 1. "
+            f"Extract garment fabric from image 2 and fit it naturally on the person at {body_location}. "
+            f"Output must be different from image 1 - garment must be visible. "
+            f"{person_position_text if person_position_text else ''}"
+        )
+        
         # Log full prompt and all details being sent
         logger.info("=" * 80)
         logger.info("process_tryon: FULL PROMPT BEING SENT TO GEMINI:")
@@ -442,28 +454,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         if total_payload_size_mb > 20:  # Gemini typically has ~20MB limit
             logger.warning(f"process_tryon: Payload size ({total_payload_size_mb:.2f}MB) may exceed Gemini limits")
         
-        # Call Gemini API
+        # Call Gemini API with retry logic (including fallback prompt for IMAGE_OTHER)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
-        
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": person_base64
-                        }
-                    },
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": garment_base64
-                        }
-                    }
-                ]
-            }]
-        }
         
         headers = {
             "Content-Type": "application/json",
@@ -473,189 +465,228 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "key": Config.GEMINI_API_KEY
         }
         
-        # Log full request details
-        logger.info("process_tryon: GEMINI API REQUEST DETAILS:")
-        logger.info(f"  - URL: {url}")
-        logger.info(f"  - Model: {Config.GEMINI_MODEL_NAME}")
-        logger.info(f"  - Headers: {headers}")
-        logger.info(f"  - Payload structure:")
-        logger.info(f"    - contents[0].parts[0]: text prompt ({len(prompt)} chars)")
-        logger.info(f"    - contents[0].parts[1]: person image (base64, {len(person_base64)} chars)")
-        logger.info(f"    - contents[0].parts[2]: garment image (base64, {len(garment_base64)} chars)")
-        logger.info("=" * 80)
+        # Try with main prompt first, then fallback if IMAGE_OTHER
+        prompts_to_try = [
+            ("main", prompt),
+            ("fallback", fallback_prompt)
+        ]
         
-        logger.info(f"process_tryon: Calling Gemini API - model={Config.GEMINI_MODEL_NAME}")
-        
-        # Retry logic for transient errors (500, 503, 429)
-        max_retries = 3
-        retry_delay = 2  # seconds
-        response = None
-        
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
-        
-                # Success
-                if response.status_code == 200:
-                    break
-                
-                # Retryable errors
-                if response.status_code in (500, 503, 429) and attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                
-                # Non-retryable errors or final attempt
-                logger.error(
-                    f"process_tryon: Gemini API error - status={response.status_code}, "
-                    f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
-                )
-                if attempt == max_retries - 1:
-                    raise ExternalServiceError(
-                        f"Gemini API error: {response.status_code} - {response.text[:200]}",
-                        service='gemini'
-                    )
-            except requests.Timeout:
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API timeout (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
-            except requests.RequestException as e:
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API request exception: {str(e)} (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    raise
-        
-        if response is None or response.status_code != 200:
-            error_msg = f"Gemini API failed after {max_retries} attempts"
-            if response:
-                error_msg += f" - status={response.status_code}, response={response.text[:200]}"
-            logger.error(f"process_tryon: {error_msg}")
-            raise ExternalServiceError(error_msg, service='gemini')
-        
-        # Parse response
-        result = response.json()
-        logger.debug(f"process_tryon: Response structure keys: {list(result.keys())}")
-        
-        # Extract image from response - try multiple response formats
         result_image_bytes = None
+        last_error = None
         
-        # Format 1: Standard Gemini format with candidates
-        if 'candidates' in result and len(result['candidates']) > 0:
-            candidate = result['candidates'][0]
-            if 'content' in candidate and 'parts' in candidate['content']:
-                for part in candidate['content']['parts']:
-                    # Check for inline_data (snake_case) - standard Gemini format
-                    if 'inline_data' in part and 'data' in part['inline_data']:
-                        image_data_b64 = part['inline_data']['data']
-                        result_image_bytes = base64.b64decode(image_data_b64)
-                        logger.info(f"process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes")
-                        break
-                    # Check for inlineData (camelCase) - Nano Banana image model format
-                    if 'inlineData' in part and 'data' in part['inlineData']:
-                        image_data_b64 = part['inlineData']['data']
-                        result_image_bytes = base64.b64decode(image_data_b64)
-                        logger.info(f"process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes")
-                        break
-                    # Also check for text response that might contain base64
-                    if 'text' in part:
-                        text_content = part['text']
-                        # Check if text contains base64 image data
-                        if 'data:image' in text_content or len(text_content) > 1000:
-                            logger.debug(f"process_tryon: Found text content, length={len(text_content)}")
-                            # Try to extract base64 from text
-                            base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
-                            if base64_match:
-                                image_data_b64 = base64_match.group(1)
-                                result_image_bytes = base64.b64decode(image_data_b64)
-                                logger.info(f"process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes")
-                                break
-        
-        # Format 2: Direct response with image data
-        if result_image_bytes is None and 'data' in result:
-            image_data_b64 = result['data']
-            result_image_bytes = base64.b64decode(image_data_b64)
-            logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
-        
-        # Format 3: Check for error in response
-        if result_image_bytes is None and 'error' in result:
-            error_info = result.get('error', {})
-            error_message = error_info.get('message', 'Unknown error')
-            error_code = error_info.get('code', 'UNKNOWN')
-            logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
-            raise ExternalServiceError(
-                f"Gemini API error: {error_code} - {error_message}",
-                service='gemini'
-            )
-        
-        # Format 4: Check if candidates exist but are empty or have finishReason
-        if result_image_bytes is None and 'candidates' in result:
-            if len(result['candidates']) == 0:
-                logger.error(f"process_tryon: Gemini returned empty candidates array")
-            else:
-                candidate = result['candidates'][0]
-                finish_reason = candidate.get('finishReason', 'UNKNOWN')
-                finish_message = candidate.get('finishMessage', '')
-                
-                if finish_reason != 'STOP':
-                    logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
-                    if finish_message:
-                        logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
-                    if 'safetyRatings' in candidate:
-                        logger.error(f"process_tryon: Safety ratings: {candidate['safetyRatings']}")
-                    
-                    # Handle specific finish reasons with helpful error messages
-                    if finish_reason == 'IMAGE_OTHER':
-                        error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
-                        raise ExternalServiceError(
-                            f"Gemini image generation failed: {error_msg}",
-                            service='gemini'
-                        )
-                    elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
-                        error_msg = "Gemini blocked the request due to safety filters."
-                        if finish_message:
-                            error_msg += f" {finish_message}"
-                        raise ExternalServiceError(error_msg, service='gemini')
-                    elif finish_reason == 'MAX_TOKENS':
-                        raise ExternalServiceError(
-                            "Gemini response was truncated due to token limit. The prompt or images may be too large.",
-                            service='gemini'
-                        )
-                    elif finish_reason == 'RECITATION':
-                        raise ExternalServiceError(
-                            "Gemini detected recitation of copyrighted content.",
-                            service='gemini'
-                        )
-        
-        if result_image_bytes is None:
-            # Log full response structure for debugging (up to 2000 chars)
-            try:
-                response_str = json.dumps(result, indent=2)
-                logger.error(f"process_tryon: Unexpected response structure. Full response ({len(response_str)} chars):")
-                logger.error(response_str[:2000])
-                if len(response_str) > 2000:
-                    logger.error(f"... (truncated, total length: {len(response_str)} chars)")
-            except Exception:
-                logger.error(f"process_tryon: Unexpected response structure. Full response: {str(result)[:2000]}")
+        for prompt_name, current_prompt in prompts_to_try:
+            logger.info(f"process_tryon: Attempting with {prompt_name} prompt ({len(current_prompt)} chars)")
             
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": current_prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": person_base64
+                            }
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": garment_base64
+                            }
+                        }
+                    ]
+                }]
+            }
+            
+            # Log full request details (only for first attempt)
+            if prompt_name == "main":
+                logger.info("=" * 80)
+                logger.info("process_tryon: GEMINI API REQUEST DETAILS:")
+                logger.info(f"  - URL: {url}")
+                logger.info(f"  - Model: {Config.GEMINI_MODEL_NAME}")
+                logger.info(f"  - Headers: {headers}")
+                logger.info(f"  - Payload structure:")
+                logger.info(f"    - contents[0].parts[0]: text prompt ({len(current_prompt)} chars)")
+                logger.info(f"    - contents[0].parts[1]: person image (base64, {len(person_base64)} chars)")
+                logger.info(f"    - contents[0].parts[2]: garment image (base64, {len(garment_base64)} chars)")
+                logger.info("=" * 80)
+            
+            # Retry logic for transient errors (500, 503, 429)
+            max_retries = 3
+            retry_delay = 2  # seconds
+            response = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
+            
+                    # Success
+                    if response.status_code == 200:
+                        break
+                    
+                    # Retryable errors
+                    if response.status_code in (500, 503, 429) and attempt < max_retries - 1:
+                        wait_time = retry_delay * (attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {wait_time} seconds..."
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    
+                    # Non-retryable errors or final attempt
+                    logger.error(
+                        f"process_tryon: Gemini API error - status={response.status_code}, "
+                        f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
+                    )
+                    if attempt == max_retries - 1:
+                        raise ExternalServiceError(
+                            f"Gemini API error: {response.status_code} - {response.text[:200]}",
+                            service='gemini'
+                        )
+                except requests.Timeout:
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API timeout (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {wait_time} seconds..."
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
+                except requests.RequestException as e:
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API request exception: {str(e)} (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {wait_time} seconds..."
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise
+            
+            if response is None or response.status_code != 200:
+                error_msg = f"Gemini API failed after {max_retries} attempts"
+                if response:
+                    error_msg += f" - status={response.status_code}, response={response.text[:200]}"
+                logger.error(f"process_tryon: {error_msg}")
+                last_error = ExternalServiceError(error_msg, service='gemini')
+                continue  # Try next prompt
+            
+            # Parse response
+            result = response.json()
+            logger.debug(f"process_tryon: Response structure keys: {list(result.keys())}")
+            
+            # Extract image from response - try multiple response formats
+            result_image_bytes = None
+            
+            # Format 1: Standard Gemini format with candidates
+            if 'candidates' in result and len(result['candidates']) > 0:
+                candidate = result['candidates'][0]
+                if 'content' in candidate and 'parts' in candidate['content']:
+                    for part in candidate['content']['parts']:
+                        # Check for inline_data (snake_case) - standard Gemini format
+                        if 'inline_data' in part and 'data' in part['inline_data']:
+                            image_data_b64 = part['inline_data']['data']
+                            result_image_bytes = base64.b64decode(image_data_b64)
+                            logger.info(f"process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes")
+                            break
+                        # Check for inlineData (camelCase) - Nano Banana image model format
+                        if 'inlineData' in part and 'data' in part['inlineData']:
+                            image_data_b64 = part['inlineData']['data']
+                            result_image_bytes = base64.b64decode(image_data_b64)
+                            logger.info(f"process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes")
+                            break
+                        # Also check for text response that might contain base64
+                        if 'text' in part:
+                            text_content = part['text']
+                            # Check if text contains base64 image data
+                            if 'data:image' in text_content or len(text_content) > 1000:
+                                logger.debug(f"process_tryon: Found text content, length={len(text_content)}")
+                                # Try to extract base64 from text
+                                base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
+                                if base64_match:
+                                    image_data_b64 = base64_match.group(1)
+                                    result_image_bytes = base64.b64decode(image_data_b64)
+                                    logger.info(f"process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes")
+                                    break
+            
+            # Format 2: Direct response with image data
+            if result_image_bytes is None and 'data' in result:
+                image_data_b64 = result['data']
+                result_image_bytes = base64.b64decode(image_data_b64)
+                logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
+            
+            # Format 3: Check for error in response
+            if result_image_bytes is None and 'error' in result:
+                error_info = result.get('error', {})
+                error_message = error_info.get('message', 'Unknown error')
+                error_code = error_info.get('code', 'UNKNOWN')
+                logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
+                last_error = ExternalServiceError(
+                    f"Gemini API error: {error_code} - {error_message}",
+                    service='gemini'
+                )
+                continue  # Try next prompt
+            
+            # Format 4: Check if candidates exist but are empty or have finishReason
+            if result_image_bytes is None and 'candidates' in result:
+                if len(result['candidates']) == 0:
+                    logger.error(f"process_tryon: Gemini returned empty candidates array")
+                    last_error = ExternalServiceError("Gemini returned empty candidates", service='gemini')
+                    continue
+                else:
+                    candidate = result['candidates'][0]
+                    finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                    finish_message = candidate.get('finishMessage', '')
+                    
+                    if finish_reason != 'STOP':
+                        logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
+                        if finish_message:
+                            logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
+                        if 'safetyRatings' in candidate:
+                            logger.error(f"process_tryon: Safety ratings: {candidate['safetyRatings']}")
+                        
+                        # Handle specific finish reasons
+                        if finish_reason == 'IMAGE_OTHER':
+                            error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
+                            logger.warning(f"process_tryon: IMAGE_OTHER with {prompt_name} prompt - will try fallback")
+                            last_error = ExternalServiceError(
+                                f"Gemini image generation failed: {error_msg}",
+                                service='gemini'
+                            )
+                            continue  # Try fallback prompt
+                        elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
+                            error_msg = "Gemini blocked the request due to safety filters."
+                            if finish_message:
+                                error_msg += f" {finish_message}"
+                            last_error = ExternalServiceError(error_msg, service='gemini')
+                            break  # Don't retry for safety issues
+                        elif finish_reason == 'MAX_TOKENS':
+                            last_error = ExternalServiceError(
+                                "Gemini response was truncated due to token limit. The prompt or images may be too large.",
+                                service='gemini'
+                            )
+                            break  # Don't retry for token limit
+                        elif finish_reason == 'RECITATION':
+                            last_error = ExternalServiceError(
+                                "Gemini detected recitation of copyrighted content.",
+                                service='gemini'
+                            )
+                            break  # Don't retry for recitation
+            
+            # If we got an image, break out of prompt loop
+            if result_image_bytes is not None:
+                logger.info(f"process_tryon: Successfully got image with {prompt_name} prompt")
+                break
+        
+        # If we still don't have an image after trying all prompts
+        if result_image_bytes is None:
+            if last_error:
+                raise last_error
             raise ExternalServiceError(
-                "Unexpected response format from Gemini API. Please check logs for full response structure.",
+                "Failed to generate image from Gemini API after trying multiple prompts. Please check logs for details.",
                 service='gemini'
             )
         
