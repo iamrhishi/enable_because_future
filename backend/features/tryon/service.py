@@ -16,17 +16,18 @@ from shared.logger import logger
 from shared.errors import ExternalServiceError
 
 
-def _crop_to_aspect_ratio(img: Image.Image, target_ratio: float, person_center_x: float = None) -> Image.Image:
+def _crop_to_aspect_ratio(img: Image.Image, target_ratio: float, person_center_x: float = None, person_info: dict = None) -> Image.Image:
     """
-    Crop image to match target aspect ratio using center crop (or person-aware crop if person_center_x provided)
+    Crop image to match target aspect ratio while preserving entire person including extended body parts
     
     Args:
         img: PIL Image to crop
         target_ratio: Target aspect ratio (width / height)
         person_center_x: Optional person center X coordinate for person-aware cropping
+        person_info: Optional dict with person boundary info (bbox, center) to preserve extended parts
         
     Returns:
-        Cropped PIL Image matching target aspect ratio
+        Cropped PIL Image matching target aspect ratio with full person preserved
     """
     w, h = img.size
     current_ratio = w / h if h > 0 else 1.0
@@ -34,6 +35,73 @@ def _crop_to_aspect_ratio(img: Image.Image, target_ratio: float, person_center_x
     if abs(current_ratio - target_ratio) < 0.001:  # Already matches (within 0.1% tolerance)
         return img
     
+    # If we have person info, use it to ensure we don't crop off extended body parts
+    if person_info and person_info.get('bbox'):
+        bbox = person_info['bbox']
+        bbox_x, bbox_y, bbox_w, bbox_h = bbox
+        person_center = person_info.get('center', (bbox_x + bbox_w // 2, bbox_y + bbox_h // 2))
+        
+        # Add padding around person to preserve extended parts (hands, feet, etc.)
+        # Use 3% of image dimensions or minimum 20 pixels
+        padding_x = max(int(w * 0.03), 20)
+        padding_y = max(int(h * 0.03), 20)
+        
+        # Calculate person bounds with padding
+        person_left = max(0, bbox_x - padding_x)
+        person_right = min(w, bbox_x + bbox_w + padding_x)
+        person_top = max(0, bbox_y - padding_y)
+        person_bottom = min(h, bbox_y + bbox_h + padding_y)
+        
+        person_width = person_right - person_left
+        person_height = person_bottom - person_top
+        person_ratio = person_width / person_height if person_height > 0 else 1.0
+        
+        # If cropping width, ensure person fits horizontally
+        if current_ratio > target_ratio:
+            new_w = int(h * target_ratio)
+            # Ensure person fits within the crop
+            if person_width > new_w:
+                # Person is wider than target - center on person
+                person_center_x = person_center[0]
+                ideal_left = person_center_x - new_w / 2
+                left = max(0, min(int(ideal_left), w - new_w))
+            else:
+                # Person fits - center crop but ensure person is included
+                ideal_left = person_center[0] - new_w / 2
+                left = max(0, min(int(ideal_left), w - new_w))
+                # Adjust if person would be cut off
+                if person_right > left + new_w:
+                    left = max(0, person_right - new_w)
+                if person_left < left:
+                    left = max(0, person_left)
+            
+            right = left + new_w
+            logger.info(f"_crop_to_aspect_ratio: Person-aware width crop from {w} to {new_w} (person bbox: {bbox}, padding: {padding_x}px)")
+            return img.crop((left, 0, right, h))
+        else:
+            # Crop height - ensure person fits vertically
+            new_h = int(w / target_ratio)
+            # Ensure person fits within the crop
+            if person_height > new_h:
+                # Person is taller than target - center on person
+                person_center_y = person_center[1]
+                ideal_top = person_center_y - new_h / 2
+                top = max(0, min(int(ideal_top), h - new_h))
+            else:
+                # Person fits - center crop but ensure person is included
+                ideal_top = person_center[1] - new_h / 2
+                top = max(0, min(int(ideal_top), h - new_h))
+                # Adjust if person would be cut off
+                if person_bottom > top + new_h:
+                    top = max(0, person_bottom - new_h)
+                if person_top < top:
+                    top = max(0, person_top)
+            
+            bottom = top + new_h
+            logger.info(f"_crop_to_aspect_ratio: Person-aware height crop from {h} to {new_h} (person bbox: {bbox}, padding: {padding_y}px)")
+            return img.crop((0, top, w, bottom))
+    
+    # Fallback to original logic if no person info
     if current_ratio > target_ratio:
         # Crop width (image is wider than target)
         new_w = int(h * target_ratio)
@@ -265,10 +333,13 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         prompt_parts = [
             "CRITICAL INSTRUCTIONS - READ FIRST:",
             "",
+            "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
+            "",
+            "MANDATORY: The output MUST be DIFFERENT from image 1. The person MUST be wearing the garment from image 2. ",
+            "DO NOT return image 1 unchanged. DO NOT return a product photo. The output MUST show the person from image 1 with the garment fitted onto them. ",
+            "",
             f"OUTPUT IMAGE SIZE: EXACTLY {original_avatar_size[0]} pixels wide × {original_avatar_size[1]} pixels tall (same as image 1).",
             f"PERSON VISIBILITY: Show the COMPLETE person from head to toe - ALL body parts including legs and feet must be visible.",
-            "",
-            "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
             "",
             garment_category_text,
             "",
@@ -304,20 +375,27 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "   - DO NOT change background dimensions. ",
             "   - Background must be IDENTICAL to image 1 - same size, same pixels. ",
             "",
-            f"4. GARMENT: ",
-            "   - Extract only the clothing fabric from image 2 (no body parts, no models, no people). ",
-            "   - Fit the garment onto the person at {body_location} ONLY. ",
-            "   - Apply 3D transformation to wrap the garment around the body naturally. ",
-            "   - The garment should follow body contours, pose, and perspective. ",
+            f"4. GARMENT (MANDATORY - MUST BE VISIBLE IN OUTPUT): ",
+            "   - Image 2 contains a garment/clothing item. Extract ONLY the clothing fabric/material from image 2. ",
+            "   - DO NOT include any body parts, models, or people from image 2. Extract ONLY the garment fabric. ",
+            f"   - Fit the extracted garment onto the person in image 1 at the {body_location}. ",
+            "   - The garment MUST be visible in the output - the person MUST be wearing it. ",
+            "   - Apply 3D transformation to wrap the garment around the body naturally, following body contours. ",
+            "   - The garment should match the person's pose, perspective, and body shape. ",
             "   - Add proper depth, shadows, and highlights for realistic appearance. ",
-            "   - Only modify pixels in the garment area - do NOT touch the person, background, or any other area. ",
+            "   - CRITICAL: The output MUST be visibly different from image 1 - the person MUST be wearing the garment. ",
+            "   - CRITICAL: If image 2 shows a product photo with a model, extract ONLY the garment fabric and apply it to the person in image 1. ",
+            "   - CRITICAL: DO NOT return image 1 unchanged. DO NOT return a product photo. The output MUST show the person from image 1 with the garment from image 2 fitted onto them. ",
+            "   - WARNING: If the output looks identical to image 1 (no garment visible), the output will be REJECTED. ",
             "",
             "FINAL OUTPUT CHECKLIST:",
             f"- Image dimensions: EXACTLY {original_avatar_size[0]}x{original_avatar_size[1]} pixels (same as image 1). ",
             "- Full person visible: head to toe, all body parts, same scale as image 1. ",
+            f"- GARMENT VISIBLE: The person MUST be wearing the garment from image 2 at the {body_location}. ",
             "- Background: identical to image 1, pixel-by-pixel. ",
             "- Format: PNG with RGBA channels. ",
-            "- NO padding, NO borders, NO cropping, NO compression. "
+            "- NO padding, NO borders, NO cropping, NO compression. ",
+            "- OUTPUT MUST BE DIFFERENT FROM IMAGE 1: The garment from image 2 MUST be visible on the person. "
         ]
         
         # Add garment details to prompt if provided
@@ -648,9 +726,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             else:
                 logger.warning("process_tryon: Could not detect person in result, using center crop")
             
-            # Crop to match avatar aspect ratio using person center from result
-            result_img = _crop_to_aspect_ratio(result_img, avatar_ratio, person_center_x=result_person_center_x)
-            logger.info(f"process_tryon: Cropped to avatar aspect ratio: {avatar_ratio:.3f}, new size: {result_img.size}")
+            # Crop to match avatar aspect ratio using person boundaries to preserve extended body parts
+            result_img = _crop_to_aspect_ratio(result_img, avatar_ratio, person_center_x=result_person_center_x, person_info=result_person_info)
+            logger.info(f"process_tryon: Cropped to avatar aspect ratio: {avatar_ratio:.3f}, new size: {result_img.size}, person preserved with padding")
             
             # Step 2: Resize to exact avatar dimensions
             if result_img.size != original_avatar_size:

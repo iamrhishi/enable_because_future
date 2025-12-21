@@ -529,9 +529,17 @@ def get_job_status(job_id):
             return error_response_from_string('Job not found', 404, 'NOT_FOUND')
         
         # Verify user owns this job
-        if job['user_id'] != user_id:
-            logger.warning(f"get_job_status: Unauthorized access - job_id={job_id}, user_id={user_id}")
-            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        # Normalize user_id comparison (handle string vs int, whitespace, etc.)
+        job_user_id = str(job['user_id']).strip() if job.get('user_id') else None
+        auth_user_id = str(user_id).strip() if user_id else None
+        
+        if job_user_id != auth_user_id:
+            logger.warning(f"get_job_status: Unauthorized access - job_id={job_id}, job belongs to user_id={job_user_id!r}, but authenticated user_id={auth_user_id!r}")
+            return error_response_from_string(
+                f'Job {job_id} does not belong to your account. Please use a job ID that belongs to your user account.',
+                403,
+                'AUTHORIZATION_ERROR'
+            )
         
         # Convert result_url to absolute URL if present
         if job.get('result_url'):
@@ -566,9 +574,17 @@ def get_job_result(job_id):
             return error_response_from_string('Job not found', 404, 'NOT_FOUND')
         
         # Verify user owns this job
-        if job['user_id'] != user_id:
-            logger.warning(f"get_job_result: Unauthorized access - job_id={job_id}, user_id={user_id}")
-            return error_response_from_string('Not authorized', 403, 'AUTHORIZATION_ERROR')
+        # Normalize user_id comparison (handle string vs int, whitespace, etc.)
+        job_user_id = str(job['user_id']).strip() if job.get('user_id') else None
+        auth_user_id = str(user_id).strip() if user_id else None
+        
+        if job_user_id != auth_user_id:
+            logger.warning(f"get_job_result: Unauthorized access - job_id={job_id}, job belongs to user_id={job_user_id!r}, but authenticated user_id={auth_user_id!r}")
+            return error_response_from_string(
+                f'Job {job_id} does not belong to your account. Please use a job ID that belongs to your user account.',
+                403,
+                'AUTHORIZATION_ERROR'
+            )
         
         if job['status'] != 'done':
             logger.info(f"get_job_result: Job not completed - job_id={job_id}, status={job['status']}")

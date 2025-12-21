@@ -185,14 +185,31 @@ def save_avatar():
                 
                 # Trim transparent padding to make person fill more of the frame
                 # This removes any transparent edges that might make the person appear small
+                # IMPORTANT: Add padding around bounding box to preserve extended body parts (hands, etc.)
                 try:
                     # Get bounding box of non-transparent pixels
                     bbox = img.getbbox()
                     if bbox:
-                        # Crop to bounding box to remove transparent padding
                         original_size = img.size
-                        img = img.crop(bbox)
-                        logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding)")
+                        img_width, img_height = original_size
+                        
+                        # Add padding margin to preserve extended body parts (hands, feet, etc.)
+                        # Use 2% of image dimensions or minimum 15 pixels, whichever is larger
+                        padding_x = max(int(img_width * 0.02), 15)
+                        padding_y = max(int(img_height * 0.02), 15)
+                        
+                        # Extract bounding box coordinates
+                        left, top, right, bottom = bbox
+                        
+                        # Expand bounding box with padding, but stay within image boundaries
+                        left = max(0, left - padding_x)
+                        top = max(0, top - padding_y)
+                        right = min(img_width, right + padding_x)
+                        bottom = min(img_height, bottom + padding_y)
+                        
+                        # Crop with padding to preserve entire person including extended parts
+                        img = img.crop((left, top, right, bottom))
+                        logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding, preserved {padding_x}x{padding_y}px margin for extended body parts)")
                     else:
                         logger.warning(f"Avatar has no visible content (all transparent)")
                 except Exception as trim_error:
@@ -314,6 +331,7 @@ def save_avatar_local():
             avatar_data = _remove_background_local(avatar_data)
             
             # Trim transparent padding to make person fill more of the frame
+            # IMPORTANT: Add padding around bounding box to preserve extended body parts (hands, etc.)
             try:
                 img = Image.open(BytesIO(avatar_data))
                 # Ensure RGBA mode
@@ -323,10 +341,26 @@ def save_avatar_local():
                 # Get bounding box of non-transparent pixels
                 bbox = img.getbbox()
                 if bbox:
-                    # Crop to bounding box to remove transparent padding
                     original_size = img.size
-                    img = img.crop(bbox)
-                    logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding)")
+                    img_width, img_height = original_size
+                    
+                    # Add padding margin to preserve extended body parts (hands, feet, etc.)
+                    # Use 2% of image dimensions or minimum 15 pixels, whichever is larger
+                    padding_x = max(int(img_width * 0.02), 15)
+                    padding_y = max(int(img_height * 0.02), 15)
+                    
+                    # Extract bounding box coordinates
+                    left, top, right, bottom = bbox
+                    
+                    # Expand bounding box with padding, but stay within image boundaries
+                    left = max(0, left - padding_x)
+                    top = max(0, top - padding_y)
+                    right = min(img_width, right + padding_x)
+                    bottom = min(img_height, bottom + padding_y)
+                    
+                    # Crop with padding to preserve entire person including extended parts
+                    img = img.crop((left, top, right, bottom))
+                    logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding, preserved {padding_x}x{padding_y}px margin for extended body parts)")
                     
                     # Save trimmed image
                     output = BytesIO()
