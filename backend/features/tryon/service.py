@@ -226,7 +226,7 @@ def _detect_person_boundaries(person_image: bytes) -> dict:
 def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper', 
                   garment_details: dict = None, options: dict = None) -> str:
     """
-    Process try-on using Gemini (Nano Banana) API
+    Process try-on using Gemini (Nano Banana) API - simplified version for faster response
     
     Args:
         person_image: Person image bytes (avatar or selfie with background removed)
@@ -247,214 +247,80 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         if not Config.GEMINI_API_KEY:
             raise ExternalServiceError("Gemini API key not configured", service='gemini')
         
-        # Handle list of images - use only the first one (revert to single image approach that was working)
+        # Handle list of images - use only the first one
         if isinstance(garment_image, list):
-            garment_image = garment_image[0]  # Use first image only
-            logger.info(f"process_tryon: Received list of {len(garment_image)} images, using first one only")
+            garment_image = garment_image[0]
+            logger.info(f"process_tryon: Received list of images, using first one only")
         
         # Log image sizes for debugging
         person_size_mb = len(person_image) / (1024 * 1024)
         garment_size_mb = len(garment_image) / (1024 * 1024)
         logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
         
-        # Capture original avatar dimensions to ensure result matches (prevents size mismatch)
-        person_img = Image.open(BytesIO(person_image))
-        original_avatar_size = person_img.size  # (width, height)
-        original_avatar_aspect = original_avatar_size[0] / original_avatar_size[1]
-        logger.info(f"process_tryon: Original avatar dimensions: {original_avatar_size}, aspect_ratio: {original_avatar_aspect:.3f}")
-        
-        # Detect person boundaries using rembg
-        person_info = _detect_person_boundaries(person_image)
-        logger.info(f"process_tryon: Person boundaries - bbox: {person_info['bbox']}, center: {person_info['center']}, "
-                  f"scale: {person_info['scale']}, aspect_ratio: {person_info['aspect_ratio']:.3f}")
-        
         # Convert images to base64
         person_base64 = base64.b64encode(person_image).decode('utf-8')
         garment_base64 = base64.b64encode(garment_image).decode('utf-8')
         
-        # Log base64 sizes
-        person_b64_size_mb = len(person_base64) / (1024 * 1024)
-        garment_b64_size_mb = len(garment_base64) / (1024 * 1024)
-        logger.info(f"process_tryon: Base64 sizes - person: {person_b64_size_mb:.2f}MB, garment: {garment_b64_size_mb:.2f}MB")
-        
-        # Build prompt with garment details - direct and technical approach
-        # Extract category information from garment_details
-        category_section = None
-        category_name = None
-        if garment_details:
-            category_section = garment_details.get('category_section')
-            category_name = garment_details.get('category_name')
-        
-        # Build category information text
-        garment_category_text = ""
-        if category_section and category_name:
-            # Use actual category section and category name
-            section_display = category_section.replace('_', ' ').title()  # 'upper_body' -> 'Upper Body'
-            category_display = category_name.replace('_', ' ').title()  # 't_shirts' -> 'T Shirts'
-            garment_category_text = f"GARMENT INFORMATION: Category Section = {section_display}, Category = {category_display}. "
-            if category_section == 'upper_body':
-                garment_category_text += f"This is an upper body garment (specifically a {category_display}) that goes on the torso/upper body. "
-            elif category_section == 'lower_body':
-                garment_category_text += f"This is a lower body garment (specifically a {category_display}) that goes on the legs/lower body. "
-        elif garment_type:
-            # Fallback to garment_type if category info not available
-            garment_category_text = f"GARMENT TYPE: {garment_type.upper()} BODY ("
-            if garment_type == 'upper':
-                garment_category_text += "shirt, jacket, hoodie, top, etc. - goes on upper body/torso). "
-            else:
-                garment_category_text += "pants, jeans, shorts, etc. - goes on lower body/legs). "
-        
         # Determine body location text
         body_location = "appropriate body location"
-        if category_section == 'upper_body':
-            body_location = "upper body/torso"
-        elif category_section == 'lower_body':
-            body_location = "lower body/legs"
+        if garment_details:
+            category_section = garment_details.get('category_section')
+            if category_section == 'upper_body':
+                body_location = "upper body/torso"
+            elif category_section == 'lower_body':
+                body_location = "lower body/legs"
         elif garment_type == 'upper':
             body_location = "upper body/torso"
         elif garment_type == 'lower':
             body_location = "lower body/legs"
         
-        # Build person positioning info for prompt
-        person_position_text = ""
-        if person_info:
-            bbox_x, bbox_y, bbox_w, bbox_h = person_info['bbox']
-            center_x, center_y = person_info['center']
-            width_ratio, height_ratio = person_info['scale']
-            aspect_ratio = person_info['aspect_ratio']
-            person_position_text = (
-                f"PERSON POSITIONING INFO: The person in image 1 is centered at ({center_x}, {center_y}) pixels, "
-                f"with bounding box ({bbox_x}, {bbox_y}, {bbox_w}, {bbox_h}) pixels. "
-                f"The person occupies {width_ratio*100:.1f}% of image width and {height_ratio*100:.1f}% of image height. "
-                f"The person's aspect ratio is {aspect_ratio:.3f}. "
-                f"Maintain this exact positioning, scale, and aspect ratio in the output. "
-            )
+        # Build garment details text from available information
+        garment_info_parts = []
+        if garment_details:
+            if garment_details.get('category_name'):
+                category_display = garment_details['category_name'].replace('_', ' ').title()
+                garment_info_parts.append(f"Category: {category_display}")
+            elif garment_details.get('category'):
+                category_display = garment_details['category'].replace('_', ' ').title()
+                garment_info_parts.append(f"Category: {category_display}")
+            
+            if garment_details.get('material_type'):
+                material_display = garment_details['material_type'].replace('_', ' ').title()
+                garment_info_parts.append(f"Material: {material_display}")
+            
+            if garment_details.get('brand'):
+                garment_info_parts.append(f"Brand: {garment_details['brand']}")
+            
+            if garment_details.get('color'):
+                garment_info_parts.append(f"Color: {garment_details['color']}")
+            
+            if garment_details.get('style'):
+                style_display = garment_details['style'].replace('_', ' ').title()
+                garment_info_parts.append(f"Style: {style_display}")
         
+        # Build comprehensive prompt with all garment details
         prompt_parts = [
-            "CRITICAL INSTRUCTIONS - READ FIRST:",
-            "",
-            "TASK: Virtual try-on - Make the person in image 1 wear the garment from image 2. ",
-            "",
-            "MANDATORY: The output MUST be DIFFERENT from image 1. The person MUST be wearing the garment from image 2. ",
-            "DO NOT return image 1 unchanged. DO NOT return a product photo. The output MUST show the person from image 1 with the garment fitted onto them. ",
-            "",
-            f"OUTPUT IMAGE SIZE: EXACTLY {original_avatar_size[0]} pixels wide × {original_avatar_size[1]} pixels tall (same as image 1).",
-            f"PERSON VISIBILITY: Show the COMPLETE person from head to toe - ALL body parts including legs and feet must be visible.",
-            "",
-            garment_category_text,
-            "",
-            person_position_text,
-            "",
-            "ABSOLUTE REQUIREMENTS (MUST FOLLOW EXACTLY):",
-            "",
-            "1. OUTPUT DIMENSIONS (CRITICAL - MUST MATCH - NO EXCEPTIONS): ",
-            f"   - The output image MUST be EXACTLY {original_avatar_size[0]} pixels wide and {original_avatar_size[1]} pixels tall. ",
-            f"   - This is the EXACT same size as image 1. DO NOT change these dimensions. ",
-            f"   - DO NOT add padding, borders, or resize. Output must be {original_avatar_size[0]}x{original_avatar_size[1]}. ",
-            f"   - Width: {original_avatar_size[0]} pixels. Height: {original_avatar_size[1]} pixels. ",
-            "   - If you return any other dimensions, the output will be REJECTED. ",
-            "",
-            "2. PERSON (MANDATORY - HIGHEST PRIORITY - DO NOT CROP OR ZOOM): ",
-            "   - Keep image 1's person COMPLETELY unchanged and FULLY visible in the output. ",
-            "   - Preserve the ENTIRE person: face, head, neck, shoulders, torso, arms, hands, waist, legs, knees, ankles, feet - EVERY body part. ",
-            "   - DO NOT crop, cut off, zoom in, or hide ANY part of the person. ",
-            "   - DO NOT focus on just the garment area - show the FULL person from head to toe. ",
-            "   - The person's complete body must be visible in the output, exactly as shown in image 1. ",
-            "   - CRITICAL: If image 1 shows the person's feet, the output MUST show feet. If image 1 shows full legs, the output MUST show full legs. ",
-            "   - CRITICAL: The person's legs and feet are visible in image 1 - they MUST be fully visible in the output. DO NOT crop or cut off the legs. ",
-            "   - The person must appear at the SAME scale and position as in image 1. ",
-            f"   - The person in image 1 occupies {person_info['scale'][0]*100:.1f}% width and {person_info['scale'][1]*100:.1f}% height. Maintain this exact scale. " if person_info else "",
-            f"   - The person's bounding box is ({person_info['bbox'][0]}, {person_info['bbox'][1]}, {person_info['bbox'][2]}, {person_info['bbox'][3]}). Keep the person in the same position. " if person_info else "",
-            f"   - The person's height in image 1 is {person_info['bbox'][3]} pixels. The output must show the full {person_info['bbox'][3]} pixels of the person's height. " if person_info else "",
-            "   - DO NOT zoom in on the upper body or garment area - the full person from head to toe must be visible. ",
-            "   - WARNING: If you crop or zoom the person, the output will be REJECTED. The full person must be visible. ",
-            "",
-            "3. BACKGROUND (MANDATORY): ",
-            "   - Copy image 1's background EXACTLY pixel-by-pixel. ",
-            "   - DO NOT add any padding, borders, or extra space. ",
-            "   - DO NOT change background dimensions. ",
-            "   - Background must be IDENTICAL to image 1 - same size, same pixels. ",
-            "",
-            f"4. GARMENT (MANDATORY - MUST BE VISIBLE IN OUTPUT): ",
-            "   - Image 2 contains a garment/clothing item. Extract ONLY the clothing fabric/material from image 2. ",
-            "   - DO NOT include any body parts, models, or people from image 2. Extract ONLY the garment fabric. ",
-            f"   - Fit the extracted garment onto the person in image 1 at the {body_location}. ",
-            "   - The garment MUST be visible in the output - the person MUST be wearing it. ",
-            "   - Apply 3D transformation to wrap the garment around the body naturally, following body contours. ",
-            "   - The garment should match the person's pose, perspective, and body shape. ",
-            "   - Add proper depth, shadows, and highlights for realistic appearance. ",
-            "   - CRITICAL: The output MUST be visibly different from image 1 - the person MUST be wearing the garment. ",
-            "   - CRITICAL: If image 2 shows a product photo with a model, extract ONLY the garment fabric and apply it to the person in image 1. ",
-            "   - CRITICAL: DO NOT return image 1 unchanged. DO NOT return a product photo. The output MUST show the person from image 1 with the garment from image 2 fitted onto them. ",
-            "   - WARNING: If the output looks identical to image 1 (no garment visible), the output will be REJECTED. ",
-            "",
-            "FINAL OUTPUT CHECKLIST:",
-            f"- Image dimensions: EXACTLY {original_avatar_size[0]}x{original_avatar_size[1]} pixels (same as image 1). ",
-            "- Full person visible: head to toe, all body parts, same scale as image 1. ",
-            f"- GARMENT VISIBLE: The person MUST be wearing the garment from image 2 at the {body_location}. ",
-            "- Background: identical to image 1, pixel-by-pixel. ",
-            "- Format: PNG with RGBA channels. ",
-            "- NO padding, NO borders, NO cropping, NO compression. ",
-            "- OUTPUT MUST BE DIFFERENT FROM IMAGE 1: The garment from image 2 MUST be visible on the person. "
+            "Virtual try-on: Make the person in image 1 wear the garment from image 2. "
         ]
         
-        # Add garment details to prompt if provided
-        if garment_details:
-            details_text = "Additional garment information: "
-            if garment_details.get('category'):
-                details_text += f"Category: {garment_details['category']}. "
-            if garment_details.get('material_type'):
-                details_text += f"Material: {garment_details['material_type']}. "
-            if garment_details.get('brand'):
-                details_text += f"Brand: {garment_details['brand']}. "
-            if garment_details.get('color'):
-                details_text += f"Color: {garment_details['color']}. "
-            if garment_details.get('style'):
-                details_text += f"Style: {garment_details['style']}. "
-            prompt_parts.append("")
-            prompt_parts.append(details_text)
+        # Add garment details if available
+        if garment_info_parts:
+            prompt_parts.append(f"Garment details: {', '.join(garment_info_parts)}. ")
+        
+        prompt_parts.extend([
+            f"Extract the garment fabric from image 2 and fit it naturally on the person at {body_location}. ",
+            "Show the complete person from head to toe. ",
+            "The output must be different from image 1 - the garment must be visible on the person. ",
+            "Preserve the background from image 1. ",
+            "DO NOT add excess padding, borders, or unnecessary additional area around the image. ",
+            "Keep the output image dimensions and composition similar to image 1 without adding extra space. ",
+            "OPTIMIZE FOR SPEED: Return a smaller, lower resolution version of the image for faster processing. "
+            "Reduce image quality and size while maintaining visual clarity of the person and garment."
+        ])
         
         prompt = "".join(prompt_parts)
         
-        # Create a simpler fallback prompt in case the main one fails with IMAGE_OTHER
-        # Keep critical requirements but more concise
-        fallback_prompt = (
-            f"Virtual try-on: Make the person in image 1 wear the garment from image 2. "
-            f"Output size: EXACTLY {original_avatar_size[0]}x{original_avatar_size[1]} pixels (same as image 1). "
-            f"Show COMPLETE person from head to toe - all body parts including legs and feet must be visible. "
-            f"Preserve background exactly as in image 1. "
-            f"Extract garment fabric from image 2 and fit it naturally on the person at {body_location}. "
-            f"Output must be different from image 1 - garment must be visible. "
-            f"{person_position_text if person_position_text else ''}"
-        )
-        
-        # Log full prompt and all details being sent
-        logger.info("=" * 80)
-        logger.info("process_tryon: FULL PROMPT BEING SENT TO GEMINI:")
-        logger.info("-" * 80)
-        logger.info(prompt)
-        logger.info("-" * 80)
-        logger.info(f"process_tryon: Prompt length: {len(prompt)} characters")
-        
-        # Log garment details if provided
-        if garment_details:
-            logger.info("process_tryon: GARMENT DETAILS BEING SENT:")
-            logger.info(f"  - garment_type: {garment_type}")
-            logger.info(f"  - category_section: {category_section}")
-            logger.info(f"  - category_name: {category_name}")
-            logger.info(f"  - full garment_details: {garment_details}")
-        else:
-            logger.info("process_tryon: No garment_details provided")
-        
-        # Check if payload might be too large (Gemini has limits)
-        total_payload_size = len(person_base64) + len(garment_base64) + len(prompt)
-        total_payload_size_mb = total_payload_size / (1024 * 1024)
-        logger.info(f"process_tryon: Total payload size: {total_payload_size_mb:.2f}MB")
-        
-        if total_payload_size_mb > 20:  # Gemini typically has ~20MB limit
-            logger.warning(f"process_tryon: Payload size ({total_payload_size_mb:.2f}MB) may exceed Gemini limits")
-        
-        # Call Gemini API with retry logic (including fallback prompt for IMAGE_OTHER)
+        # Call Gemini API with retry logic for transient errors only
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
         
         headers = {
@@ -465,312 +331,226 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "key": Config.GEMINI_API_KEY
         }
         
-        # Try with main prompt first, then fallback if IMAGE_OTHER
-        prompts_to_try = [
-            ("main", prompt),
-            ("fallback", fallback_prompt)
-        ]
-        
-        result_image_bytes = None
-        last_error = None
-        
-        for prompt_name, current_prompt in prompts_to_try:
-            logger.info(f"process_tryon: Attempting with {prompt_name} prompt ({len(current_prompt)} chars)")
-            
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": current_prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": "image/png",
-                                "data": person_base64
-                            }
-                        },
-                        {
-                            "inline_data": {
-                                "mime_type": "image/png",
-                                "data": garment_base64
-                            }
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": person_base64
                         }
-                    ]
-                }]
+                    },
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": garment_base64
+                        }
+                    }
+                ]
+            }],
+            # Generation config to optimize for speed
+            "generationConfig": {
+                "temperature": 0.4,  # Lower temperature for faster, more deterministic output
             }
-            
-            # Log full request details (only for first attempt)
-            if prompt_name == "main":
-                logger.info("=" * 80)
-                logger.info("process_tryon: GEMINI API REQUEST DETAILS:")
-                logger.info(f"  - URL: {url}")
-                logger.info(f"  - Model: {Config.GEMINI_MODEL_NAME}")
-                logger.info(f"  - Headers: {headers}")
-                logger.info(f"  - Payload structure:")
-                logger.info(f"    - contents[0].parts[0]: text prompt ({len(current_prompt)} chars)")
-                logger.info(f"    - contents[0].parts[1]: person image (base64, {len(person_base64)} chars)")
-                logger.info(f"    - contents[0].parts[2]: garment image (base64, {len(garment_base64)} chars)")
-                logger.info("=" * 80)
-            
-            # Retry logic for transient errors (500, 503, 429)
-            max_retries = 3
-            retry_delay = 2  # seconds
-            response = None
-            
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
-            
-                    # Success
-                    if response.status_code == 200:
-                        break
-                    
-                    # Retryable errors
-                    if response.status_code in (500, 503, 429) and attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)
-                        logger.warning(
-                            f"process_tryon: Gemini API returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
-                            f"Retrying in {wait_time} seconds..."
-                        )
-                        time.sleep(wait_time)
-                        continue
-                    
-                    # Non-retryable errors or final attempt
-                    logger.error(
-                        f"process_tryon: Gemini API error - status={response.status_code}, "
-                        f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
+        }
+        
+        # Retry logic for transient errors (500, 503, 429) only
+        max_retries = 3
+        retry_delay = 2  # seconds
+        response = None
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
+        
+                # Success
+                if response.status_code == 200:
+                    break
+                
+                # Retryable errors
+                if response.status_code in (500, 503, 429) and attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(
+                        f"process_tryon: Gemini API returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {wait_time} seconds..."
                     )
-                    if attempt == max_retries - 1:
-                        raise ExternalServiceError(
-                            f"Gemini API error: {response.status_code} - {response.text[:200]}",
-                            service='gemini'
-                        )
-                except requests.Timeout:
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)
-                        logger.warning(
-                            f"process_tryon: Gemini API timeout (attempt {attempt + 1}/{max_retries}). "
-                            f"Retrying in {wait_time} seconds..."
-                        )
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
-                except requests.RequestException as e:
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)
-                        logger.warning(
-                            f"process_tryon: Gemini API request exception: {str(e)} (attempt {attempt + 1}/{max_retries}). "
-                            f"Retrying in {wait_time} seconds..."
-                        )
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        raise
-            
-            if response is None or response.status_code != 200:
-                error_msg = f"Gemini API failed after {max_retries} attempts"
-                if response:
-                    error_msg += f" - status={response.status_code}, response={response.text[:200]}"
-                logger.error(f"process_tryon: {error_msg}")
-                last_error = ExternalServiceError(error_msg, service='gemini')
-                continue  # Try next prompt
-            
-            # Parse response
-            result = response.json()
-            logger.debug(f"process_tryon: Response structure keys: {list(result.keys())}")
-            
-            # Extract image from response - try multiple response formats
-            result_image_bytes = None
-            
-            # Format 1: Standard Gemini format with candidates
-            if 'candidates' in result and len(result['candidates']) > 0:
-                candidate = result['candidates'][0]
-                if 'content' in candidate and 'parts' in candidate['content']:
-                    for part in candidate['content']['parts']:
-                        # Check for inline_data (snake_case) - standard Gemini format
-                        if 'inline_data' in part and 'data' in part['inline_data']:
-                            image_data_b64 = part['inline_data']['data']
-                            result_image_bytes = base64.b64decode(image_data_b64)
-                            logger.info(f"process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes")
-                            break
-                        # Check for inlineData (camelCase) - Nano Banana image model format
-                        if 'inlineData' in part and 'data' in part['inlineData']:
-                            image_data_b64 = part['inlineData']['data']
-                            result_image_bytes = base64.b64decode(image_data_b64)
-                            logger.info(f"process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes")
-                            break
-                        # Also check for text response that might contain base64
-                        if 'text' in part:
-                            text_content = part['text']
-                            # Check if text contains base64 image data
-                            if 'data:image' in text_content or len(text_content) > 1000:
-                                logger.debug(f"process_tryon: Found text content, length={len(text_content)}")
-                                # Try to extract base64 from text
-                                base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
-                                if base64_match:
-                                    image_data_b64 = base64_match.group(1)
-                                    result_image_bytes = base64.b64decode(image_data_b64)
-                                    logger.info(f"process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes")
-                                    break
-            
-            # Format 2: Direct response with image data
-            if result_image_bytes is None and 'data' in result:
-                image_data_b64 = result['data']
-                result_image_bytes = base64.b64decode(image_data_b64)
-                logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
-            
-            # Format 3: Check for error in response
-            if result_image_bytes is None and 'error' in result:
-                error_info = result.get('error', {})
-                error_message = error_info.get('message', 'Unknown error')
-                error_code = error_info.get('code', 'UNKNOWN')
-                logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
-                last_error = ExternalServiceError(
-                    f"Gemini API error: {error_code} - {error_message}",
-                    service='gemini'
+                    time.sleep(wait_time)
+                    continue
+                
+                # Non-retryable errors or final attempt
+                logger.error(
+                    f"process_tryon: Gemini API error - status={response.status_code}, "
+                    f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
                 )
-                continue  # Try next prompt
-            
-            # Format 4: Check if candidates exist but are empty or have finishReason
-            if result_image_bytes is None and 'candidates' in result:
-                if len(result['candidates']) == 0:
-                    logger.error(f"process_tryon: Gemini returned empty candidates array")
-                    last_error = ExternalServiceError("Gemini returned empty candidates", service='gemini')
+                if attempt == max_retries - 1:
+                    raise ExternalServiceError(
+                        f"Gemini API error: {response.status_code} - {response.text[:200]}",
+                        service='gemini'
+                    )
+            except requests.Timeout:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(
+                        f"process_tryon: Gemini API timeout (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {wait_time} seconds..."
+                    )
+                    time.sleep(wait_time)
                     continue
                 else:
-                    candidate = result['candidates'][0]
-                    finish_reason = candidate.get('finishReason', 'UNKNOWN')
-                    finish_message = candidate.get('finishMessage', '')
-                    
-                    if finish_reason != 'STOP':
-                        logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
-                        if finish_message:
-                            logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
-                        if 'safetyRatings' in candidate:
-                            logger.error(f"process_tryon: Safety ratings: {candidate['safetyRatings']}")
-                        
-                        # Handle specific finish reasons
-                        if finish_reason == 'IMAGE_OTHER':
-                            error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
-                            logger.warning(f"process_tryon: IMAGE_OTHER with {prompt_name} prompt - will try fallback")
-                            last_error = ExternalServiceError(
-                                f"Gemini image generation failed: {error_msg}",
-                                service='gemini'
-                            )
-                            continue  # Try fallback prompt
-                        elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
-                            error_msg = "Gemini blocked the request due to safety filters."
-                            if finish_message:
-                                error_msg += f" {finish_message}"
-                            last_error = ExternalServiceError(error_msg, service='gemini')
-                            break  # Don't retry for safety issues
-                        elif finish_reason == 'MAX_TOKENS':
-                            last_error = ExternalServiceError(
-                                "Gemini response was truncated due to token limit. The prompt or images may be too large.",
-                                service='gemini'
-                            )
-                            break  # Don't retry for token limit
-                        elif finish_reason == 'RECITATION':
-                            last_error = ExternalServiceError(
-                                "Gemini detected recitation of copyrighted content.",
-                                service='gemini'
-                            )
-                            break  # Don't retry for recitation
-            
-            # If we got an image, break out of prompt loop
-            if result_image_bytes is not None:
-                logger.info(f"process_tryon: Successfully got image with {prompt_name} prompt")
-                break
+                    raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(
+                        f"process_tryon: Gemini API request exception: {str(e)} (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {wait_time} seconds..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise
         
-        # If we still don't have an image after trying all prompts
-        if result_image_bytes is None:
-            if last_error:
-                raise last_error
+        if response is None or response.status_code != 200:
+            error_msg = f"Gemini API failed after {max_retries} attempts"
+            if response:
+                error_msg += f" - status={response.status_code}, response={response.text[:200]}"
+            logger.error(f"process_tryon: {error_msg}")
+            raise ExternalServiceError(error_msg, service='gemini')
+        
+        # Parse response
+        result = response.json()
+        
+        # Extract image from response - try multiple response formats
+        result_image_bytes = None
+        
+        # Format 1: Standard Gemini format with candidates
+        if 'candidates' in result and len(result['candidates']) > 0:
+            candidate = result['candidates'][0]
+            if 'content' in candidate and 'parts' in candidate['content']:
+                for part in candidate['content']['parts']:
+                    # Check for inline_data (snake_case) - standard Gemini format
+                    if 'inline_data' in part and 'data' in part['inline_data']:
+                        image_data_b64 = part['inline_data']['data']
+                        result_image_bytes = base64.b64decode(image_data_b64)
+                        logger.info(f"process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes")
+                        break
+                    # Check for inlineData (camelCase) - Nano Banana image model format
+                    if 'inlineData' in part and 'data' in part['inlineData']:
+                        image_data_b64 = part['inlineData']['data']
+                        result_image_bytes = base64.b64decode(image_data_b64)
+                        logger.info(f"process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes")
+                        break
+                    # Also check for text response that might contain base64
+                    if 'text' in part:
+                        text_content = part['text']
+                        # Try to extract base64 from text
+                        base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
+                        if base64_match:
+                            image_data_b64 = base64_match.group(1)
+                            result_image_bytes = base64.b64decode(image_data_b64)
+                            logger.info(f"process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes")
+                            break
+        
+        # Format 2: Direct response with image data
+        if result_image_bytes is None and 'data' in result:
+            image_data_b64 = result['data']
+            result_image_bytes = base64.b64decode(image_data_b64)
+            logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
+        
+        # Format 3: Check for error in response
+        if result_image_bytes is None and 'error' in result:
+            error_info = result.get('error', {})
+            error_message = error_info.get('message', 'Unknown error')
+            error_code = error_info.get('code', 'UNKNOWN')
+            logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
             raise ExternalServiceError(
-                "Failed to generate image from Gemini API after trying multiple prompts. Please check logs for details.",
+                f"Gemini API error: {error_code} - {error_message}",
                 service='gemini'
             )
         
-        # Log result image info and process for transparency
+        # Format 4: Check if candidates exist but are empty or have finishReason
+        if result_image_bytes is None and 'candidates' in result:
+            if len(result['candidates']) == 0:
+                logger.error(f"process_tryon: Gemini returned empty candidates array")
+                raise ExternalServiceError("Gemini returned empty candidates", service='gemini')
+            else:
+                candidate = result['candidates'][0]
+                finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                finish_message = candidate.get('finishMessage', '')
+                
+                if finish_reason != 'STOP':
+                    logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
+                    if finish_message:
+                        logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
+                    
+                    # Handle specific finish reasons - raise error immediately
+                    if finish_reason == 'IMAGE_OTHER':
+                        error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
+                        logger.error(f"process_tryon: IMAGE_OTHER - {error_msg}")
+                        raise ExternalServiceError(
+                            f"Gemini image generation failed: {error_msg}",
+                            service='gemini'
+                        )
+                    elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
+                        error_msg = "Gemini blocked the request due to safety filters."
+                        if finish_message:
+                            error_msg += f" {finish_message}"
+                        raise ExternalServiceError(error_msg, service='gemini')
+                    elif finish_reason == 'MAX_TOKENS':
+                        raise ExternalServiceError(
+                            "Gemini response was truncated due to token limit. The prompt or images may be too large.",
+                            service='gemini'
+                        )
+                    elif finish_reason == 'RECITATION':
+                        raise ExternalServiceError(
+                            "Gemini detected recitation of copyrighted content.",
+                            service='gemini'
+                        )
+                    else:
+                        # Unknown finish reason
+                        error_msg = f"Gemini returned finish reason: {finish_reason}"
+                        if finish_message:
+                            error_msg += f" - {finish_message}"
+                        raise ExternalServiceError(error_msg, service='gemini')
+        
+        # If we still don't have an image
+        if result_image_bytes is None:
+            raise ExternalServiceError(
+                "Failed to extract image from Gemini API response. Please check logs for details.",
+                service='gemini'
+            )
+        
+        # Check if background removal is needed
         try:
             result_img = Image.open(BytesIO(result_image_bytes))
-            gemini_result_size = result_img.size
-            gemini_aspect = gemini_result_size[0] / gemini_result_size[1] if gemini_result_size[1] > 0 else 1.0
-            logger.info(f"process_tryon: Gemini returned image, mode={result_img.mode}, size={gemini_result_size}, aspect_ratio: {gemini_aspect:.3f}")
-            logger.info(f"process_tryon: Avatar dimensions: {original_avatar_size}, aspect_ratio: {original_avatar_aspect:.3f}")
-            logger.info(f"process_tryon: Gemini returned: {gemini_result_size}, aspect_ratio: {gemini_aspect:.3f}")
-            
-            # Verify aspect ratio matches avatar
-            aspect_ratio_diff = abs(gemini_aspect - original_avatar_aspect)
-            if aspect_ratio_diff > 0.1:  # Allow 10% tolerance
-                logger.warning(f"process_tryon: Aspect ratio mismatch! Avatar: {original_avatar_aspect:.3f}, Gemini: {gemini_aspect:.3f}, diff: {aspect_ratio_diff:.3f}")
-            else:
-                logger.info(f"process_tryon: Aspect ratio matches avatar (diff: {aspect_ratio_diff:.3f})")
-            
-            # Check if Gemini already provided transparency
             has_transparency = result_img.mode in ('RGBA', 'LA', 'P')
             logger.info(f"process_tryon: Gemini result has transparency: {has_transparency}, mode: {result_img.mode}")
             
-            # Process Gemini result: background removal + aspect ratio matching
-            if has_transparency:
-                logger.info("process_tryon: Gemini result already has transparency - processing aspect ratio")
-                if result_img.mode != 'RGBA':
-                    result_img = result_img.convert('RGBA')
-            else:
-                # Gemini has no transparency - use rembg to remove background
+            if not has_transparency:
+                # Use rembg to remove background
                 logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
                 from rembg import remove  # type: ignore
-                
-                logger.info(f"process_tryon: Image dimensions before rembg: {gemini_result_size}")
                 
                 result_image_bytes = remove(result_image_bytes)
                 logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
                 
-                # Process rembg result
-                try:
-                    result_img = Image.open(BytesIO(result_image_bytes))
-                    rembg_size = result_img.size
-                    logger.info(f"process_tryon: rembg result image, mode={result_img.mode}, size={rembg_size}")
-                    
-                    if result_img.mode != 'RGBA':
-                        result_img = result_img.convert('RGBA')
-                except Exception as img_verify_error:
-                    logger.warning(f"process_tryon: Could not verify rembg result: {str(img_verify_error)}")
-                    # Fallback to original Gemini result
-                    result_img = Image.open(BytesIO(result_image_bytes))
-                    if result_img.mode != 'RGBA':
-                        result_img = result_img.convert('RGBA')
-            
-            # Step 1: Detect person in Gemini result for accurate cropping
-            avatar_ratio = original_avatar_aspect
-            
-            # Detect person boundaries in the result image (more accurate than using avatar info)
-            logger.info("process_tryon: Detecting person boundaries in Gemini result for accurate cropping")
-            result_img_bytes = BytesIO()
-            result_img.save(result_img_bytes, format='PNG')
-            result_img_bytes.seek(0)
-            
-            result_person_info = _detect_person_boundaries(result_img_bytes.getvalue())
-            result_person_center_x = result_person_info['center'][0] if result_person_info else None
-            
-            if result_person_center_x:
-                logger.info(f"process_tryon: Detected person center in result: ({result_person_center_x}, {result_person_info['center'][1]}), bbox: {result_person_info['bbox']}")
-            else:
-                logger.warning("process_tryon: Could not detect person in result, using center crop")
-            
-            # Crop to match avatar aspect ratio using person boundaries to preserve extended body parts
-            result_img = _crop_to_aspect_ratio(result_img, avatar_ratio, person_center_x=result_person_center_x, person_info=result_person_info)
-            logger.info(f"process_tryon: Cropped to avatar aspect ratio: {avatar_ratio:.3f}, new size: {result_img.size}, person preserved with padding")
-            
-            # Step 2: Resize to exact avatar dimensions
-            if result_img.size != original_avatar_size:
-                logger.info(f"process_tryon: Resizing from {result_img.size} to {original_avatar_size} to match avatar dimensions")
-                result_img = result_img.resize(original_avatar_size, Image.Resampling.LANCZOS)
-            
-            # Save final result
-            output = BytesIO()
-            result_img.save(output, format='PNG')
-            result_image_bytes = output.getvalue()
-            logger.info(f"process_tryon: Final result size: {result_img.size}, matches avatar: {result_img.size == original_avatar_size}, aspect_ratio: {result_img.size[0]/result_img.size[1]:.3f}")
+                # Verify and convert rembg result to RGBA if needed
+                result_img = Image.open(BytesIO(result_image_bytes))
+                if result_img.mode != 'RGBA':
+                    result_img = result_img.convert('RGBA')
+                
+                # Save as PNG
+                output = BytesIO()
+                result_img.save(output, format='PNG')
+                result_image_bytes = output.getvalue()
+            elif result_img.mode != 'RGBA':
+                # Only convert if not already RGBA (e.g., LA or P mode)
+                result_img = result_img.convert('RGBA')
+                output = BytesIO()
+                result_img.save(output, format='PNG')
+                result_image_bytes = output.getvalue()
+            # If already RGBA with transparency, use result as-is (no need to re-save)
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails
