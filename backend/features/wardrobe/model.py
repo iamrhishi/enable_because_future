@@ -55,9 +55,20 @@ class WardrobeItem:
     
     @classmethod
     def get_by_user(cls, user_id: str, category: str = None, 
-                   search: str = None, custom_category_name: str = None) -> List['WardrobeItem']:
-        """Get all wardrobe items for a user"""
-        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, custom_category={custom_category_name}")
+                   search: str = None, category_id: int = None,
+                   platform_category_name: str = None) -> List['WardrobeItem']:
+        """
+        Get all wardrobe items for a user
+        
+        Args:
+            user_id: User ID
+            category: Legacy category filter ('upper', 'lower')
+            search: Search term for title/brand/color/etc
+            category_id: Category ID (works for both user-created and platform categories)
+                        Filters by category_id column in wardrobe table directly
+            platform_category_name: Platform category name (for platform categories, also filter by garment_category_type)
+        """
+        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, category_id={category_id}, platform_category_name={platform_category_name}, search={search}")
         try:
             query = "SELECT * FROM wardrobe WHERE user_id = ?"
             params = [user_id]
@@ -66,9 +77,20 @@ class WardrobeItem:
                 query += " AND category = ?"
                 params.append(category)
             
-            if custom_category_name:
-                query += " AND custom_category_name = ?"
-                params.append(custom_category_name)
+            if category_id is not None:
+                # Filter by category_id directly - works for both user-created and platform categories
+                # Items can have category_id set to either:
+                # - User category ID (from wardrobe_categories table)
+                # - Platform category ID (from platform_categories table)
+                if platform_category_name:
+                    # For platform categories, also check garment_category_type as fallback
+                    # Some items might have garment_category_type set but not category_id
+                    query += " AND (category_id = ? OR garment_category_type = ?)"
+                    params.extend([category_id, platform_category_name])
+                else:
+                    # For user categories, filter by category_id only
+                    query += " AND category_id = ?"
+                    params.append(category_id)
             
             if search:
                 query += " AND (title LIKE ? OR brand LIKE ? OR color LIKE ? OR garment_category_type LIKE ? OR description LIKE ? OR size LIKE ?)"

@@ -587,21 +587,41 @@ def get_wardrobe_items():
     try:
         # Get query parameters
         category = request.args.get('category')  # 'upper', 'lower', or custom category name
-        custom_category_id = request.args.get('category_id')  # Custom category ID
+        category_id = request.args.get('category_id')  # Platform or user category ID
         search = request.args.get('search', '').strip()
         
         # Get items
-        custom_category_name = None
-        if custom_category_id:
-            # Get custom category name
-            custom_cat = WardrobeCategory.get_by_id(int(custom_category_id), user_id)
-            if custom_cat:
-                custom_category_name = custom_cat.name
+        # Parse category_id if provided
+        category_id_int = None
+        platform_category_name = None
+        if category_id:
+            try:
+                category_id_int = int(category_id)
+                # Check if it's a user-created category
+                custom_cat = WardrobeCategory.get_by_id(category_id_int, user_id)
+                if custom_cat:
+                    logger.info(f"get_wardrobe_items: Filtering by user category ID {category_id_int}: {custom_cat.name}")
+                else:
+                    # Check if it's a platform category
+                    from shared.database import db_manager
+                    platform_cat = db_manager.execute_query(
+                        "SELECT name FROM platform_categories WHERE id = ?",
+                        (category_id_int,),
+                        fetch_one=True
+                    )
+                    if platform_cat:
+                        platform_category_name = platform_cat['name']
+                        logger.info(f"get_wardrobe_items: Filtering by platform category ID {category_id_int}: {platform_category_name}")
+                    else:
+                        logger.warning(f"get_wardrobe_items: Category ID {category_id_int} not found in platform or user categories - will still filter by category_id")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"get_wardrobe_items: Invalid category_id: {category_id}, error: {str(e)}")
         
         items = WardrobeItem.get_by_user(
             user_id=user_id,
-            category=category if not custom_category_name else None,
-            custom_category_name=custom_category_name,
+            category=category,
+            category_id=category_id_int,
+            platform_category_name=platform_category_name,  # For platform categories, also filter by garment_category_type
             search=search if search else None
         )
         
