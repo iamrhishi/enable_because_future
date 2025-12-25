@@ -46,6 +46,7 @@ def main():
         (13, 'add_hip_circumference', load_migration(13, 'add_hip_circumference')),
         (14, 'add_image_path', load_migration(14, 'add_image_path')),
         (16, 'rename_pullover_cardigans_to_pullover', load_migration(16, 'rename_pullover_cardigans_to_pullover')),
+        (17, 'add_postal_code_to_users', load_migration(17, 'add_postal_code_to_users')),
     ]
     
     migration_manager.run_migrations(migrations)

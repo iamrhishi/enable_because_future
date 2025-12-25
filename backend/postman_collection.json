@@ -60,7 +60,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\",\n  \"confirm_password\": \"Test123!@#\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"123 Test Street\",\n  \"city\": \"Test City\",\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test123!@#\",\n  \"confirm_password\": \"Test123!@#\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"gender\": \"male\",\n  \"birthday\": \"1990-01-15\",\n  \"street\": \"123 Test Street\",\n  \"city\": \"Test City\",\n  \"postal_code\": \"12345\",\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/create-account",
@@ -99,7 +99,7 @@
 								}
 							],
 							"cookie": [],
-									"body": "{\n    \"success\": true,\n    \"message\": \"Account created successfully\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY0MjI4NDgwLCJleHAiOjE3NjQzMTQ4ODB9.9MtXwAC4QX9wg4eOfn22xzhSWyQihu0q92BDPDsyHAs\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"testuser@example.com\",\n            \"first_name\": \"Test\",\n            \"last_name\": \"User\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Test Street\",\n            \"city\": \"Test City\",\n            \"is_active\": true,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    }\n}"
+									"body": "{\n    \"success\": true,\n    \"message\": \"Account created successfully\",\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjNhNmFkOTQiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY0MjI4NDgwLCJleHAiOjE3NjQzMTQ4ODB9.9MtXwAC4QX9wg4eOfn22xzhSWyQihu0q92BDPDsyHAs\",\n        \"user\": {\n            \"userid\": \"f3a6ad94\",\n            \"email\": \"testuser@example.com\",\n            \"first_name\": \"Test\",\n            \"last_name\": \"User\",\n            \"gender\": \"male\",\n            \"birthday\": \"1990-01-15\",\n            \"street\": \"123 Test Street\",\n            \"city\": \"Test City\",\n            \"postal_code\": \"12345\",\n            \"is_active\": true,\n            \"created_at\": \"2025-12-03T11:30:00\",\n            \"updated_at\": \"2025-12-03T11:30:00\"\n        }\n    }\n}"
 						},
 						{
 							"name": "Validation Error",
@@ -2671,6 +2671,12 @@
 											"key": "category_id",
 											"value": "1",
 											"disabled": true
+										},
+										{
+											"key": "item_id",
+											"value": "19",
+											"disabled": true,
+											"description": "Filter by item ID (also supports 'id' parameter)"
 										},
 										{
 											"key": "search",

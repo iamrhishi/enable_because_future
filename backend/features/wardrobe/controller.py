@@ -588,6 +588,7 @@ def get_wardrobe_items():
         # Get query parameters
         category = request.args.get('category')  # 'upper', 'lower', or custom category name
         category_id = request.args.get('category_id')  # Platform or user category ID
+        item_id = request.args.get('item_id') or request.args.get('id')  # Support both 'item_id' and 'id'
         search = request.args.get('search', '').strip()
         
         # Get items
@@ -617,11 +618,21 @@ def get_wardrobe_items():
             except (ValueError, TypeError) as e:
                 logger.warning(f"get_wardrobe_items: Invalid category_id: {category_id}, error: {str(e)}")
         
+        # Parse item_id if provided
+        item_id_int = None
+        if item_id:
+            try:
+                item_id_int = int(item_id)
+                logger.info(f"get_wardrobe_items: Filtering by item ID {item_id_int}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"get_wardrobe_items: Invalid item_id: {item_id}, error: {str(e)}")
+        
         items = WardrobeItem.get_by_user(
             user_id=user_id,
             category=category,
             category_id=category_id_int,
             platform_category_name=platform_category_name,  # For platform categories, also filter by garment_category_type
+            item_id=item_id_int,
             search=search if search else None
         )
         

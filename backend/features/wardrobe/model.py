@@ -56,7 +56,7 @@ class WardrobeItem:
     @classmethod
     def get_by_user(cls, user_id: str, category: str = None, 
                    search: str = None, category_id: int = None,
-                   platform_category_name: str = None) -> List['WardrobeItem']:
+                   platform_category_name: str = None, item_id: int = None) -> List['WardrobeItem']:
         """
         Get all wardrobe items for a user
         
@@ -67,11 +67,17 @@ class WardrobeItem:
             category_id: Category ID (works for both user-created and platform categories)
                         Filters by category_id column in wardrobe table directly
             platform_category_name: Platform category name (for platform categories, also filter by garment_category_type)
+            item_id: Item ID to filter by (filters by id column in wardrobe table)
         """
-        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, category_id={category_id}, platform_category_name={platform_category_name}, search={search}")
+        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, category_id={category_id}, platform_category_name={platform_category_name}, item_id={item_id}, search={search}")
         try:
             query = "SELECT * FROM wardrobe WHERE user_id = ?"
             params = [user_id]
+            
+            if item_id is not None:
+                # Filter by item ID directly
+                query += " AND id = ?"
+                params.append(item_id)
             
             if category:
                 query += " AND category = ?"

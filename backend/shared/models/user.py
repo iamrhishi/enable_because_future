@@ -15,7 +15,7 @@ class User:
                  first_name: str = None, last_name: str = None,
                  password: str = None, gender: str = None,
                  birthday: str = None, street: str = None, city: str = None,
-                 avatar: bytes = None, is_active: bool = True,
+                 postal_code: str = None, avatar: bytes = None, is_active: bool = True,
                  id: int = None, created_at: str = None, updated_at: str = None,
                  **kwargs):
         self.id = id
@@ -28,6 +28,7 @@ class User:
         self.birthday = birthday  # YYYY-MM-DD format
         self.street = street
         self.city = city
+        self.postal_code = postal_code
         self.avatar = avatar
         self.is_active = is_active
         self.created_at = created_at
@@ -95,11 +96,11 @@ class User:
                 # Update existing user
                 db_manager.execute_query(
                     """UPDATE users SET email = ?, first_name = ?, last_name = ?, 
-                       gender = ?, birthday = ?, street = ?, city = ?, avatar = ?,
+                       gender = ?, birthday = ?, street = ?, city = ?, postal_code = ?, avatar = ?,
                        is_active = ?, updated_at = CURRENT_TIMESTAMP
                        WHERE userid = ?""",
                     (self.email, self.first_name, self.last_name, self.gender,
-                     self.birthday, self.street, self.city, self.avatar,
+                     self.birthday, self.street, self.city, self.postal_code, self.avatar,
                      self.is_active, self.userid)
                 )
                 # Update password if provided
@@ -117,10 +118,10 @@ class User:
                 
                 user_id = db_manager.get_lastrowid(
                     """INSERT INTO users (userid, email, first_name, last_name, password,
-                       gender, birthday, street, city, avatar, is_active)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       gender, birthday, street, city, postal_code, avatar, is_active)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.userid, self.email, self.first_name, self.last_name, hashed_password,
-                     self.gender, self.birthday, self.street, self.city, self.avatar, self.is_active)
+                     self.gender, self.birthday, self.street, self.city, self.postal_code, self.avatar, self.is_active)
                 )
                 self.id = user_id
                 self.password = hashed_password  # Store hashed version
@@ -135,7 +136,7 @@ class User:
         try:
             allowed_fields = [
                 'email', 'first_name', 'last_name', 'gender', 'birthday',
-                'street', 'city', 'avatar', 'is_active'
+                'street', 'city', 'postal_code', 'avatar', 'is_active'
             ]
             
             for field in allowed_fields:
@@ -191,6 +192,7 @@ class User:
             'birthday': self.birthday,
             'street': self.street,
             'city': self.city,
+            'postal_code': self.postal_code,
             'is_active': self.is_active,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
