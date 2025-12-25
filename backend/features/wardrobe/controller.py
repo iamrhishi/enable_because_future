@@ -677,6 +677,9 @@ def get_wardrobe_item(item_id: int):
 def update_wardrobe_item(item_id: int):
     """
     Update a wardrobe item
+    Supports:
+    - JSON requests for updating metadata
+    - Multipart/form-data for updating image and/or metadata
     Uses WardrobeItem model
     user_id is extracted from JWT token by @require_auth decorator
     """
@@ -685,39 +688,85 @@ def update_wardrobe_item(item_id: int):
     logger.info(f"update_wardrobe_item: ENTRY - item_id={item_id}, user_id={user_id} (from JWT)")
     
     try:
-        # Handle JSON requests safely
+        # Get item first to check if it exists
+        item = WardrobeItem.get_by_id(item_id, user_id)
+        if not item:
+            return error_response_from_string('Wardrobe item not found', 404, 'NOT_FOUND')
+        
+        # Handle both JSON and multipart/form-data requests
         content_type = request.content_type or ''
         if 'application/json' in content_type:
             data = request.get_json(silent=True, force=False) or {}
         else:
             data = {}
+        form_data = request.form
         
-        if not data:
+        # Check if we have any data to update
+        has_data = bool(data) or bool(form_data) or 'garment_image' in request.files
+        if not has_data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
-        item = WardrobeItem.get_by_id(item_id, user_id)
-        if not item:
-            return error_response_from_string('Wardrobe item not found', 404, 'NOT_FOUND')
+        # Handle image upload if provided (multipart/form-data)
+        if 'garment_image' in request.files:
+            garment_file = request.files['garment_image']
+            if garment_file and garment_file.filename:
+                try:
+                    garment_image = garment_file.read()
+                    garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                    
+                    # Generate new storage path (keep same garment_id if exists, or generate new)
+                    import uuid
+                    import os
+                    if item.image_path:
+                        # Extract garment_id from existing path or generate new
+                        existing_path = item.image_path
+                        # Path format: wardrobe/{user_id}/{garment_id}.png
+                        if '/wardrobe/' in existing_path:
+                            garment_id = os.path.splitext(os.path.basename(existing_path))[0]
+                        else:
+                            garment_id = str(uuid.uuid4())
+                    else:
+                        garment_id = str(uuid.uuid4())
+                    
+                    storage_path = f"wardrobe/{user_id}/{garment_id}.png"
+                    
+                    storage_service = get_storage_service()
+                    image_url = storage_service.upload_image(
+                        garment_image,
+                        storage_path,
+                        content_type='image/png'
+                    )
+                    
+                    item.image_path = image_url
+                    logger.info(f"update_wardrobe_item: Image updated for item {item_id}")
+                except Exception as e:
+                    logger.exception(f"update_wardrobe_item: Error processing image: {str(e)}")
+                    return error_response_from_string(f'Error processing image: {str(e)}', 400, 'VALIDATION_ERROR')
         
-        # Update fields
-        if 'category' in data:
-            item.category = data['category']
-        if 'custom_category_name' in data:
-            item.custom_category_name = data['custom_category_name']
-        if 'category_id' in data:
-            item.category_id = data['category_id']
-        if 'garment_category_type' in data:
-            item.garment_category_type = data['garment_category_type']
-        if 'brand' in data:
-            item.brand = data['brand']
-        if 'color' in data:
-            item.color = data['color']
-        if 'title' in data:
-            item.title = data['title']
+        # Update fields from form_data or data (form_data takes precedence for multipart)
+        if 'category' in form_data or 'category' in data:
+            item.category = form_data.get('category') or data.get('category')
+        if 'custom_category_name' in form_data or 'custom_category_name' in data:
+            item.custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
+        if 'category_id' in form_data or 'category_id' in data:
+            category_id_val = form_data.get('category_id') or data.get('category_id')
+            if category_id_val:
+                try:
+                    item.category_id = int(category_id_val)
+                except (ValueError, TypeError):
+                    return error_response_from_string('Invalid category_id', 400, 'VALIDATION_ERROR')
+        if 'garment_category_type' in form_data or 'garment_category_type' in data:
+            item.garment_category_type = form_data.get('garment_category_type') or data.get('garment_category_type')
+        if 'brand' in form_data or 'brand' in data:
+            item.brand = form_data.get('brand') or data.get('brand')
+        if 'color' in form_data or 'color' in data:
+            item.color = form_data.get('color') or data.get('color')
+        if 'title' in form_data or 'title' in data:
+            item.title = form_data.get('title') or data.get('title')
         
         # Update new fields with validation
-        if 'fabric' in data:
-            fabric_input = data['fabric']
+        if 'fabric' in form_data or 'fabric' in data:
+            fabric_input = form_data.get('fabric') or data.get('fabric')
             if isinstance(fabric_input, str):
                 try:
                     import json
@@ -735,12 +784,12 @@ def update_wardrobe_item(item_id: int):
                 fabric = None
             item.fabric = fabric
         
-        if 'care_instructions' in data:
-            item.care_instructions = data['care_instructions']
-        if 'size' in data:
-            item.size = data['size']
-        if 'description' in data:
-            item.description = data['description']
+        if 'care_instructions' in form_data or 'care_instructions' in data:
+            item.care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
+        if 'size' in form_data or 'size' in data:
+            item.size = form_data.get('size') or data.get('size')
+        if 'description' in form_data or 'description' in data:
+            item.description = form_data.get('description') or data.get('description')
         
         item.save()
         
