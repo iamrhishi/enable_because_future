@@ -8,6 +8,7 @@ import base64
 import time
 import re
 import json
+import hashlib
 import numpy as np  # type: ignore
 from PIL import Image  # type: ignore
 from io import BytesIO
@@ -261,6 +262,13 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         person_base64 = base64.b64encode(person_image).decode('utf-8')
         garment_base64 = base64.b64encode(garment_image).decode('utf-8')
         
+        # Generate deterministic seed from input images for consistent outputs
+        # Hash the images together to create a seed that's the same for identical inputs
+        input_hash = hashlib.sha256(person_image + garment_image).digest()
+        # Convert first 8 bytes to integer for seed (max 64-bit integer)
+        seed = int.from_bytes(input_hash[:8], byteorder='big') % (2**31)  # Limit to 32-bit signed int range
+        logger.info(f"process_tryon: Generated seed={seed} from input images hash for deterministic output")
+        
         # Determine body location text
         body_location = "appropriate body location"
         if garment_details:
@@ -349,9 +357,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                     }
                 ]
             }],
-            # Generation config to optimize for speed
+            # Generation config to optimize for speed and consistency
             "generationConfig": {
-                "temperature": 0.4,  # Lower temperature for faster, more deterministic output
+                "temperature": 0.0,  # Minimum temperature (0.0) for maximum determinism and consistency
+                "seed": seed,  # Deterministic seed computed from input images - ensures same inputs produce same outputs
             }
         }
         
