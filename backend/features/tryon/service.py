@@ -317,12 +317,15 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         
         prompt_parts.extend([
             f"Extract the garment fabric from image 2 and fit it naturally on the person at {body_location}. ",
-            "Show the complete person from head to toe. ",
+            "CRITICAL: Show the COMPLETE person from head to toe - this is ESSENTIAL. ",
+            "The entire body must be visible including: head, torso, arms, hands, legs, knees, ankles, and feet. ",
+            "DO NOT crop or cut off any part of the person's body, especially legs, feet, or ankles. ",
+            "The full person from head to toe must be preserved in the output image. ",
             "The output must be different from image 1 - the garment must be visible on the person. ",
             "Preserve the background from image 1. ",
             "DO NOT add excess padding, borders, or unnecessary additional area around the image. ",
             "Keep the output image dimensions and composition similar to image 1 without adding extra space. ",
-            "OPTIMIZE FOR SPEED: Return a smaller, lower resolution version of the image for faster processing. "
+            "OPTIMIZE FOR SPEED: Return a smaller, lower resolution version of the image for faster processing. ",
             "Reduce image quality and size while maintaining visual clarity of the person and garment."
         ])
         

@@ -223,83 +223,281 @@ def create_tryon_job():
                     
                     # Check if URL is a direct image or product page
                     if not is_image_url(item_url):
-                        # Likely a product page - CHECK CACHE FIRST
+                        # Likely a product page - CHECK USER'S WARDROBE FIRST (fastest), THEN GLOBAL CACHE
                         product_info = None
                         cached_data = None
                         
-                        # Check cache for this URL
+                        # OPTIMIZATION 1: Check if user already has this URL in their wardrobe (fastest - image already stored)
+                        # Query directly by URL instead of loading all items (much faster!)
                         try:
-                            cached = db_manager.execute_query(
-                                "SELECT * FROM garment_metadata WHERE url = ?",
-                                (item_url,),
-                                fetch_one=True
-                            )
+                            from features.wardrobe.model import WardrobeItem
+                            from shared.storage import get_storage_service
                             
-                            if cached:
-                                # Safely convert cached row to dict, filtering out non-serializable values
-                                import json as json_module  # Ensure json is available in this scope
-                                cached_dict = {}
-                                for k, v in dict(cached).items():
-                                    if isinstance(v, bytes):
-                                        continue
-                                    try:
-                                        json_module.dumps(v)
-                                        cached_dict[k] = v
-                                    except (TypeError, ValueError):
-                                        if hasattr(v, 'isoformat'):
-                                            cached_dict[k] = v.isoformat()
-                                        else:
-                                            continue
-                                
-                                # Parse JSON fields
-                                if cached_dict.get('images'):
-                                    try:
-                                        cached_dict['images'] = json_module.loads(cached_dict['images'])
-                                    except:
-                                        cached_dict['images'] = []
-                                if cached_dict.get('sizes'):
-                                    try:
-                                        cached_dict['sizes'] = json_module.loads(cached_dict['sizes'])
-                                    except:
-                                        cached_dict['sizes'] = []
-                                if cached_dict.get('colors'):
-                                    try:
-                                        cached_dict['colors'] = json_module.loads(cached_dict['colors'])
-                                    except:
-                                        cached_dict['colors'] = []
-                                
-                                # Check if cache is valid (has data and not expired - 3 days)
-                                from datetime import datetime, timedelta
-                                scraped_at_str = cached_dict.get('scraped_at') or cached_dict.get('updated_at')
-                                is_valid_cache = False
-                                
-                                if scraped_at_str:
-                                    try:
-                                        if isinstance(scraped_at_str, str):
-                                            scraped_at = datetime.strptime(scraped_at_str, '%Y-%m-%d %H:%M:%S')
-                                        else:
-                                            scraped_at = scraped_at_str
-                                        cache_age = datetime.now() - scraped_at
-                                        is_valid_cache = cache_age <= timedelta(days=3) and (
-                                            (cached_dict.get('title') and cached_dict.get('title').strip()) or
-                                            (cached_dict.get('images') and len(cached_dict.get('images', [])) > 0)
-                                        )
-                                    except:
-                                        is_valid_cache = False
-                                
-                                if is_valid_cache:
-                                    cached_data = cached_dict
-                                    logger.info(f"create_tryon_job: Using cached product data for URL (saving Scrape.do credits)")
-                        except Exception as cache_error:
-                            logger.warning(f"create_tryon_job: Cache check failed: {str(cache_error)}")
+                            # Direct database query for wardrobe item with this URL (optimized)
+                            matching_item = None
+                            try:
+                                wardrobe_row = db_manager.execute_query(
+                                    "SELECT * FROM wardrobe WHERE user_id = ? AND garment_url = ? LIMIT 1",
+                                    (user_id, item_url),
+                                    fetch_one=True
+                                )
+                                if wardrobe_row:
+                                    matching_item = WardrobeItem(**dict(wardrobe_row))
+                                    logger.info(f"create_tryon_job: Found URL in user's wardrobe via direct query (item_id={matching_item.id})")
+                            except Exception as query_error:
+                                logger.debug(f"create_tryon_job: Direct wardrobe query failed (garment_url column might not exist): {str(query_error)}")
+                                # Fallback: check if garment_url column exists, if not, skip wardrobe check
+                                pass
+                            
+                            if matching_item and matching_item.image_path:
+                                # User has this URL in wardrobe - use stored image directly (fastest path!)
+                                logger.info(f"create_tryon_job: Found URL in user's wardrobe (item_id={matching_item.id}), using stored image")
+                                try:
+                                    storage_service = get_storage_service()
+                                    image_path = matching_item.image_path
+                                    if image_path.startswith('/images/'):
+                                        image_path = image_path.replace('/images/', '')
+                                    garment_image = storage_service.get_image(image_path)
+                                    
+                                    # Build garment_details from wardrobe item
+                                    garment_details = {
+                                        'category': matching_item.category,
+                                        'brand': matching_item.brand,
+                                        'title': matching_item.title,
+                                        'color': matching_item.color,
+                                        'garment_category_type': matching_item.garment_category_type,
+                                    }
+                                    
+                                    # Extract category_section and category_name
+                                    category_section = getattr(matching_item, 'category_section', None) or matching_item._data.get('category_section') if hasattr(matching_item, '_data') else None
+                                    if category_section:
+                                        garment_details['category_section'] = category_section
+                                    elif matching_item.category:
+                                        if matching_item.category in ['upper']:
+                                            garment_details['category_section'] = 'upper_body'
+                                        elif matching_item.category in ['lower']:
+                                            garment_details['category_section'] = 'lower_body'
+                                    
+                                    if matching_item.custom_category_name:
+                                        garment_details['category_name'] = matching_item.custom_category_name
+                                    elif matching_item.garment_category_type:
+                                        garment_details['category_name'] = matching_item.garment_category_type
+                                    
+                                    # Add fabric info if available
+                                    if matching_item.fabric:
+                                        try:
+                                            import json as json_module
+                                            fabric_data = json_module.loads(matching_item.fabric) if isinstance(matching_item.fabric, str) else matching_item.fabric
+                                            if fabric_data and isinstance(fabric_data, list) and len(fabric_data) > 0:
+                                                garment_details['material_type'] = ', '.join([f.get('name', '') for f in fabric_data if f.get('name')])
+                                        except:
+                                            pass
+                                    
+                                    garment_details = {k: v for k, v in garment_details.items() if v is not None}
+                                    
+                                    # Set garment_type
+                                    if matching_item.category:
+                                        garment_type = matching_item.category
+                                    elif matching_item.garment_category_type:
+                                        garment_type = 'upper' if matching_item.garment_category_type in ['t-shirt', 'shirt', 'jacket', 'sweater', 'hoodie'] else 'lower'
+                                    
+                                    logger.info(f"create_tryon_job: Using wardrobe item image (fastest path - no scraping needed!)")
+                                    # Skip to preprocessing - we have everything we need
+                                    product_info = None  # Signal that we already have the image
+                                    cached_data = None
+                                except Exception as wardrobe_error:
+                                    logger.warning(f"create_tryon_job: Failed to load image from wardrobe item: {str(wardrobe_error)}, falling back to cache/scraping")
+                                    matching_item = None  # Fall through to cache check
+                            else:
+                                logger.info(f"create_tryon_job: URL not found in user's wardrobe, checking global cache")
+                        except Exception as wardrobe_check_error:
+                            logger.warning(f"create_tryon_job: Wardrobe check failed: {str(wardrobe_check_error)}, falling back to cache")
                         
-                        # If cache is valid, use it; otherwise scrape fresh
-                        if cached_data and cached_data.get('images'):
+                        # OPTIMIZATION 2: Check global garment_metadata cache BEFORE scraping (GLOBAL - shared across ALL users, no user_id)
+                        # IMPORTANT: This check happens BEFORE any scraping to avoid unnecessary API calls
+                        # This cache is populated when ANY user scrapes a URL, and can be used by ANY other user
+                        # The garment_metadata table has NO user_id column - it's completely global
+                        if not product_info and not cached_data and not garment_image:
+                            import time as time_module
+                            cache_check_start = time_module.time()
+                            logger.info(f"create_tryon_job: 🔍 STEP 1: Checking GLOBAL database cache BEFORE scraping (shared across ALL users) for URL: {item_url[:100]}")
+                            try:
+                                # Normalize URL for cache lookup - remove query params for better matching
+                                # URLs with different query params (v1, v2, etc.) should match the same product
+                                from urllib.parse import urlparse, urlunparse
+                                parsed_url = urlparse(item_url)
+                                # Try exact match first
+                                cached = db_manager.execute_query(
+                                    "SELECT * FROM garment_metadata WHERE url = ?",
+                                    (item_url,),
+                                    fetch_one=True
+                                )
+                                
+                                if cached:
+                                    logger.info(f"create_tryon_job: Found exact URL match in cache")
+                                else:
+                                    # If exact match fails, try base URL (without query params)
+                                    base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', '', ''))
+                                    logger.info(f"create_tryon_job: No exact match, trying base URL: {base_url}")
+                                    cached = db_manager.execute_query(
+                                        "SELECT * FROM garment_metadata WHERE url LIKE ?",
+                                        (f"{base_url}%",),
+                                        fetch_one=True
+                                    )
+                                    if cached:
+                                        logger.info(f"create_tryon_job: Found cache with base URL match (query params differ)")
+                                
+                                if cached:
+                                    # Safely convert cached row to dict, keeping image bytes for fast access
+                                    import json as json_module  # Ensure json is available in this scope
+                                    cached_dict = {}
+                                    cached_row_dict = dict(cached)
+                                    
+                                    # Debug: Check if bytes exist in raw row
+                                    has_bytes_in_row = 'cached_image_1' in cached_row_dict and cached_row_dict.get('cached_image_1') is not None
+                                    if has_bytes_in_row:
+                                        logger.info(f"create_tryon_job: DEBUG - Raw DB row has cached_image_1: {type(cached_row_dict.get('cached_image_1'))}, size: {len(cached_row_dict.get('cached_image_1')) if cached_row_dict.get('cached_image_1') else 0} bytes")
+                                    
+                                    for k, v in cached_row_dict.items():
+                                        # Keep cached_image_1 and cached_image_2 bytes (we need these for fast access)
+                                        if isinstance(v, bytes) and k in ['cached_image_1', 'cached_image_2']:
+                                            cached_dict[k] = v  # Keep image bytes
+                                            logger.debug(f"create_tryon_job: Preserved {k} bytes in cached_dict (size: {len(v)} bytes)")
+                                            continue
+                                        # Skip other bytes
+                                        if isinstance(v, bytes):
+                                            continue
+                                        try:
+                                            json_module.dumps(v)
+                                            cached_dict[k] = v
+                                        except (TypeError, ValueError):
+                                            if hasattr(v, 'isoformat'):
+                                                cached_dict[k] = v.isoformat()
+                                            else:
+                                                continue
+                                    
+                                    # Parse JSON fields
+                                    if cached_dict.get('images'):
+                                        try:
+                                            cached_dict['images'] = json_module.loads(cached_dict['images'])
+                                        except:
+                                            cached_dict['images'] = []
+                                    if cached_dict.get('sizes'):
+                                        try:
+                                            cached_dict['sizes'] = json_module.loads(cached_dict['sizes'])
+                                        except:
+                                            cached_dict['sizes'] = []
+                                    if cached_dict.get('colors'):
+                                        try:
+                                            cached_dict['colors'] = json_module.loads(cached_dict['colors'])
+                                        except:
+                                            cached_dict['colors'] = []
+                                    
+                                    # Check if cache is valid (has data and not expired - 30 days for better reuse)
+                                    # Extended from 3 days to 30 days since URLs are shared across users
+                                    from datetime import datetime, timedelta
+                                    scraped_at_str = cached_dict.get('scraped_at') or cached_dict.get('updated_at')
+                                    is_valid_cache = False
+                                    
+                                    # Cache is valid if it has images (even if old) - product pages don't change that often
+                                    has_images = cached_dict.get('images') and len(cached_dict.get('images', [])) > 0
+                                    has_title = cached_dict.get('title') and cached_dict.get('title').strip()
+                                    
+                                    if has_images or has_title:
+                                        # If cache has data, check age but be lenient (30 days instead of 3)
+                                        if scraped_at_str:
+                                            try:
+                                                if isinstance(scraped_at_str, str):
+                                                    scraped_at = datetime.strptime(scraped_at_str, '%Y-%m-%d %H:%M:%S')
+                                                else:
+                                                    scraped_at = scraped_at_str
+                                                cache_age = datetime.now() - scraped_at
+                                                # Extended cache validity to 30 days for better reuse across users
+                                                is_valid_cache = cache_age <= timedelta(days=30)
+                                            except:
+                                                # If we can't parse date, assume cache is valid if it has data
+                                                is_valid_cache = True
+                                        else:
+                                            # No date but has data - assume valid
+                                            is_valid_cache = True
+                                    
+                                    if is_valid_cache:
+                                        cached_data = cached_dict
+                                        # Check if we also have cached image bytes (faster than fetching from URL)
+                                        # TTL: Cached images expire after 1 day of inactivity
+                                        cached_image_bytes = None
+                                        cached_images_at = cached_dict.get('cached_images_at')
+                                        
+                                        # Debug: Check what we have in cached_dict
+                                        has_cached_img_1 = 'cached_image_1' in cached_dict and cached_dict.get('cached_image_1') is not None
+                                        logger.info(f"create_tryon_job: DEBUG - cached_dict has cached_image_1: {has_cached_img_1}, cached_images_at: {cached_images_at}")
+                                        
+                                        if cached_dict.get('cached_image_1') and cached_images_at:
+                                            # Check TTL: images expire after 1 day
+                                            try:
+                                                if isinstance(cached_images_at, str):
+                                                    cache_time = datetime.strptime(cached_images_at, '%Y-%m-%d %H:%M:%S')
+                                                else:
+                                                    cache_time = cached_images_at
+                                                cache_age = datetime.now() - cache_time
+                                                
+                                                if cache_age <= timedelta(days=1):
+                                                    cached_image_bytes = cached_dict['cached_image_1']
+                                                    cached_image_url = cached_dict.get('cached_image_1_url', '')
+                                                    logger.info(f"create_tryon_job: ✅ Found cached image bytes! (size: {len(cached_image_bytes)} bytes, age: {cache_age.days}d {cache_age.seconds//3600}h, URL: {cached_image_url[:80]})")
+                                                    # Update last_accessed_at for TTL tracking
+                                                    try:
+                                                        db_manager.execute_query(
+                                                            "UPDATE garment_metadata SET last_accessed_at = CURRENT_TIMESTAMP WHERE url = ?",
+                                                            (cached_dict.get('url'),)
+                                                        )
+                                                    except:
+                                                        pass
+                                                else:
+                                                    logger.warning(f"create_tryon_job: ⚠️  Cached image bytes expired (age: {cache_age.days} days > 1 day TTL), will fetch fresh")
+                                            except Exception as ttl_check_error:
+                                                logger.warning(f"create_tryon_job: TTL check failed: {str(ttl_check_error)}, using cached image anyway")
+                                                cached_image_bytes = cached_dict.get('cached_image_1')
+                                                if cached_image_bytes:
+                                                    logger.info(f"create_tryon_job: Using cached image despite TTL check error (size: {len(cached_image_bytes)} bytes)")
+                                        elif cached_dict.get('cached_image_1'):
+                                            # Have image bytes but no cached_images_at - use it anyway
+                                            cached_image_bytes = cached_dict['cached_image_1']
+                                            logger.info(f"create_tryon_job: ✅ Found cached image bytes (no timestamp), using it (size: {len(cached_image_bytes)} bytes)")
+                                        else:
+                                            logger.info(f"create_tryon_job: ⚠️  No cached image bytes found in cache_dict (keys: {list(cached_dict.keys())[:10]})")
+                                        
+                                        cached_data['_cached_image_bytes'] = cached_image_bytes  # Store for later use
+                                        
+                                        cache_check_time = time_module.time() - cache_check_start
+                                        cache_age_days = cache_age.days if 'cache_age' in locals() else 'unknown'
+                                        logger.info(f"create_tryon_job: ✅ CACHE HIT! Using cached product data (cache age: {cache_age_days} days, check took {cache_check_time:.2f}s, saving Scrape.do credits)")
+                                    else:
+                                        cache_check_time = time_module.time() - cache_check_start
+                                        logger.warning(f"create_tryon_job: ❌ Cache found but invalid/expired (check took {cache_check_time:.2f}s)")
+                            except Exception as cache_error:
+                                cache_check_time = time_module.time() - cache_check_start
+                                logger.warning(f"create_tryon_job: Cache check failed after {cache_check_time:.2f}s: {str(cache_error)}")
+                        
+                        # STEP 2: If cache is valid, use it; otherwise scrape fresh
+                        # Priority 1: If we have cached image bytes, use them immediately (fastest path)
+                        if cached_data and cached_data.get('_cached_image_bytes'):
+                            garment_image = cached_data['_cached_image_bytes']
+                            logger.info(f"create_tryon_job: ✅ STEP 2: Cache HIT with IMAGE BYTES! Using cached image ({len(garment_image)} bytes) - SKIPPING BOTH SCRAPING AND DOWNLOAD (saved ~10-12s total!)")
+                            # Set product_info from cache if available (for garment_details)
+                            if cached_data.get('images') or cached_data.get('title'):
+                                product_info = cached_data
+                        # Priority 2: If we have cached metadata with images, use it (but need to fetch images)
+                        elif cached_data and cached_data.get('images'):
                             product_info = cached_data
-                            logger.info(f"create_tryon_job: Using cached images ({len(product_info.get('images', []))} images)")
-                        else:
-                            # Cache miss or expired - scrape fresh
-                            logger.info(f"create_tryon_job: Cache miss/expired, scraping fresh data")
+                            logger.info(f"create_tryon_job: ✅ STEP 2: Cache HIT - Using global cached images ({len(product_info.get('images', []))} images) - SKIPPING SCRAPING (saved ~5-7s)")
+                            logger.info(f"create_tryon_job: ⚠️  NOTE: Still need to fetch image from URL (this will take ~5-6s even with cache)")
+                        # Priority 3: No cache - scrape fresh
+                        elif not product_info and not garment_image:
+                            # Cache miss or expired - scrape fresh (only if we didn't get image from wardrobe)
+                            import time as time_module
+                            scrape_start = time_module.time()
+                            logger.info(f"create_tryon_job: ❌ STEP 2: Cache MISS - No cache found in database, must scrape fresh (this will take 5-7 seconds)")
                             try:
                                 extractor = BrandExtractorFactory.get_extractor(item_url)
                                 product_info = extractor.extract_product_info(item_url)
@@ -326,27 +524,136 @@ def create_tryon_job():
                                 except Exception as simple_scrape_error:
                                     logger.warning(f"create_tryon_job: Simple scraping also failed: {str(simple_scrape_error)}")
                                     product_info = None
+                            
+                            scrape_time = time_module.time() - scrape_start
+                            logger.info(f"create_tryon_job: Scraping completed in {scrape_time:.2f}s")
+                            
+                            # IMPORTANT: Cache the scraped result globally (NO user_id - shared across ALL users)
+                            # This ensures that once a URL is scraped, all future requests (from any user) can use the cache
+                            if product_info and product_info.get('images'):
+                                try:
+                                    import json as json_module
+                                    # Save with the exact URL used, but also save with base URL for better matching
+                                    from urllib.parse import urlparse, urlunparse
+                                    parsed_url = urlparse(item_url)
+                                    base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', '', ''))
+                                    
+                                    # Save with exact URL (GLOBAL CACHE - no user_id, shared across all users)
+                                    # Only save 1-2 image URLs (the ones we actually use for Gemini), not all images
+                                    all_images = product_info.get('images', [])
+                                    images_to_cache = all_images[:2]  # Only cache first 2 images
+                                    db_manager.execute_query(
+                                        """INSERT OR REPLACE INTO garment_metadata 
+                                           (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+                                        (item_url, 
+                                         product_info.get('title'), 
+                                         product_info.get('price'),
+                                         json_module.dumps(images_to_cache),  # Only cache 1-2 images, not all
+                                         json_module.dumps(product_info.get('sizes', [])),
+                                         json_module.dumps(product_info.get('colors', [])),
+                                         product_info.get('brand'))
+                                    )
+                                    logger.info(f"create_tryon_job: ✅ CACHED scraped result globally (exact URL) - {len(images_to_cache)} image URLs cached (out of {len(all_images)} total), title: {product_info.get('title', 'N/A')[:50]}")
+                                    
+                                    # Also save with base URL (without query params) if different, for better cache hits
+                                    if base_url != item_url:
+                                        try:
+                                            db_manager.execute_query(
+                                                """INSERT OR REPLACE INTO garment_metadata 
+                                                   (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+                                                (base_url, 
+                                                 product_info.get('title'), 
+                                                 product_info.get('price'),
+                                                 json_module.dumps(images_to_cache),  # Only cache 1-2 images
+                                                 json_module.dumps(product_info.get('sizes', [])),
+                                                 json_module.dumps(product_info.get('colors', [])),
+                                                 product_info.get('brand'))
+                                            )
+                                            logger.info(f"create_tryon_job: ✅ Also cached with base URL (without query params) for better matching")
+                                        except Exception as base_url_error:
+                                            logger.warning(f"create_tryon_job: Failed to cache base URL: {str(base_url_error)}")
+                                    
+                                    # Cleanup old cached images (TTL: 1 day of inactivity)
+                                    try:
+                                        db_manager.execute_query(
+                                            """UPDATE garment_metadata 
+                                               SET cached_image_1 = NULL, cached_image_1_url = NULL,
+                                                   cached_image_2 = NULL, cached_image_2_url = NULL,
+                                                   cached_images_at = NULL
+                                               WHERE last_accessed_at < datetime('now', '-1 day') 
+                                                 AND cached_images_at IS NOT NULL""",
+                                            ()
+                                        )
+                                        logger.debug(f"create_tryon_job: Cleaned up cached images older than 1 day")
+                                    except Exception as cleanup_error:
+                                        logger.debug(f"create_tryon_job: Cache cleanup failed (non-critical): {str(cleanup_error)}")
+                                    
+                                    logger.info(f"create_tryon_job: ✅ Global cache saved successfully - next request (from any user) will use cache instead of scraping")
+                                except Exception as cache_save_error:
+                                    logger.error(f"create_tryon_job: ❌ FAILED to cache scraped result: {str(cache_save_error)}")
+                                    import traceback
+                                    logger.error(traceback.format_exc())
                         
-                        # Extract garment images from product info (cached or fresh)
-                        # Fetch up to 3 images to send to Gemini for better results
+                        # STEP 3: Extract garment images from product info (cached or fresh)
+                        # Only fetch 1-2 images that we actually use for Gemini (not all images)
+                        # Skip if we already got image from wardrobe or cached bytes
                         garment_images = []
-                        if product_info:
+                        if product_info and not garment_image:
                             images = product_info.get('images', [])
                             if images:
-                                # Try to fetch up to 3 images (or as many as available)
-                                for img_url in images[:3]:
+                                import time as time_module
+                                image_fetch_start = time_module.time()
+                                # Only fetch 1-2 images (the ones we actually use for Gemini)
+                                images_to_fetch = min(2, len(images))  # Max 2 images
+                                logger.info(f"create_tryon_job: ⏱️  STEP 3: Fetching {images_to_fetch} garment image(s) from URLs (only the ones we use for Gemini, not all {len(images)} images)")
+                                
+                                for idx, img_url in enumerate(images[:images_to_fetch]):
                                     try:
+                                        img_fetch_single_start = time_module.time()
                                         garment_img = fetch_image_from_url(img_url)
-                                        garment_images.append(garment_img)
-                                        logger.info(f"create_tryon_job: Successfully fetched image {len(garment_images)}/{min(3, len(images))}: {img_url[:100]}")
+                                        img_fetch_time = time_module.time() - img_fetch_single_start
+                                        garment_images.append((img_url, garment_img))  # Store URL with image for caching
+                                        logger.info(f"create_tryon_job: ✅ Fetched image {idx+1}/{images_to_fetch} in {img_fetch_time:.2f}s: {img_url[:100]}")
                                     except Exception as img_fetch_error:
                                         logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
                                         continue
                                 
-                                # If we got at least one image, use the first one (revert to single image approach)
+                                total_image_fetch_time = time_module.time() - image_fetch_start
+                                logger.info(f"create_tryon_job: Total image fetching took {total_image_fetch_time:.2f}s")
+                                
+                                # If we got at least one image, use the first one
                                 if garment_images:
-                                    garment_image = garment_images[0]  # Use first image only
-                                    logger.info(f"create_tryon_job: Fetched {len(garment_images)} garment image(s), using first one for try-on")
+                                    garment_image = garment_images[0][1]  # Use first image bytes
+                                    logger.info(f"create_tryon_job: Using first image for try-on ({len(garment_image)} bytes)")
+                                    
+                                    # CACHE the fetched images for future use (1-2 images only, not all)
+                                    if garment_images and item_url:
+                                        try:
+                                            # Cache first image (always)
+                                            cached_img_1 = garment_images[0][1]
+                                            cached_img_1_url = garment_images[0][0]
+                                            
+                                            # Cache second image if available
+                                            cached_img_2 = garment_images[1][1] if len(garment_images) > 1 else None
+                                            cached_img_2_url = garment_images[1][0] if len(garment_images) > 1 else None
+                                            
+                                            # Update cache with image bytes (only cache 1-2 images we actually use)
+                                            db_manager.execute_query(
+                                                """UPDATE garment_metadata 
+                                                   SET cached_image_1 = ?, cached_image_1_url = ?,
+                                                       cached_image_2 = ?, cached_image_2_url = ?,
+                                                       cached_images_at = CURRENT_TIMESTAMP,
+                                                       last_accessed_at = CURRENT_TIMESTAMP
+                                                   WHERE url = ?""",
+                                                (cached_img_1, cached_img_1_url, cached_img_2, cached_img_2_url, item_url)
+                                            )
+                                            logger.info(f"create_tryon_job: ✅ CACHED {len(garment_images)} image byte(s) for future use (TTL: 1 day) - next request will be instant!")
+                                        except Exception as image_cache_error:
+                                            logger.warning(f"create_tryon_job: Failed to cache image bytes: {str(image_cache_error)}")
+                                            import traceback
+                                            logger.debug(traceback.format_exc())
                                     
                                     # Get categorization from product title
                                     categorization = None
