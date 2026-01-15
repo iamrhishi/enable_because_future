@@ -15,13 +15,14 @@ class WardrobeItem:
                  brand: str = None, color: str = None, is_external: bool = False,
                  title: str = None, category_id: int = None, custom_category_name: str = None,
                  fabric: str = None, care_instructions: str = None, size: str = None, 
-                 description: str = None, **kwargs):
+                 description: str = None, category_section: str = None, **kwargs):
         self.id = id
         self.user_id = user_id
         self.image_path = image_path
         self.category = category  # 'upper', 'lower', or None if using custom category
         self.category_id = category_id  # ID of custom category
         self.custom_category_name = custom_category_name  # Name of custom category
+        self.category_section = category_section  # 'upper_body', 'lower_body', 'accessoires', 'wishlist'
         self.garment_category_type = garment_category_type
         self.brand = brand
         self.color = color
@@ -56,7 +57,8 @@ class WardrobeItem:
     @classmethod
     def get_by_user(cls, user_id: str, category: str = None, 
                    search: str = None, category_id: int = None,
-                   platform_category_name: str = None, item_id: int = None) -> List['WardrobeItem']:
+                   platform_category_name: str = None, item_id: int = None,
+                   category_section: str = None) -> List['WardrobeItem']:
         """
         Get all wardrobe items for a user
         
@@ -68,8 +70,9 @@ class WardrobeItem:
                         Filters by category_id column in wardrobe table directly
             platform_category_name: Platform category name (for platform categories, also filter by garment_category_type)
             item_id: Item ID to filter by (filters by id column in wardrobe table)
+            category_section: Section filter ('upper_body', 'lower_body', 'accessoires', 'wishlist')
         """
-        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, category_id={category_id}, platform_category_name={platform_category_name}, item_id={item_id}, search={search}")
+        logger.info(f"WardrobeItem.get_by_user: ENTRY - user_id={user_id}, category={category}, category_id={category_id}, platform_category_name={platform_category_name}, item_id={item_id}, category_section={category_section}, search={search}")
         try:
             query = "SELECT * FROM wardrobe WHERE user_id = ?"
             params = [user_id]
@@ -82,6 +85,11 @@ class WardrobeItem:
             if category:
                 query += " AND category = ?"
                 params.append(category)
+            
+            if category_section:
+                # Filter by category_section
+                query += " AND category_section = ?"
+                params.append(category_section)
             
             if category_id is not None:
                 # Filter by category_id directly - works for both user-created and platform categories
@@ -121,15 +129,15 @@ class WardrobeItem:
                 # Update
                 db_manager.execute_query(
                     """UPDATE wardrobe SET image_path = ?, category = ?, 
-                       category_id = ?, custom_category_name = ?,
+                       category_id = ?, custom_category_name = ?, category_section = ?,
                        garment_category_type = ?, brand = ?, color = ?, 
                        is_external = ?, title = ?, fabric = ?, 
                        care_instructions = ?, size = ?, description = ?
                        WHERE id = ? AND user_id = ?""",
                     (self.image_path, self.category, self.category_id, self.custom_category_name,
-                     self.garment_category_type, self.brand, self.color, self.is_external, self.title,
-                     self.fabric, self.care_instructions, self.size, self.description,
-                     self.id, self.user_id)
+                     self.category_section, self.garment_category_type, self.brand, self.color, 
+                     self.is_external, self.title, self.fabric, self.care_instructions, 
+                     self.size, self.description, self.id, self.user_id)
                 )
                 logger.info(f"WardrobeItem.save: EXIT - Item updated")
             else:
@@ -148,12 +156,12 @@ class WardrobeItem:
                 
                 item_id = db_manager.get_lastrowid(
                     """INSERT INTO wardrobe (user_id, garment_id, garment_image, garment_type, image_path, category, 
-                       category_id, custom_category_name,
+                       category_id, custom_category_name, category_section,
                        garment_category_type, brand, color, is_external, title,
                        fabric, care_instructions, size, description)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.user_id, garment_id, garment_image, garment_type, self.image_path, self.category,
-                     self.category_id, self.custom_category_name,
+                     self.category_id, self.custom_category_name, self.category_section,
                      self.garment_category_type, self.brand, self.color,
                      self.is_external, self.title, self.fabric, 
                      self.care_instructions, self.size, self.description)
@@ -205,6 +213,7 @@ class WardrobeItem:
             'category': self.category,
             'category_id': self.category_id,
             'custom_category_name': self.custom_category_name,
+            'category_section': self.category_section,
             'garment_category_type': self.garment_category_type,
             'brand': self.brand,
             'color': self.color,

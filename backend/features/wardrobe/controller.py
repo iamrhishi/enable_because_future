@@ -460,6 +460,19 @@ def add_garment():
         custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
         category_id = form_data.get('category_id') or data.get('category_id')
         
+        # Validate category_section if provided
+        if category_section:
+            valid_sections = ['upper_body', 'lower_body', 'accessoires', 'wishlist']
+            if category_section not in valid_sections:
+                # Check if it's a user-created section
+                section = WardrobeCategory.get_section_by_name(category_section, user_id)
+                if not section:
+                    return error_response_from_string(
+                        f'Invalid category_section: {category_section}. Must be one of {valid_sections} or a user-created section.',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+        
         # Map category_section to legacy category if needed
         if category_section and not category:
             # Map new category_section to legacy category
@@ -470,7 +483,7 @@ def add_garment():
                 'wishlist': None
             }
             category = section_to_category.get(category_section)
-            # If category_section is not recognized, default to 'upper'
+            # If category_section is not recognized (user-created), default to 'upper'
             if category is None and category_section not in ['accessoires', 'wishlist']:
                 category = 'upper'
         
@@ -539,6 +552,7 @@ def add_garment():
             category=category if not custom_category_name else None,
             custom_category_name=custom_category_name,
             category_id=int(category_id) if category_id else None,
+            category_section=category_section,
             garment_category_type=garment_type,
             brand=product_info.get('brand') if product_info else form_data.get('brand') or data.get('brand'),
             color=product_info.get('colors', [None])[0] if product_info and product_info.get('colors') else form_data.get('color') or data.get('color'),
@@ -588,6 +602,7 @@ def get_wardrobe_items():
         # Get query parameters
         category = request.args.get('category')  # 'upper', 'lower', or custom category name
         category_id = request.args.get('category_id')  # Platform or user category ID
+        category_section = request.args.get('category_section')  # 'upper_body', 'lower_body', 'accessoires', 'wishlist'
         item_id = request.args.get('item_id') or request.args.get('id')  # Support both 'item_id' and 'id'
         search = request.args.get('search', '').strip()
         
@@ -633,6 +648,7 @@ def get_wardrobe_items():
             category_id=category_id_int,
             platform_category_name=platform_category_name,  # For platform categories, also filter by garment_category_type
             item_id=item_id_int,
+            category_section=category_section,
             search=search if search else None
         )
         
@@ -766,6 +782,21 @@ def update_wardrobe_item(item_id: int):
                     item.category_id = int(category_id_val)
                 except (ValueError, TypeError):
                     return error_response_from_string('Invalid category_id', 400, 'VALIDATION_ERROR')
+        if 'category_section' in form_data or 'category_section' in data:
+            new_section = form_data.get('category_section') or data.get('category_section')
+            # Validate category_section
+            if new_section:
+                valid_sections = ['upper_body', 'lower_body', 'accessoires', 'wishlist']
+                if new_section not in valid_sections:
+                    # Check if it's a user-created section
+                    section = WardrobeCategory.get_section_by_name(new_section, user_id)
+                    if not section:
+                        return error_response_from_string(
+                            f'Invalid category_section: {new_section}. Must be one of {valid_sections} or a user-created section.',
+                            400,
+                            'VALIDATION_ERROR'
+                        )
+            item.category_section = new_section
         if 'garment_category_type' in form_data or 'garment_category_type' in data:
             item.garment_category_type = form_data.get('garment_category_type') or data.get('garment_category_type')
         if 'brand' in form_data or 'brand' in data:
