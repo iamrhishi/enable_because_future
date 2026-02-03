@@ -540,10 +540,11 @@ def add_garment():
                     return error_response_from_string('Fabric percentages must sum to 100%', 400, 'VALIDATION_ERROR')
                 fabric = json.dumps(fabric_input)
         
-        # Get care_instructions, size, description
+        # Get care_instructions, size, description, url
         care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
         size = form_data.get('size') or data.get('size')
         description = form_data.get('description') or data.get('description')
+        url = form_data.get('url') or data.get('url')
         
         # Create wardrobe item
         wardrobe_item = WardrobeItem(
@@ -561,7 +562,8 @@ def add_garment():
             fabric=fabric,
             care_instructions=care_instructions,
             size=size,
-            description=description
+            description=description,
+            url=url
         )
         wardrobe_item.save()
         
@@ -832,7 +834,9 @@ def update_wardrobe_item(item_id: int):
             item.size = form_data.get('size') or data.get('size')
         if 'description' in form_data or 'description' in data:
             item.description = form_data.get('description') or data.get('description')
-        
+        if 'url' in form_data or 'url' in data:
+            item.url = form_data.get('url') or data.get('url')
+
         item.save()
         
         result = item.to_dict()

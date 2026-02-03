@@ -14,8 +14,8 @@ class WardrobeItem:
                  category: str = None, garment_category_type: str = None,
                  brand: str = None, color: str = None, is_external: bool = False,
                  title: str = None, category_id: int = None, custom_category_name: str = None,
-                 fabric: str = None, care_instructions: str = None, size: str = None, 
-                 description: str = None, category_section: str = None, **kwargs):
+                 fabric: str = None, care_instructions: str = None, size: str = None,
+                 description: str = None, category_section: str = None, url: str = None, **kwargs):
         self.id = id
         self.user_id = user_id
         self.image_path = image_path
@@ -32,6 +32,7 @@ class WardrobeItem:
         self.care_instructions = care_instructions  # TEXT or JSON array
         self.size = size  # TEXT: "M", "L", "42", etc.
         self.description = description  # TEXT: Short description
+        self.url = url  # TEXT: Product page URL
         self._data = kwargs
     
     @classmethod
@@ -128,16 +129,16 @@ class WardrobeItem:
             if self.id:
                 # Update
                 db_manager.execute_query(
-                    """UPDATE wardrobe SET image_path = ?, category = ?, 
+                    """UPDATE wardrobe SET image_path = ?, category = ?,
                        category_id = ?, custom_category_name = ?, category_section = ?,
-                       garment_category_type = ?, brand = ?, color = ?, 
-                       is_external = ?, title = ?, fabric = ?, 
-                       care_instructions = ?, size = ?, description = ?
+                       garment_category_type = ?, brand = ?, color = ?,
+                       is_external = ?, title = ?, fabric = ?,
+                       care_instructions = ?, size = ?, description = ?, url = ?
                        WHERE id = ? AND user_id = ?""",
                     (self.image_path, self.category, self.category_id, self.custom_category_name,
-                     self.category_section, self.garment_category_type, self.brand, self.color, 
-                     self.is_external, self.title, self.fabric, self.care_instructions, 
-                     self.size, self.description, self.id, self.user_id)
+                     self.category_section, self.garment_category_type, self.brand, self.color,
+                     self.is_external, self.title, self.fabric, self.care_instructions,
+                     self.size, self.description, self.url, self.id, self.user_id)
                 )
                 logger.info(f"WardrobeItem.save: EXIT - Item updated")
             else:
@@ -155,16 +156,16 @@ class WardrobeItem:
                 garment_image = b''  # Empty bytes for legacy BLOB field
                 
                 item_id = db_manager.get_lastrowid(
-                    """INSERT INTO wardrobe (user_id, garment_id, garment_image, garment_type, image_path, category, 
+                    """INSERT INTO wardrobe (user_id, garment_id, garment_image, garment_type, image_path, category,
                        category_id, custom_category_name, category_section,
                        garment_category_type, brand, color, is_external, title,
-                       fabric, care_instructions, size, description)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       fabric, care_instructions, size, description, url)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.user_id, garment_id, garment_image, garment_type, self.image_path, self.category,
                      self.category_id, self.custom_category_name, self.category_section,
                      self.garment_category_type, self.brand, self.color,
-                     self.is_external, self.title, self.fabric, 
-                     self.care_instructions, self.size, self.description)
+                     self.is_external, self.title, self.fabric,
+                     self.care_instructions, self.size, self.description, self.url)
                 )
                 self.id = item_id
                 logger.info(f"WardrobeItem.save: EXIT - Item created with id={item_id}")
@@ -223,6 +224,7 @@ class WardrobeItem:
             'care_instructions': json.loads(self.care_instructions) if self.care_instructions and self.care_instructions.startswith('[') else self.care_instructions,
             'size': self.size,
             'description': self.description,
+            'url': self.url,
         }
         
         # Add date_added and updated_at if they exist in _data
