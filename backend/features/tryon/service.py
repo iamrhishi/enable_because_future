@@ -310,19 +310,22 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         prompt_parts = [
             "Edit image 1: Replace the current garment on the person with the garment from image 2. "
         ]
-        
+
         # Add garment details if available
         if garment_info_parts:
             prompt_parts.append(f"New garment: {', '.join(garment_info_parts)}. ")
-        
+
         prompt_parts.extend([
             f"Extract the garment fabric from image 2 and fit it naturally on the person at {body_location}. ",
-            f"Show the complete person from head to toe, don't create comparison of original image with the new one and preserve the background from person at {body_location}.",
-            "The output must be different from image 1 - the garment must be visible on the person. ",
-            "DO NOT add excess padding, borders, or unnecessary additional area around the image. ",
-            "Keep the output image dimensions and composition similar to image 1 without adding extra space. ",
-            "OPTIMIZE FOR SPEED: Return a smaller, lower resolution version of the image for faster processing. "
-            "Reduce image quality and size while maintaining visual clarity of the person and garment."
+            "CRITICAL FRAMING REQUIREMENTS: ",
+            "- Maintain EXACTLY the same framing, crop, and composition as image 1. ",
+            "- The person's head and feet must remain at the SAME positions as in image 1. ",
+            "- Do NOT zoom in or out - keep the same scale as the original. ",
+            "- Do NOT add any padding, borders, margins, or extra space around the person. ",
+            "- Do NOT crop or cut off any body parts (head, hands, feet) that were visible in image 1. ",
+            "- The output dimensions should match image 1 exactly. ",
+            "Do NOT create a side-by-side comparison or show before/after - output ONLY the edited image. ",
+            "The garment must be clearly visible and naturally fitted on the person."
         ])
         
         prompt = "".join(prompt_parts)
