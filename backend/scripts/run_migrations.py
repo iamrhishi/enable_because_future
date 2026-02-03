@@ -49,6 +49,7 @@ def main():
         (17, 'add_postal_code_to_users', load_migration(17, 'add_postal_code_to_users')),
         (19, 'add_image_cache_to_garment_metadata', load_migration(19, 'add_image_cache_to_garment_metadata')),
         (20, 'add_category_section_to_wardrobe', load_migration(20, 'add_category_section_to_wardrobe')),
+        (21, 'add_url_to_wardrobe', load_migration(21, 'add_url_to_wardrobe')),
     ]
     
     migration_manager.run_migrations(migrations)
