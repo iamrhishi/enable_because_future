@@ -58,6 +58,11 @@ class Config:
     
     # Remote Try-On API Configuration
     REMOTE_TRYON_API_URL = os.environ.get('REMOTE_TRYON_API_URL', 'http://35.198.124.100:5000/api/tryon-gemini')
+
+    # Mixer-Service API Configuration (specialized virtual try-on model)
+    MIXER_SERVICE_URL = os.environ.get('MIXER_SERVICE_URL', 'https://api.becausefuture.tech/mixer-service/tryon')
+    MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', 'becausefuture')
+    MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', 'becausefuture!2025')
     
     @staticmethod
     def validate():

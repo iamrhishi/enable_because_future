@@ -1,9 +1,11 @@
 """
-AI model integration for try-on processing using Gemini (Nano Banana) API
-Simplified to use Gemini only - no routing logic needed
+AI model integration for try-on processing
+Primary: Mixer-Service API (specialized virtual try-on model)
+V2 (unused): Gemini API - kept for reference but not used
 """
 
 import requests  # type: ignore
+from requests.auth import HTTPBasicAuth  # type: ignore
 import base64
 import time
 import re
@@ -15,6 +17,181 @@ from io import BytesIO
 from config import Config
 from shared.logger import logger
 from shared.errors import ExternalServiceError
+
+
+# =============================================================================
+# V2 TRY-ON SERVICE: Mixer-Service (Specialized Virtual Try-On Model)
+# Currently not used - service is down. Kept for when it becomes available.
+# =============================================================================
+
+def process_tryon_v2_mixer(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
+                           garment_details: dict = None, options: dict = None) -> str:
+    """
+    [V2 - NOT USED] Process try-on using Mixer-Service API (specialized virtual try-on model)
+
+    NOTE: This function is kept for future use when mixer-service becomes available.
+    Currently the service at api.becausefuture.tech is unreachable.
+
+    Args:
+        person_image: Person image bytes (avatar or selfie with background removed)
+        garment_image: Garment image bytes (can be single image or list - uses first)
+        garment_type: 'upper' or 'lower'
+        garment_details: Dict with garment info (not used by mixer-service, kept for API compatibility)
+        options: Additional options including num_inference_steps
+
+    Returns:
+        result_url: Base64 data URL of result image
+
+    Raises:
+        ExternalServiceError: If processing fails
+    """
+    logger.info(f"process_tryon_v2_mixer: ENTRY - garment_type={garment_type} (using Mixer-Service)")
+
+    try:
+        # Validate config
+        if not Config.MIXER_SERVICE_URL:
+            raise ExternalServiceError("Mixer-Service URL not configured", service='mixer-service')
+
+        # Handle list of images - use only the first one
+        if isinstance(garment_image, list):
+            garment_image = garment_image[0]
+            logger.info(f"process_tryon: Received list of images, using first one only")
+
+        # Log image sizes for debugging
+        person_size_mb = len(person_image) / (1024 * 1024)
+        garment_size_mb = len(garment_image) / (1024 * 1024)
+        logger.info(f"process_tryon: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
+
+        # Prepare files for mixer-service API
+        # API expects: person_image, cloth_image, cloth_type
+        files = {
+            'person_image': ('person.png', BytesIO(person_image), 'image/png'),
+            'cloth_image': ('garment.png', BytesIO(garment_image), 'image/png')
+        }
+
+        # Prepare form data
+        data = {
+            'cloth_type': garment_type  # 'upper' or 'lower'
+        }
+
+        # Add optional num_inference_steps from options
+        if options and options.get('num_inference_steps'):
+            data['num_inference_steps'] = str(options['num_inference_steps'])
+
+        # Prepare auth
+        auth = HTTPBasicAuth(Config.MIXER_SERVICE_USERNAME, Config.MIXER_SERVICE_PASSWORD)
+
+        # Call mixer-service API with retry logic
+        max_retries = 3
+        retry_delay = 2
+        response = None
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"process_tryon: Calling Mixer-Service API (attempt {attempt + 1}/{max_retries})")
+                response = requests.post(
+                    Config.MIXER_SERVICE_URL,
+                    files=files,
+                    data=data,
+                    auth=auth,
+                    headers={"Accept": "image/png"},
+                    timeout=120  # 2 minute timeout
+                )
+
+                # Success - got image response
+                if response.status_code == 200 and response.headers.get('Content-Type', '').startswith('image/'):
+                    logger.info(f"process_tryon: Mixer-Service returned image, size={len(response.content)} bytes")
+                    break
+
+                # Retryable errors (5xx, 429)
+                if response.status_code in (500, 502, 503, 504, 429) and attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(
+                        f"process_tryon: Mixer-Service returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {wait_time} seconds..."
+                    )
+                    # Reset file positions for retry
+                    files['person_image'] = ('person.png', BytesIO(person_image), 'image/png')
+                    files['cloth_image'] = ('garment.png', BytesIO(garment_image), 'image/png')
+                    time.sleep(wait_time)
+                    continue
+
+                # Non-retryable error or final attempt
+                error_text = response.text[:500] if response.text else 'No response body'
+                logger.error(f"process_tryon: Mixer-Service error - status={response.status_code}, response={error_text}")
+
+                # Try to parse error message
+                try:
+                    error_json = response.json()
+                    error_msg = error_json.get('message', error_text)
+                except:
+                    error_msg = error_text
+
+                raise ExternalServiceError(
+                    f"Mixer-Service error ({response.status_code}): {error_msg}",
+                    service='mixer-service'
+                )
+
+            except requests.Timeout:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(f"process_tryon: Mixer-Service timeout (attempt {attempt + 1}/{max_retries}). Retrying...")
+                    # Reset file positions for retry
+                    files['person_image'] = ('person.png', BytesIO(person_image), 'image/png')
+                    files['cloth_image'] = ('garment.png', BytesIO(garment_image), 'image/png')
+                    time.sleep(wait_time)
+                    continue
+                raise ExternalServiceError("Mixer-Service timeout after multiple retries", service='mixer-service')
+
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    logger.warning(f"process_tryon: Mixer-Service request failed: {str(e)}. Retrying...")
+                    # Reset file positions for retry
+                    files['person_image'] = ('person.png', BytesIO(person_image), 'image/png')
+                    files['cloth_image'] = ('garment.png', BytesIO(garment_image), 'image/png')
+                    time.sleep(wait_time)
+                    continue
+                raise ExternalServiceError(f"Mixer-Service request failed: {str(e)}", service='mixer-service')
+
+        # Validate response
+        if response is None or response.status_code != 200:
+            raise ExternalServiceError("Mixer-Service failed after all retries", service='mixer-service')
+
+        if not response.headers.get('Content-Type', '').startswith('image/'):
+            raise ExternalServiceError(
+                f"Mixer-Service returned unexpected content type: {response.headers.get('Content-Type')}",
+                service='mixer-service'
+            )
+
+        # Get result image bytes
+        result_image_bytes = response.content
+
+        # Verify it's a valid image
+        try:
+            result_img = Image.open(BytesIO(result_image_bytes))
+            logger.info(f"process_tryon: Result image valid - size={result_img.size}, mode={result_img.mode}")
+        except Exception as img_error:
+            raise ExternalServiceError(f"Mixer-Service returned invalid image: {str(img_error)}", service='mixer-service')
+
+        # Convert to base64 data URL (to match expected output format)
+        result_base64 = base64.b64encode(result_image_bytes).decode('utf-8')
+        result_url = f"data:image/png;base64,{result_base64}"
+
+        logger.info(f"process_tryon_v2_mixer: EXIT - Success, result size={len(result_base64)} chars")
+        return result_url
+
+    except ExternalServiceError:
+        logger.exception("process_tryon_v2_mixer: EXIT - ExternalServiceError")
+        raise
+    except Exception as e:
+        logger.exception(f"process_tryon_v2_mixer: EXIT - Unexpected error: {str(e)}")
+        raise ExternalServiceError(f"Try-on processing failed: {str(e)}", service='mixer-service')
+
+
+# =============================================================================
+# PRIMARY TRY-ON SERVICE: Gemini API
+# =============================================================================
 
 
 def _crop_to_aspect_ratio(img: Image.Image, target_ratio: float, person_center_x: float = None, person_info: dict = None) -> Image.Image:
@@ -224,21 +401,25 @@ def _detect_person_boundaries(person_image: bytes) -> dict:
         }
 
 
-def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper', 
+def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
                   garment_details: dict = None, options: dict = None) -> str:
     """
-    Process try-on using Gemini (Nano Banana) API - simplified version for faster response
-    
+    Process try-on using Gemini (Nano Banana) API - PRIMARY SERVICE
+
+    This is the main try-on service using Google's Gemini image generation model.
+    While Gemini is a general-purpose model (not specifically trained for virtual try-on),
+    we use enhanced prompts to improve garment matching and framing preservation.
+
     Args:
         person_image: Person image bytes (avatar or selfie with background removed)
         garment_image: Garment image bytes (can be single image or list of images)
         garment_type: 'upper' or 'lower'
         garment_details: Dict with garment info (category, material_type, brand, color, style, etc.)
         options: Additional options (not currently used, kept for compatibility)
-        
+
     Returns:
         result_url: Base64 data URL of result image
-        
+
     Raises:
         ExternalServiceError: If processing fails
     """
@@ -306,26 +487,87 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 style_display = garment_details['style'].replace('_', ' ').title()
                 garment_info_parts.append(f"Style: {style_display}")
         
+        # Get input image dimensions and pad to standard aspect ratio
+        # Gemini tends to zoom/reframe unusual aspect ratios, so we pad to ~3:4 or 1:1
+        # then crop back to original dimensions after processing
+        original_width, original_height = None, None
+        padded_person_image = person_image
+        pad_left, pad_top = 0, 0
+
+        try:
+            person_img = Image.open(BytesIO(person_image))
+            original_width, original_height = person_img.size
+            input_ratio = original_width / original_height
+            logger.info(f"process_tryon: Original person image: {original_width}x{original_height}, ratio={input_ratio:.3f}")
+
+            # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing
+            if input_ratio < 0.6:
+                # Pad to 3:4 aspect ratio (0.75) which is more standard
+                target_ratio = 0.75
+                new_width = int(original_height * target_ratio)
+
+                # Create padded canvas with transparent background
+                if person_img.mode != 'RGBA':
+                    person_img = person_img.convert('RGBA')
+
+                padded_img = Image.new('RGBA', (new_width, original_height), (0, 0, 0, 0))
+
+                # Center the original image on the padded canvas
+                pad_left = (new_width - original_width) // 2
+                pad_top = 0
+                padded_img.paste(person_img, (pad_left, pad_top), person_img)
+
+                # Convert padded image to bytes
+                padded_buffer = BytesIO()
+                padded_img.save(padded_buffer, format='PNG')
+                padded_person_image = padded_buffer.getvalue()
+
+                # Update base64 for API call
+                person_base64 = base64.b64encode(padded_person_image).decode('utf-8')
+
+                logger.info(f"process_tryon: Padded person image to {new_width}x{original_height} (ratio={target_ratio:.3f}), pad_left={pad_left}")
+
+            input_width, input_height = original_width, original_height
+        except Exception as e:
+            logger.warning(f"process_tryon: Could not process input dimensions: {e}")
+            input_width, input_height = None, None
+            original_width, original_height = None, None
+
         # Build comprehensive prompt with all garment details
         prompt_parts = [
-            "Edit image 1: Replace the current garment on the person with the garment from image 2. "
+            "TASK: Virtual try-on - dress the person in image 1 with the garment from image 2.\n\n"
         ]
 
         # Add garment details if available
         if garment_info_parts:
-            prompt_parts.append(f"New garment: {', '.join(garment_info_parts)}. ")
+            prompt_parts.append(f"GARMENT TO APPLY: {', '.join(garment_info_parts)}.\n")
 
         prompt_parts.extend([
-            f"Extract the garment fabric from image 2 and fit it naturally on the person at {body_location}. ",
-            "CRITICAL FRAMING REQUIREMENTS: ",
-            "- Maintain EXACTLY the same framing, crop, and composition as image 1. ",
-            "- The person's head and feet must remain at the SAME positions as in image 1. ",
-            "- Do NOT zoom in or out - keep the same scale as the original. ",
-            "- Do NOT add any padding, borders, margins, or extra space around the person. ",
-            "- Do NOT crop or cut off any body parts (head, hands, feet) that were visible in image 1. ",
-            "- The output dimensions should match image 1 exactly. ",
-            "Do NOT create a side-by-side comparison or show before/after - output ONLY the edited image. ",
-            "The garment must be clearly visible and naturally fitted on the person."
+            f"Apply the garment from image 2 onto the {body_location} of the person in image 1.\n\n",
+            "GARMENT MATCHING REQUIREMENTS (CRITICAL):\n",
+            "- Reproduce the EXACT garment design from image 2: same sleeve length, neckline, hem length, cuts, and all design details.\n",
+            "- Preserve the exact fabric pattern, texture, color, and material appearance.\n",
+            "- If the garment has asymmetric elements (one sleeve longer, off-shoulder, etc.), maintain that asymmetry exactly.\n",
+            "- Do NOT modify, simplify, or interpret the garment differently - copy it precisely.\n\n",
+            "FRAMING AND DIMENSION REQUIREMENTS (CRITICAL):\n",
+        ])
+
+        # Add explicit dimension constraint if we have it
+        if input_width and input_height:
+            prompt_parts.append(f"- Output image MUST be exactly {input_width}x{input_height} pixels.\n")
+
+        prompt_parts.extend([
+            "- The person's HEAD must be at the EXACT same vertical position (same distance from top edge).\n",
+            "- The person's FEET must be at the EXACT same vertical position (same distance from bottom edge).\n",
+            "- If feet are visible in image 1, they MUST be visible in the output at the same position.\n",
+            "- Do NOT zoom in, zoom out, or change the scale of the person.\n",
+            "- Do NOT crop, cut off, or truncate any body parts (head, hands, arms, legs, feet).\n",
+            "- The person must occupy the SAME area of the frame as in image 1.\n",
+            "- Maintain identical aspect ratio, framing, and composition.\n\n",
+            "OUTPUT REQUIREMENTS:\n",
+            "- Output ONLY a single edited image (no side-by-side, no before/after comparison).\n",
+            "- The garment must look naturally fitted on the person's body.\n",
+            "- Preserve the person's pose, face, hair, skin, and any visible accessories.\n"
         ])
         
         prompt = "".join(prompt_parts)
@@ -363,6 +605,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "generationConfig": {
                 "temperature": 0.0,  # Minimum temperature (0.0) for maximum determinism and consistency
                 "seed": seed,  # Deterministic seed computed from input images - ensures same inputs produce same outputs
+                "responseModalities": ["IMAGE"],  # Ensure we get an image response
             }
         }
         
@@ -565,7 +808,89 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails
-        
+
+        # Post-processing: Handle padded input and ensure output dimensions match
+        if original_width and original_height:
+            try:
+                result_img = Image.open(BytesIO(result_image_bytes))
+                result_width, result_height = result_img.size
+                logger.info(f"process_tryon: Gemini output dimensions: {result_width}x{result_height}")
+
+                # Ensure RGBA mode for transparency preservation
+                if result_img.mode != 'RGBA':
+                    result_img = result_img.convert('RGBA')
+
+                # If we padded the input, we need to extract the center portion
+                if pad_left > 0 or pad_top > 0:
+                    # Calculate the expected padded dimensions (what we sent to Gemini)
+                    padded_width = original_width + (2 * pad_left)
+                    padded_height = original_height + (2 * pad_top)
+                    logger.info(f"process_tryon: Input was padded to {padded_width}x{padded_height}, need to extract center {original_width}x{original_height}")
+
+                    # Scale result to match the padded dimensions first
+                    if result_width != padded_width or result_height != padded_height:
+                        # Scale proportionally to match padded dimensions
+                        scale = min(padded_width / result_width, padded_height / result_height)
+                        scaled_w = int(result_width * scale)
+                        scaled_h = int(result_height * scale)
+                        result_img = result_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+                        logger.info(f"process_tryon: Scaled result to {scaled_w}x{scaled_h}")
+
+                        # Center on canvas of padded size if needed
+                        if scaled_w != padded_width or scaled_h != padded_height:
+                            canvas = Image.new('RGBA', (padded_width, padded_height), (0, 0, 0, 0))
+                            paste_x = (padded_width - scaled_w) // 2
+                            paste_y = (padded_height - scaled_h) // 2
+                            canvas.paste(result_img, (paste_x, paste_y), result_img)
+                            result_img = canvas
+
+                    # Now crop to extract the original (unpadded) region
+                    crop_left = pad_left
+                    crop_top = pad_top
+                    crop_right = crop_left + original_width
+                    crop_bottom = crop_top + original_height
+                    result_img = result_img.crop((crop_left, crop_top, crop_right, crop_bottom))
+                    logger.info(f"process_tryon: Cropped to original dimensions: {original_width}x{original_height}")
+
+                else:
+                    # No padding was applied - use original dimension matching logic
+                    if result_width != original_width or result_height != original_height:
+                        logger.info(f"process_tryon: Dimension mismatch - output {result_width}x{result_height} vs input {original_width}x{original_height}. Adjusting...")
+
+                        output_ratio = result_width / result_height if result_height > 0 else 1.0
+                        input_ratio = original_width / original_height if original_height > 0 else 1.0
+
+                        if abs(output_ratio - input_ratio) < 0.05:
+                            # Same aspect ratio - simple high-quality resize
+                            result_img = result_img.resize((original_width, original_height), Image.Resampling.LANCZOS)
+                            logger.info(f"process_tryon: Resized output to match input dimensions (same aspect ratio)")
+                        else:
+                            # Different aspect ratio - scale to fit within target, center on transparent canvas
+                            scale_w = original_width / result_width
+                            scale_h = original_height / result_height
+                            scale = min(scale_w, scale_h)
+
+                            new_w = int(result_width * scale)
+                            new_h = int(result_height * scale)
+                            result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+                            canvas = Image.new('RGBA', (original_width, original_height), (0, 0, 0, 0))
+                            paste_x = (original_width - new_w) // 2
+                            paste_y = (original_height - new_h) // 2
+                            canvas.paste(result_img, (paste_x, paste_y), result_img)
+                            result_img = canvas
+                            logger.info(f"process_tryon: Scaled and centered output on transparent canvas (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
+                    else:
+                        logger.info(f"process_tryon: Output dimensions already match input: {result_width}x{result_height}")
+
+                # Save final image
+                output = BytesIO()
+                result_img.save(output, format='PNG')
+                result_image_bytes = output.getvalue()
+                logger.info(f"process_tryon: Final output dimensions: {result_img.size[0]}x{result_img.size[1]}")
+            except Exception as resize_error:
+                logger.warning(f"process_tryon: Dimension matching failed: {str(resize_error)}, using result as-is")
+
         # Convert to base64 data URL
         result_base64 = base64.b64encode(result_image_bytes).decode('utf-8')
         result = f"data:image/png;base64,{result_base64}"
