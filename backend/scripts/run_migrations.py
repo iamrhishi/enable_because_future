@@ -50,6 +50,8 @@ def main():
         (19, 'add_image_cache_to_garment_metadata', load_migration(19, 'add_image_cache_to_garment_metadata')),
         (20, 'add_category_section_to_wardrobe', load_migration(20, 'add_category_section_to_wardrobe')),
         (21, 'add_url_to_wardrobe', load_migration(21, 'add_url_to_wardrobe')),
+        (22, 'add_avatar_path', load_migration(22, 'add_avatar_path')),
+        (23, 'add_tryon_results', load_migration(23, 'add_tryon_results')),
     ]
     
     migration_manager.run_migrations(migrations)

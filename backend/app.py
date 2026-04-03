@@ -49,6 +49,56 @@ def serve_image(filename):
         logger.exception(f"serve_image: Error serving image {filename}: {str(e)}")
         return jsonify({"error": "Failed to serve image"}), 500
 
+# Serve avatars by userid (looks up actual filename from database)
+@app.route('/api/avatar/<userid>')
+def get_user_avatar_file(userid):
+    """
+    Get avatar file for a user by userid
+    Looks up the actual avatar path from database and serves the file
+    
+    Args:
+        userid: User ID to fetch avatar for
+        
+    Returns:
+        Avatar image file or 404 if not found
+    """
+    try:
+        from shared.models.user import User
+        from pathlib import Path
+        
+        logger.info(f"get_user_avatar_file: ENTRY - userid={userid}")
+        
+        # Get user from database
+        user = User.get_by_id(userid)
+        if not user:
+            logger.warning(f"get_user_avatar_file: User not found - userid={userid}")
+            return jsonify({"error": "User not found"}), 404
+        
+        # Check if user has avatar_path
+        if not user.avatar_path:
+            logger.warning(f"get_user_avatar_file: User has no avatar - userid={userid}")
+            return jsonify({"error": "User has no avatar"}), 404
+        
+        # Serve the file
+        images_dir = Path(Config.IMAGES_DIR)
+        file_path = images_dir / user.avatar_path
+        
+        # Security: Ensure file is within images directory
+        if not str(file_path.resolve()).startswith(str(images_dir.resolve())):
+            logger.warning(f"get_user_avatar_file: Invalid path - userid={userid}")
+            return jsonify({"error": "Invalid path"}), 403
+        
+        if file_path.exists():
+            logger.info(f"get_user_avatar_file: EXIT - Serving avatar for userid={userid}")
+            return send_from_directory(str(images_dir), user.avatar_path)
+        else:
+            logger.warning(f"get_user_avatar_file: Avatar file not found - userid={userid}, path={user.avatar_path}")
+            return jsonify({"error": "Avatar file not found"}), 404
+            
+    except Exception as e:
+        logger.exception(f"get_user_avatar_file: EXIT - Error: {str(e)}")
+        return jsonify({"error": "Failed to serve avatar"}), 500
+
 # Serve icons from backend/icons for platform/user categories
 @app.route('/icons/<path:filename>')
 def serve_icon(filename):
@@ -132,151 +182,72 @@ def save_avatar():
                 'VALIDATION_ERROR'
             )
         
-        # Read file as binary data
-        avatar_data = avatar_file.read()
-        
-        # Validate file size (max 5MB)
-        max_size = 5 * 1024 * 1024  # 5MB
-        if len(avatar_data) > max_size:
-            return error_response_from_string(
-                'File too large. Maximum size is 5MB',
-                400,
-                'VALIDATION_ERROR'
-            )
-        
-        # user_id is already set from JWT token via @require_auth decorator
         user_id = request.user_id
-        
-        # Always remove background using Gemini (Nano Banana) API
-        # Per user requirement: Use Nano Banana to remove background and keep only user image
+        avatar_data = avatar_file.read()
         try:
-            from features.tryon.service import remove_background
+            from features.tryon.service import _remove_background_local
             from PIL import Image
             from io import BytesIO
-            
-            logger.info(f"Removing background from avatar using Gemini API (Nano Banana) for user: {user_id}")
-            avatar_data = remove_background(avatar_data)
-            
-            # Verify that background removal resulted in transparent image
+            logger.info(f"Removing background from avatar using rembg (local) for user: {user_id}")
+            avatar_data = _remove_background_local(avatar_data)
             try:
                 img = Image.open(BytesIO(avatar_data))
-                original_mode = img.mode
-                
-                # Check if image has transparency (alpha channel)
-                has_transparency = img.mode in ('RGBA', 'LA', 'P')
-                
-                if not has_transparency:
-                    # If image is RGB (no transparency), background removal didn't work properly
-                    logger.error(f"Avatar from Gemini is {original_mode} mode (no transparency). Background removal failed to create transparent image.")
-                    return error_response_from_string(
-                        'Background removal failed to create transparent image. Please try uploading again with a clearer photo.',
-                        500,
-                        'EXTERNAL_SERVICE_ERROR'
-                    )
-                
-                # Convert to RGBA to ensure proper transparency support
-                if img.mode == 'P':
-                    # Palette mode - convert to RGBA to preserve transparency
+                if img.mode != 'RGBA':
                     img = img.convert('RGBA')
-                elif img.mode == 'LA':
-                    # Grayscale with alpha - convert to RGBA
-                    img = img.convert('RGBA')
-                # If already RGBA, keep as is
-                
-                # Trim transparent padding to make person fill more of the frame
-                # This removes any transparent edges that might make the person appear small
-                # IMPORTANT: Add padding around bounding box to preserve extended body parts (hands, etc.)
-                try:
-                    # Get bounding box of non-transparent pixels
-                    bbox = img.getbbox()
-                    if bbox:
-                        original_size = img.size
-                        img_width, img_height = original_size
-                        
-                        # Add padding margin to preserve extended body parts (hands, feet, etc.)
-                        # Use 2% of image dimensions or minimum 15 pixels, whichever is larger
-                        padding_x = max(int(img_width * 0.02), 15)
-                        padding_y = max(int(img_height * 0.02), 15)
-                        
-                        # Extract bounding box coordinates
-                        left, top, right, bottom = bbox
-                        
-                        # Expand bounding box with padding, but stay within image boundaries
-                        left = max(0, left - padding_x)
-                        top = max(0, top - padding_y)
-                        right = min(img_width, right + padding_x)
-                        bottom = min(img_height, bottom + padding_y)
-                        
-                        # Crop with padding to preserve entire person including extended parts
-                        img = img.crop((left, top, right, bottom))
-                        logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding, preserved {padding_x}x{padding_y}px margin for extended body parts)")
-                    else:
-                        logger.warning(f"Avatar has no visible content (all transparent)")
-                except Exception as trim_error:
-                    logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
-                
-                # Save as PNG with transparency preserved (RGBA mode ensures alpha channel)
-                output = BytesIO()
-                # PIL automatically preserves alpha channel when saving RGBA images as PNG
-                img.save(output, format='PNG')
-                avatar_data = output.getvalue()
-                
-                logger.info(f"Avatar processed with transparency preserved, user: {user_id}, mode: RGBA, size: {img.size}")
-            except Exception as img_check_error:
-                logger.exception(f"Error processing avatar transparency: {str(img_check_error)}")
-                return error_response_from_string(
-                    'Failed to process avatar image. Please try uploading again.',
-                    500,
-                    'EXTERNAL_SERVICE_ERROR'
-                )
-            
+                bbox = img.getbbox()
+                if bbox:
+                    original_size = img.size
+                    img_width, img_height = original_size
+                    padding_x = max(int(img_width * 0.02), 15)
+                    padding_y = max(int(img_height * 0.02), 15)
+                    left, top, right, bottom = bbox
+                    left = max(0, left - padding_x)
+                    top = max(0, top - padding_y)
+                    right = min(img_width, right + padding_x)
+                    bottom = min(img_height, bottom + padding_y)
+                    img = img.crop((left, top, right, bottom))
+                    logger.info(f"Avatar trimmed from {original_size} to {img.size} (removed transparent padding, preserved {padding_x}x{padding_y}px margin for extended body parts)")
+                    output = BytesIO()
+                    img.save(output, format='PNG')
+                    avatar_data = output.getvalue()
+                else:
+                    logger.warning(f"Avatar has no visible content (all transparent)")
+            except Exception as trim_error:
+                logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
-            # Fail fast - don't save avatar without background removal
             return error_response_from_string(
                 f'Failed to remove background from avatar: {str(e)}',
                 500,
                 'EXTERNAL_SERVICE_ERROR'
             )
-        
         logger.info(f"Saving avatar for user: {user_id}, size: {len(avatar_data)} bytes, bg_removed: True, transparent: True")
-        
-        # Use User model instead of direct SQL
         from shared.models.user import User
         user = User.get_by_id(user_id)
-        
         if not user:
             return error_response_from_string('User not found', 404, 'NOT_FOUND')
-        
-        # Save avatar to disk storage for frontend URL access
         from shared.storage import get_storage_service
         import uuid
         avatar_filename = f"{user_id}_{uuid.uuid4().hex[:8]}.png"
         storage_path = f"avatars/{user_id}/{avatar_filename}"
-        
         storage_service = get_storage_service()
         avatar_url = storage_service.upload_image(
             avatar_data,
             storage_path,
             content_type='image/png'
         )
-        
-        # Construct absolute URL for frontend
-        # Get base URL from request (works for both localhost and production)
         base_url = request.url_root.rstrip('/')
         absolute_avatar_url = f"{base_url}{avatar_url}"
-        
-        # Also save to database for backward compatibility (get_avatar endpoint)
         user.avatar = avatar_data
+        user.avatar_path = storage_path  # Store the file path reference
         user.save()
-        
         logger.info(f"Avatar saved successfully for user: {user_id}, URL: {absolute_avatar_url}")
-        
         return success_response(
             data={
-                'message': 'Avatar saved successfully',
+                'message': 'Avatar saved successfully (rembg-based background removal)',
                 'background_removed': True,
-                'avatar_url': absolute_avatar_url  # Return URL for frontend to use
+                'method': 'rembg',
+                'avatar_url': absolute_avatar_url
             },
             message='Avatar saved successfully'
         )
@@ -407,6 +378,7 @@ def save_avatar_local():
         
         # Also save to database for backward compatibility
         user.avatar = avatar_data
+        user.avatar_path = storage_path  # Store the file path reference
         user.save()
         
         logger.info(f"Avatar saved successfully (local) for user: {user_id}, URL: {absolute_avatar_url}")

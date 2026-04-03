@@ -19,6 +19,7 @@ from shared.errors import ValidationError, NotFoundError
 from shared.logger import logger
 import base64
 import json
+import time
 from io import BytesIO
 
 wardrobe_bp = Blueprint('wardrobe', __name__, url_prefix='/api/wardrobe')
@@ -976,3 +977,103 @@ def extract_garment_from_url():
         logger.exception(f"extract_garment_from_url: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
+
+# ===== EXTENSION SPECIFIC ENDPOINTS =====
+
+@wardrobe_bp.route('/save-extracted', methods=['POST'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def save_extracted_garment():
+    """
+    Save a garment extracted from web pages directly to wardrobe
+    Specifically designed for Chrome extension use
+    Accepts base64 image data without URL validation
+    Saves image as base64 in description field (or could be stored as file)
+    
+    Request JSON:
+    {
+        "garment_image": "data:image/jpeg;base64,...",  # Data URL or base64 string
+        "garment_type": "upper" or "lower",
+        "garment_id": "optional_unique_id"
+    }
+    """
+    user_id = request.user_id
+    logger.info(f"save_extracted_garment: ENTRY - user_id={user_id}")
+    
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        # Validate required fields
+        garment_image_data = data.get('garment_image')
+        garment_type = data.get('garment_type', 'upper').lower()
+        garment_id = data.get('garment_id', f'extracted_{user_id}_{int(time.time() * 1000)}')
+        
+        if not garment_image_data:
+            logger.warning("save_extracted_garment: Missing garment_image")
+            return error_response_from_string('garment_image is required', 400, 'VALIDATION_ERROR')
+        
+        # Validate garment type
+        if garment_type not in ['upper', 'lower']:
+            logger.warning(f"save_extracted_garment: Invalid garment_type: {garment_type}")
+            return error_response_from_string('garment_type must be "upper" or "lower"', 400, 'VALIDATION_ERROR')
+        
+        # Convert data URL to base64 if needed
+        if garment_image_data.startswith('data:'):
+            # Extract base64 part from data URL
+            try:
+                base64_str = garment_image_data.split(',')[1]
+                garment_image_bytes = base64.b64decode(base64_str)
+            except (IndexError, ValueError) as e:
+                logger.warning(f"save_extracted_garment: Invalid data URL format: {str(e)}")
+                return error_response_from_string('Invalid image data URL format', 400, 'VALIDATION_ERROR')
+        else:
+            # Assume it's already base64
+            try:
+                garment_image_bytes = base64.b64decode(garment_image_data)
+            except ValueError as e:
+                logger.warning(f"save_extracted_garment: Invalid base64 string: {str(e)}")
+                return error_response_from_string('Invalid base64 image data', 400, 'VALIDATION_ERROR')
+        
+        # Validate and preprocess image
+        try:
+            garment_image = preprocess_image(garment_image_bytes, resize=True, normalize=True)
+        except Exception as e:
+            logger.warning(f"save_extracted_garment: Image validation failed: {str(e)}")
+            return error_response_from_string(f'Invalid image: {str(e)}', 400, 'VALIDATION_ERROR')
+        
+        # Save image to storage and get the path
+        try:
+            image_path = get_storage_service().save_garment_image(garment_image, user_id, garment_id)
+            logger.info(f"save_extracted_garment: Image saved to {image_path}")
+        except Exception as e:
+            logger.warning(f"save_extracted_garment: Failed to save image: {str(e)}")
+            return error_response_from_string(f'Failed to save image: {str(e)}', 400, 'VALIDATION_ERROR')
+        
+        # Create wardrobe item using the WardrobeItem model
+        # The model uses image_path (file path) instead of garment_image (BLOB)
+        wardrobe_item = WardrobeItem(
+            user_id=user_id,
+            image_path=image_path,
+            category=garment_type,  # 'upper' or 'lower'
+            is_external=False,  # Not from external URL
+            title=f"Extracted Garment - {garment_type.capitalize()}",
+            description=f"Extracted from web page on {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        # Save to database
+        wardrobe_item.save()
+        
+        logger.info(f"save_extracted_garment: EXIT - Successfully saved garment {garment_id} to wardrobe for user {user_id}")
+        
+        return success_response(
+            data={
+                'id': wardrobe_item.id,
+                'image_path': wardrobe_item.image_path,
+                'category': wardrobe_item.category,
+                'title': wardrobe_item.title
+            },
+            message='Garment saved to wardrobe successfully'
+        )
+        
+    except Exception as e:
+        logger.exception(f"save_extracted_garment: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Failed to save garment: {str(e)}', 500)

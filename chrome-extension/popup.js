@@ -1,4 +1,160 @@
 document.addEventListener('DOMContentLoaded', function() {
+        // Function to fetch avatar from backend and update Chrome storage
+        async function fetchAndStoreAvatar() {
+          chrome.storage.local.get(['jwtToken', 'userID'], async function(result) {
+            const jwtToken = result.jwtToken;
+            const userID = result.userID;
+            if (!jwtToken || !userID) return;
+            try {
+              // Use the new /api/avatar/<userid> endpoint to get the avatar file directly
+              const response = await fetch(`${API_BASE_URL}/api/avatar/${userID}`, {
+                method: 'GET'
+              });
+              if (response.ok) {
+                // Get the blob and convert to data URL
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                  const avatarDataUrl = reader.result;
+                  chrome.storage.local.set({ avatarDataUrl });
+                  renderAvatarPreview(avatarDataUrl);
+                };
+                reader.readAsDataURL(blob);
+              } else {
+                // Fallback: try to get avatar_url from the authenticated endpoint
+                const authResponse = await fetch(`${API_BASE_URL}/api/users/avatar`, {
+                  method: 'GET',
+                  headers: { 'Authorization': `Bearer ${jwtToken}` }
+                });
+                if (authResponse.ok) {
+                  const result = await authResponse.json();
+                  if (result.success && result.data && result.data.avatar_url) {
+                    chrome.storage.local.set({ avatarDataUrl: result.data.avatar_url });
+                    renderAvatarPreview(result.data.avatar_url);
+                  } else {
+                    chrome.storage.local.set({ avatarDataUrl: null });
+                    renderAvatarPreview(null);
+                  }
+                } else {
+                  chrome.storage.local.set({ avatarDataUrl: null });
+                  renderAvatarPreview(null);
+                }
+              }
+            } catch (error) {
+              console.error('Failed to fetch avatar:', error);
+              chrome.storage.local.set({ avatarDataUrl: null });
+              renderAvatarPreview(null);
+            }
+          });
+        }
+      const menuBar = document.getElementById('bottom-menu-bar');
+
+      function showSignInPage() {
+        signinPage.style.display = 'flex';
+        if (accountCreationPage) accountCreationPage.style.display = 'none';
+        if (userProfilePage) userProfilePage.style.display = 'none';
+        if (wardrobePage) wardrobePage.style.display = 'none';
+        mainApp.style.display = 'none';
+        if (menuBar) menuBar.style.display = 'none';
+      }
+
+      function showAccountCreationPage() {
+        signinPage.style.display = 'none';
+        if (accountCreationPage) accountCreationPage.style.display = 'flex';
+        if (userProfilePage) userProfilePage.style.display = 'none';
+        if (wardrobePage) wardrobePage.style.display = 'none';
+        mainApp.style.display = 'none';
+        if (menuBar) menuBar.style.display = 'none';
+      }
+
+      function showMainApp() {
+        signinPage.style.display = 'none';
+        if (accountCreationPage) accountCreationPage.style.display = 'none';
+        if (userProfilePage) userProfilePage.style.display = 'none';
+        if (wardrobePage) wardrobePage.style.display = 'none';
+        mainApp.style.display = 'flex';
+        if (menuBar) menuBar.style.display = 'flex';
+        // ...existing code...
+        updateToggleButtonState();
+        // ...existing code...
+        fetchAndStoreAvatar();
+        initializeMainApp();
+      }
+
+      function showWardrobePage() {
+        // Hide all other pages
+        signinPage.style.display = 'none';
+        if (accountCreationPage) accountCreationPage.style.display = 'none';
+        if (userProfilePage) userProfilePage.style.display = 'none';
+        if (mainApp) mainApp.style.display = 'none';
+        const savedPage = document.getElementById('saved-page');
+        if (savedPage) savedPage.style.display = 'none';
+        
+        // Show wardrobe page and header
+        if (wardrobePage) wardrobePage.style.display = 'flex';
+        if (menuBar) menuBar.style.display = 'flex';
+        const extensionHeader = document.querySelector('.extension-header');
+        if (extensionHeader) extensionHeader.style.display = 'flex';
+        loadWardrobeItems();
+      }
+    // Avatar upload elements
+    const avatarUploadInput = document.getElementById('avatar-upload');
+    const avatarPreview = document.getElementById('avatar-preview');
+    const avatarCameraBtn = document.createElement('button');
+    avatarCameraBtn.className = 'avatar-upload-camera';
+    avatarCameraBtn.innerHTML = '<img src="camera.png" alt="Upload Avatar" />';
+    avatarPreview.appendChild(avatarCameraBtn);
+
+    // Handle camera button click
+    avatarCameraBtn.addEventListener('click', () => {
+      avatarUploadInput.click();
+    });
+
+    // Handle avatar file selection
+    avatarUploadInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      // Show loading state
+      avatarCameraBtn.disabled = true;
+      avatarCameraBtn.innerHTML = 'Uploading...';
+
+      // Prepare form data for backend
+      const formData = new FormData();
+      formData.append('user_id', currentUser?.userID || '');
+      formData.append('avatar', file);
+
+      // Retrieve JWT token from chrome storage
+      chrome.storage.local.get(['jwtToken'], async function(tokenResult) {
+        const jwtToken = tokenResult.jwtToken;
+        try {
+          // Call avatar creation API (adjust endpoint as per backend)
+          const response = await fetch(`${API_BASE_URL}/api/save-avatar`, {
+            method: 'POST',
+            body: formData,
+            headers: jwtToken ? { 'Authorization': `Bearer ${jwtToken}` } : undefined
+          });
+          if (!response.ok) throw new Error('Avatar upload failed');
+          const result = await response.json();
+          // Show avatar image on home screen
+          if (result.success && result.data && result.data.avatar_url) {
+            avatarPreview.innerHTML = `<img src="${result.data.avatar_url}" class="avatar-display-image" alt="Avatar" />`;
+            // Store new avatar URL in Chrome storage for immediate display
+            chrome.storage.local.set({ avatarDataUrl: result.data.avatar_url });
+          } else {
+            avatarPreview.innerHTML = '<span>Avatar upload failed</span>';
+          }
+        } catch (error) {
+          avatarPreview.innerHTML = '<span>Avatar upload failed</span>';
+          console.error('Avatar upload error:', error);
+        } finally {
+          avatarCameraBtn.disabled = false;
+          avatarCameraBtn.innerHTML = '<img src="camera.png" alt="Upload Avatar" />';
+        }
+      });
+    });
+  // ===== BACKEND URL CONFIGURATION =====
+  // Use dev branch backend
+  const API_BASE_URL = 'http://localhost:8000'; // Ensure this matches backend port
 
   // ===== GLOBAL VARIABLES =====
   // Wardrobe functionality
@@ -8,6 +164,656 @@ document.addEventListener('DOMContentLoaded', function() {
   // Garment source toggle
   let currentGarmentSource = 'online'; // 'online' or 'wardrobe'
   let isShowingWardrobe = false;
+
+  // ===== LAYERED TRY-ON STATE =====
+  let currentWorkingAvatar = null; // Original avatar (base64) or try-on result blob
+  let originalAvatarBase64 = null; // Store original for reset
+  let appliedGarments = []; // Track applied garments: [{type, src}]
+  let tryOnCount = 0; // 0, 1, or 2 (max 2 layers)
+  let firstGarmentType = null; // 'upper' or 'lower'
+  let tryOnInProgress = false; // Prevent multiple simultaneous try-ons
+
+  // ===== BACKGROUND THEME STATE =====
+  let currentBackground = 'image'; // 'image', 'white', or 'blue'
+
+  // ===== TRY-ON PERSISTENCE FUNCTIONS =====
+  // Save try-on state to Chrome storage
+  function saveTryOnState(resultDataUrl) {
+    const state = {
+      currentWorkingAvatar,
+      originalAvatarBase64,
+      appliedGarments,
+      tryOnCount,
+      firstGarmentType,
+      resultDataUrl
+    };
+    chrome.storage.local.set({ tryOnState: state });
+    console.log('💾 Try-on state saved to storage:', { tryOnCount, appliedCount: appliedGarments.length });
+  }
+
+  // Restore try-on state from Chrome storage
+  function restoreTryOnState() {
+    chrome.storage.local.get('tryOnState', function(result) {
+      if (result.tryOnState) {
+        const state = result.tryOnState;
+        currentWorkingAvatar = state.currentWorkingAvatar;
+        originalAvatarBase64 = state.originalAvatarBase64;
+        appliedGarments = state.appliedGarments || [];
+        tryOnCount = state.tryOnCount || 0;
+        firstGarmentType = state.firstGarmentType;
+        
+        console.log('📂 Try-on state restored from storage:', { tryOnCount, appliedCount: appliedGarments.length });
+        
+        // Display the saved result if it exists
+        if (state.resultDataUrl && tryOnCount > 0) {
+          displayPersistedTryOnResult(state.resultDataUrl);
+        }
+      }
+    });
+  }
+
+  // Display the persisted try-on result
+  function displayPersistedTryOnResult(resultDataUrl) {
+    const tryonResult = document.getElementById('tryon-result');
+    if (!tryonResult) return;
+    
+    console.log('📸 displayPersistedTryOnResult called');
+    
+    // Create wrapper for image
+    const imgWrapper = document.createElement('div');
+    imgWrapper.style.cssText = 'position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;';
+    
+    const resultImg = document.createElement('img');
+    resultImg.src = resultDataUrl;
+    resultImg.alt = 'Try-On Result';
+    resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
+    
+    // Create close button
+    const resultCloseBtn = document.createElement('button');
+    resultCloseBtn.className = 'tryon-close-btn';
+    resultCloseBtn.innerHTML = '&times;';
+    resultCloseBtn.style.cssText = 'position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(255, 0, 0, 0.8); color: white; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; z-index: 1002; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);';
+    resultCloseBtn.addEventListener('click', () => {
+      hideTryonResult();
+      // Clear persisted state when user closes result
+      chrome.storage.local.remove('tryOnState');
+      resetTryOnState();
+    });
+    resultCloseBtn.addEventListener('mouseover', function() {
+      this.style.background = 'rgba(255, 0, 0, 1)';
+      this.style.transform = 'scale(1.1)';
+    });
+    resultCloseBtn.addEventListener('mouseout', function() {
+      this.style.background = 'rgba(255, 0, 0, 0.8)';
+      this.style.transform = 'scale(1)';
+    });
+    
+    // Create save button
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'tryon-save-btn';
+    saveBtn.innerHTML = '❤️';
+    saveBtn.title = 'Save to Database';
+    saveBtn.style.cssText = 'position: absolute; top: 50px; right: 12px; width: 32px; height: 32px; background: rgba(255, 255, 255, 0.9); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; z-index: 1002; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);';
+    saveBtn.addEventListener('click', async () => {
+      console.log('❤️ Heart button clicked');
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = '0.6';
+      const success = await saveResultToDatabase(resultDataUrl);
+      if (success) {
+        saveBtn.innerHTML = '❤️';
+        saveBtn.classList.add('saved-success');
+        console.log('✅ Try-on saved successfully');
+        setTimeout(() => {
+          saveBtn.disabled = false;
+          saveBtn.style.opacity = '1';
+          saveBtn.innerHTML = '❤️';
+          saveBtn.classList.remove('saved-success');
+        }, 2000);
+      } else {
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '1';
+        saveBtn.innerHTML = '❤️';
+        console.log('❌ Failed to save try-on');
+        alert('Failed to save. Please try again.');
+      }
+    });
+    saveBtn.addEventListener('mouseover', function() {
+      this.style.background = 'rgba(255, 255, 255, 1)';
+      this.style.transform = 'scale(1.1)';
+      this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+    });
+    saveBtn.addEventListener('mouseout', function() {
+      this.style.background = 'rgba(255, 255, 255, 0.9)';
+      this.style.transform = 'scale(1)';
+      this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
+    });
+    
+    // Create button container for vertical stacking
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'position: absolute; top: 0; right: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1001;';
+    buttonContainer.appendChild(resultCloseBtn);
+    buttonContainer.appendChild(saveBtn);
+    
+    // Give buttons pointer events
+    resultCloseBtn.style.pointerEvents = 'auto';
+    saveBtn.style.pointerEvents = 'auto';
+    
+    imgWrapper.appendChild(resultImg);
+    imgWrapper.appendChild(buttonContainer);
+    
+    tryonResult.innerHTML = '';
+    tryonResult.appendChild(imgWrapper);
+    
+    console.log('🖼️ Buttons appended, close:', resultCloseBtn, 'heart:', saveBtn);
+    
+    // Show the layered UI with buttons
+    showLayeredTryOnUI();
+    showTryonResult();
+    
+    console.log('🖼️ Persisted try-on result displayed');
+  }
+
+  // Reset try-on state variables
+  function resetTryOnState() {
+    currentWorkingAvatar = null;
+    appliedGarments = [];
+    tryOnCount = 0;
+    firstGarmentType = null;
+  }
+
+  // ===== SAVED TRY-ONS DATABASE FUNCTIONS =====
+  
+  // Save try-on result to both browser storage and backend database
+  async function saveResultToDatabase(resultDataUrl) {
+    try {
+      // Get JWT token from storage
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get('jwtToken', resolve);
+      });
+      
+      const jwtToken = storageResult.jwtToken;
+      if (!jwtToken) {
+        console.warn('⚠️ No JWT token found, skipping database save');
+        return false;
+      }
+
+      // Prepare payload
+      const payload = {
+        result_image: resultDataUrl,
+        applied_garments: appliedGarments,
+        try_on_count: tryOnCount,
+        original_avatar: originalAvatarBase64
+      };
+
+      // Call backend API
+      const response = await fetch(`${API_BASE_URL}/api/tryon-results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jwtToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to save try-on result to database:', response.status);
+        return false;
+      }
+
+      const data = await response.json();
+      console.log('✅ Try-on result saved to database with ID:', data.data?.id);
+      return true;
+    } catch (error) {
+      console.error('❌ Error saving to database:', error);
+      return false;
+    }
+  }
+
+  // Fetch all saved try-ons for current user
+  async function fetchSavedTryOns() {
+    try {
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get('jwtToken', resolve);
+      });
+      
+      const jwtToken = storageResult.jwtToken;
+      if (!jwtToken) {
+        console.warn('⚠️ No JWT token found');
+        return [];
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/tryon-results`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`
+        }
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch saved try-ons:', response.status);
+        return [];
+      }
+
+      const data = await response.json();
+      console.log('✅ Fetched saved try-ons:', data.data?.length || 0);
+      return data.data || [];
+    } catch (error) {
+      console.error('❌ Error fetching saved try-ons:', error);
+      return [];
+    }
+  }
+
+  // Get details of a specific saved try-on
+  async function fetchSavedTryOnDetails(resultId) {
+    try {
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get('jwtToken', resolve);
+      });
+      
+      const jwtToken = storageResult.jwtToken;
+      if (!jwtToken) return null;
+
+      const response = await fetch(`${API_BASE_URL}/api/tryon-results/${resultId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`
+        }
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch details for result:', resultId);
+        return null;
+      }
+
+      const data = await response.json();
+      return data.data || null;
+    } catch (error) {
+      console.error('❌ Error fetching try-on details:', error);
+      return null;
+    }
+  }
+
+  // Delete a saved try-on
+  async function deleteSavedTryOn(resultId) {
+    try {
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get('jwtToken', resolve);
+      });
+      
+      const jwtToken = storageResult.jwtToken;
+      if (!jwtToken) return false;
+
+      const response = await fetch(`${API_BASE_URL}/api/tryon-results/${resultId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`
+        }
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to delete try-on:', resultId);
+        return false;
+      }
+
+      console.log('✅ Try-on deleted successfully:', resultId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting try-on:', error);
+      return false;
+    }
+  }
+
+  // Display saved try-ons in the saved page
+  async function displaySavedTryOns() {
+    const savedList = document.getElementById('saved-results-list');
+    if (!savedList) return;
+
+    // Show loading state
+    savedList.innerHTML = '<div class="saved-empty-state"><p>Loading...</p></div>';
+
+    // Fetch saved try-ons
+    const results = await fetchSavedTryOns();
+
+    if (!results || results.length === 0) {
+      savedList.innerHTML = `
+        <div class="saved-empty-state">
+          <p>No saved try-ons yet</p>
+          <p class="saved-empty-hint">Try-ons you save will appear here</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Build list HTML
+    savedList.innerHTML = '';
+    results.forEach((result) => {
+      const item = document.createElement('div');
+      item.className = 'saved-result-item';
+      
+      // Format date
+      const date = new Date(result.created_at);
+      const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Parse applied_garments if it's JSON string
+      let garmentsText = '';
+      if (typeof result.applied_garments === 'string') {
+        try {
+          const garments = JSON.parse(result.applied_garments);
+          garmentsText = garments.map(g => `${g.type} (${g.id})`).join(', ');
+        } catch (e) {
+          garmentsText = result.applied_garments;
+        }
+      } else if (Array.isArray(result.applied_garments)) {
+        garmentsText = result.applied_garments.map(g => `${g.type} (${g.id})`).join(', ');
+      }
+
+      item.innerHTML = `
+        <img src="${result.result_image}" alt="Try-on result" class="saved-result-thumbnail" />
+        <div class="saved-result-info">
+          <div class="saved-result-details">
+            <div class="saved-result-count">Layers: ${result.try_on_count}/2</div>
+            <div class="saved-result-garments">${garmentsText || 'No details'}</div>
+            <div class="saved-result-time">${timeStr}</div>
+          </div>
+        </div>
+        <div class="saved-result-actions">
+          <button class="saved-result-btn load-btn" data-result-id="${result.id}">Load</button>
+          <button class="saved-result-btn delete-btn" data-result-id="${result.id}">Delete</button>
+        </div>
+      `;
+
+      // Load button handler
+      const loadBtn = item.querySelector('.load-btn');
+      loadBtn.addEventListener('click', async () => {
+        await loadSavedTryOn(result.id);
+      });
+
+      // Delete button handler
+      const deleteBtn = item.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', async () => {
+        if (confirm('Delete this saved try-on?')) {
+          const success = await deleteSavedTryOn(result.id);
+          if (success) {
+            displaySavedTryOns(); // Refresh the list
+          }
+        }
+      });
+
+      savedList.appendChild(item);
+    });
+  }
+
+  // Load a saved try-on and display it
+  async function loadSavedTryOn(resultId) {
+    const details = await fetchSavedTryOnDetails(resultId);
+    if (!details) {
+      alert('Failed to load try-on details');
+      return;
+    }
+
+    // Restore state from saved try-on
+    currentWorkingAvatar = details.result_image;
+    originalAvatarBase64 = details.original_avatar;
+    appliedGarments = details.applied_garments || [];
+    tryOnCount = details.try_on_count || 0;
+    firstGarmentType = appliedGarments.length > 0 ? appliedGarments[0].type : null;
+
+    console.log('📂 Loaded saved try-on:', { tryOnCount, appliedCount: appliedGarments.length });
+
+    // Switch to main app
+    showMainApp();
+
+    // Display the result
+    setTimeout(() => {
+      displayPersistedTryOnResult(details.result_image);
+    }, 200);
+  }
+
+  // Signout button - handles all signout buttons (main app, wardrobe, saved page)
+  document.addEventListener('click', (e) => {
+    const isSignoutBtn = e.target.id === 'signout-btn' || e.target.closest('#signout-btn') ||
+                         e.target.id === 'signout-btn-saved' || e.target.closest('#signout-btn-saved');
+    
+    if (isSignoutBtn) {
+      if (confirm('Sign out and return to login?')) {
+        console.log('User confirmed signout');
+        
+        // Clear all storage
+        chrome.storage.local.clear();
+        
+        // Reset UI and return to sign-in
+        showSignInPage();
+        
+        // Reset sign-in form
+        if (signinEmail) signinEmail.value = '';
+        if (signinPassword) signinPassword.value = '';
+        if (signinBtn) {
+          signinBtn.innerHTML = 'Sign In';
+          signinBtn.disabled = false;
+        }
+        
+        console.log('Signout completed successfully');
+      } else {
+        console.log('User cancelled signout');
+      }
+    }
+  });
+
+  // Refresh button - handles all refresh buttons (main app, wardrobe, saved page)
+  document.addEventListener('click', (e) => {
+    const isRefreshBtn = e.target.id === 'refresh-btn' || e.target.closest('#refresh-btn') ||
+                         e.target.id === 'refresh-btn-saved' || e.target.closest('#refresh-btn-saved');
+    
+    if (isRefreshBtn) {
+      console.log('Refresh button clicked - reloading saved try-ons');
+      
+      // Get current page
+      const savedPage = document.getElementById('saved-page');
+      if (savedPage && savedPage.style.display !== 'none') {
+        // Reload saved page
+        displaySavedTryOns();
+      } else {
+        // Original refresh logic for main app
+        console.log('Refresh button clicked - resetting current session');
+        
+        if (confirm('Reset current session? This will clear uploaded images but keep you signed in.')) {
+          console.log('User confirmed refresh');
+          
+          // Reset garment data
+          uploadedGarments = [];
+          garmentImgData = null;
+          
+          // Reset try-on result if it exists
+          const tryonResult = document.getElementById('tryon-result');
+          if (tryonResult) {
+            tryonResult.innerHTML = '';
+          }
+          
+          // Clear image storage but keep user session
+          chrome.storage.local.remove([
+            'avatarImg', 
+            'avatarBgRemovedImg', 
+            'uploadedGarments',
+            'garmentImg',
+            'garmentType'
+          ]);
+          
+          console.log('Session refresh completed');
+        } else {
+          console.log('User cancelled refresh');
+        }
+      }
+    }
+  });
+
+  // Background theme button - handles all background theme buttons
+  document.addEventListener('click', (e) => {
+    const isBgThemeBtn = e.target.id === 'bg-theme-btn' || e.target.closest('#bg-theme-btn') ||
+                         e.target.id === 'bg-theme-btn-saved' || e.target.closest('#bg-theme-btn-saved');
+    
+    if (isBgThemeBtn) {
+      console.log('Background theme button clicked');
+      showBackgroundThemeModal();
+    }
+  });
+
+  // Function to show background theme selection modal
+  function showBackgroundThemeModal() {
+    return new Promise((resolve) => {
+      // Create modal container
+      const modal = document.createElement('div');
+      modal.id = 'bg-theme-modal';
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        backdrop-filter: blur(2px);
+      `;
+
+      // Create modal content
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 32px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        max-width: 360px;
+        animation: modalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      `;
+
+      // Title
+      const title = document.createElement('h3');
+      title.textContent = 'Background Theme';
+      title.style.cssText = `
+        margin: 0 0 24px 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: #1a1a1a;
+      `;
+
+      // Options container
+      const optionsContainer = document.createElement('div');
+      optionsContainer.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      `;
+
+      // Image option
+      const imageBtn = document.createElement('button');
+      imageBtn.textContent = 'Image (Default)';
+      imageBtn.style.cssText = `
+        padding: 14px 16px;
+        background: ${currentBackground === 'image' ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)' : '#e8e8e8'};
+        color: ${currentBackground === 'image' ? 'white' : '#333'};
+        border: 2px solid ${currentBackground === 'image' ? '#45a049' : '#d0d0d0'};
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      `;
+      imageBtn.addEventListener('click', () => {
+        setBackground('image');
+        modal.remove();
+        resolve();
+      });
+
+      // White option
+      const whiteBtn = document.createElement('button');
+      whiteBtn.textContent = 'White';
+      whiteBtn.style.cssText = `
+        padding: 14px 16px;
+        background: ${currentBackground === 'white' ? 'linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%)' : '#e8e8e8'};
+        color: #333;
+        border: 2px solid ${currentBackground === 'white' ? '#999' : '#d0d0d0'};
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      `;
+      whiteBtn.addEventListener('click', () => {
+        setBackground('white');
+        modal.remove();
+        resolve();
+      });
+
+      // Blue option
+      const blueBtn = document.createElement('button');
+      blueBtn.textContent = 'Blue (#A2B5B8)';
+      blueBtn.style.cssText = `
+        padding: 14px 16px;
+        background: ${currentBackground === 'blue' ? 'linear-gradient(135deg, #A2B5B8 0%, #8fa3a6 100%)' : '#e8e8e8'};
+        color: ${currentBackground === 'blue' ? 'white' : '#333'};
+        border: 2px solid ${currentBackground === 'blue' ? '#8fa3a6' : '#d0d0d0'};
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      `;
+      blueBtn.addEventListener('click', () => {
+        setBackground('blue');
+        modal.remove();
+        resolve();
+      });
+
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+          resolve();
+        }
+      });
+
+      // Assemble modal
+      optionsContainer.appendChild(imageBtn);
+      optionsContainer.appendChild(whiteBtn);
+      optionsContainer.appendChild(blueBtn);
+      modalContent.appendChild(title);
+      modalContent.appendChild(optionsContainer);
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+
+      console.log('🎨 Background theme modal shown');
+    });
+  }
+
+  // Function to set background
+  function setBackground(theme) {
+    currentBackground = theme;
+    chrome.storage.local.set({ backgroundTheme: theme });
+    console.log('🎨 Background set to:', theme);
+
+    const mainApp = document.getElementById('main-app');
+    const wardrobePage = document.getElementById('wardrobe-page');
+
+    if (theme === 'image') {
+      if (mainApp) mainApp.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat';
+      if (wardrobePage) wardrobePage.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat';
+    } else if (theme === 'white') {
+      if (mainApp) mainApp.style.background = '#ffffff';
+      if (wardrobePage) wardrobePage.style.background = '#ffffff';
+    } else if (theme === 'blue') {
+      if (mainApp) mainApp.style.background = '#A2B5B8';
+      if (wardrobePage) wardrobePage.style.background = '#A2B5B8';
+    }
+  }
+
+  // Load saved background theme on startup
+  chrome.storage.local.get('backgroundTheme', function(result) {
+    const theme = result.backgroundTheme || 'image';
+    setBackground(theme);
+  });
 
   // ===== FIRST PRIORITY: BRAND DOMAIN CHECK =====
   // This MUST run first when extension opens/reopens
@@ -51,15 +857,17 @@ document.addEventListener('DOMContentLoaded', function() {
   const backToSigninLink = document.getElementById('back-to-signin');
   const createAccountBtn = document.getElementById('create-account-btn');
 
-  // Account Creation Form Fields
+  // Account Creation Form Fields (NEW MODEL)
   const createEmail = document.getElementById('create-email');
   const createFirstname = document.getElementById('create-firstname');
   const createLastname = document.getElementById('create-lastname');
-  const createPassword = document.getElementById('create-password');
-  const createAge = document.getElementById('create-age');
   const createGender = document.getElementById('create-gender');
-  const createWeight = document.getElementById('create-weight');
-  const createHeight = document.getElementById('create-height');
+  const createBirthdate = document.getElementById('create-birthdate');
+  const createStreetNo = document.getElementById('create-streetno');
+  const createCity = document.getElementById('create-city');
+  const createPostalCode = document.getElementById('create-postalcode');
+  const createPassword = document.getElementById('create-password');
+  const createConfirmPassword = document.getElementById('create-confirm-password');
 
   // User Profile Page Elements
   const userProfilePage = document.getElementById('user-profile-page');
@@ -78,6 +886,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const profileGender = document.getElementById('profile-gender');
   const profileWeight = document.getElementById('profile-weight');
   const profileHeight = document.getElementById('profile-height');
+
+  // Wardrobe Page Elements
+  const wardrobePage = document.getElementById('wardrobe-page');
+  const wardrobeSearchInput = document.getElementById('wardrobe-search');
+  const wardrobeTabs = document.querySelectorAll('.wardrobe-tab');
+  const wardrobeTabContents = document.querySelectorAll('.wardrobe-tab-content');
+  const upperGarmentsGrid = document.getElementById('upper-garments-grid');
+  const lowerGarmentsGrid = document.getElementById('lower-garments-grid');
+  const upperEmptyState = document.getElementById('upper-empty-state');
+  const lowerEmptyState = document.getElementById('lower-empty-state');
 
   // ===== BRAND DOMAIN CHECK FUNCTION =====
   // Function to check if current page URL matches any brand domain and contains garment types
@@ -284,15 +1102,19 @@ document.addEventListener('DOMContentLoaded', function() {
   let currentImagePage = 0;
   const imagesPerPage = 4;
 
-  // Function to handle try-on click from extracted images
   async function handleImageTryOn(imageSrc) {
-    console.log('🎯 handleImageTryOn called with image:', imageSrc);
+    console.log('🎯 handleImageTryOn called with image:', imageSrc.substring(0, 100) + (imageSrc.length > 100 ? '...' : ''));
+    console.log('   Full URL length:', imageSrc.length, 'characters');
     
     // Detect garment type from current URL
     const garmentType = await detectGarmentTypeFromURL();
     console.log('🔍 Detected garment type:', garmentType);
     
     try {
+      console.log('📤 Calling performTryOn with:', {
+        imageSrc: imageSrc.substring(0, 100) + (imageSrc.length > 100 ? '...' : ''),
+        garmentType: garmentType
+      });
       await performTryOn(imageSrc, garmentType);
       console.log('✅ Try-on completed successfully from extracted image');
     } catch (error) {
@@ -348,33 +1170,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // Global try-on function that can be called from anywhere
-  // Helper function to convert data URL to blob
-  function dataURLToBlob(dataURL) {
-    const parts = dataURL.split(',');
-    const contentType = parts[0].match(/:(.*?);/)[1];
-    const raw = window.atob(parts[1]);
-    const rawLength = raw.length;
-    const uInt8Array = new Uint8Array(rawLength);
-    
-    for (let i = 0; i < rawLength; ++i) {
-      uInt8Array[i] = raw.charCodeAt(i);
-    }
-    
-    return new Blob([uInt8Array], { type: contentType });
-  }
-
-  // Helper function to safely convert image data to blob
-  async function safeImageToBlob(imageData) {
-    if (imageData.startsWith('data:')) {
-      // It's a data URL, convert directly to blob
-      return dataURLToBlob(imageData);
-    } else {
-      // It's a regular URL, fetch it
-      return await fetch(imageData).then(res => res.blob());
-    }
-  }
-
   // ===== WARDROBE FUNCTIONALITY =====
   // Helper function to convert blob to base64
   function blobToBase64(blob) {
@@ -388,61 +1183,93 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Function to save garment to wardrobe
   async function saveToWardrobe(garmentImageData, garmentType, garmentUrl = null) {
-    try {
-      if (!currentUser || !currentUser.userID) {
-        console.error('❌ No user logged in');
-        return { success: false, message: 'Please sign in to save garments' };
+    return new Promise((resolve, reject) => {
+      try {
+        if (!currentUser || !currentUser.userID) {
+          console.error('❌ No user logged in');
+          resolve({ success: false, message: 'Please sign in to save garments' });
+          return;
+        }
+
+        // Get JWT token from chrome storage (same as avatar retrieval)
+        chrome.storage.local.get(['jwtToken'], async function(tokenResult) {
+          const jwtToken = tokenResult.jwtToken;
+          
+          if (!jwtToken) {
+            console.error('❌ No JWT token found in storage');
+            resolve({ success: false, message: 'Authentication token not found' });
+            return;
+          }
+
+          try {
+            // Generate unique garment ID
+            const garmentId = `garment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Convert image data to blob if it's a data URL
+            let imageBlob;
+            if (garmentImageData.startsWith('data:')) {
+              imageBlob = dataURLToBlob(garmentImageData);
+            } else {
+              const response = await fetch(garmentImageData);
+              imageBlob = await response.blob();
+            }
+
+            // Convert blob to base64 for storage
+            const imageBase64 = await blobToBase64(imageBlob);
+
+            const wardrobeData = {
+              user_id: currentUser.userID,
+              garment_id: garmentId,
+              garment_image: imageBase64,
+              garment_type: garmentType,
+              date_added: new Date().toISOString()
+            };
+
+            // Only include garment_url if it's provided
+            if (garmentUrl) {
+              wardrobeData.garment_url = garmentUrl;
+            }
+
+            // Save to backend database using the new /save-extracted endpoint
+            console.log('🔐 JWT Token retrieved from chrome storage:', jwtToken?.substring(0, 20) + '...');
+            console.log('🔐 Sending wardrobe request to /api/wardrobe/save-extracted with Authorization header');
+            
+            const response = await fetch(`${API_BASE_URL}/api/wardrobe/save-extracted`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+              },
+              body: JSON.stringify({
+                garment_image: garmentImageData,
+                garment_type: garmentType,
+                garment_id: garmentId
+              })
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              console.log('✅ Garment saved to wardrobe:', garmentId);
+              
+              // Add to local cache
+              wardrobeItems.push(wardrobeData);
+              
+              resolve({ success: true, garmentId: garmentId });
+            } else {
+              throw new Error(`Failed to save: ${response.status}`);
+            }
+
+          } catch (error) {
+            console.error('❌ Error saving to wardrobe:', error);
+            resolve({ success: false, message: error.message });
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Error in saveToWardrobe:', error);
+        resolve({ success: false, message: error.message });
       }
-
-      // Generate unique garment ID
-      const garmentId = `garment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Convert image data to blob if it's a data URL
-      let imageBlob;
-      if (garmentImageData.startsWith('data:')) {
-        imageBlob = dataURLToBlob(garmentImageData);
-      } else {
-        const response = await fetch(garmentImageData);
-        imageBlob = await response.blob();
-      }
-
-      // Convert blob to base64 for storage
-      const imageBase64 = await blobToBase64(imageBlob);
-
-      const wardrobeData = {
-        user_id: currentUser.userID,
-        garment_id: garmentId,
-        garment_image: imageBase64,
-        garment_type: garmentType,
-        garment_url: garmentUrl,
-        date_added: new Date().toISOString()
-      };
-
-      // Save to backend database
-      const response = await fetch('http://localhost:5000/api/wardrobe/save', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(wardrobeData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Garment saved to wardrobe:', garmentId);
-        
-        // Add to local cache
-        wardrobeItems.push(wardrobeData);
-        
-        return { success: true, garmentId: garmentId };
-      } else {
-        throw new Error(`Failed to save: ${response.status}`);
-      }
-
-    } catch (error) {
-      console.error('❌ Error saving to wardrobe:', error);
-      return { success: false, message: error.message };
-    }
+    });
   }
 
   // Function to check if garment is already in wardrobe
@@ -455,20 +1282,32 @@ document.addEventListener('DOMContentLoaded', function() {
   async function handleFavoriteClick(event, garmentImageData, garmentType, garmentUrl = null) {
     event.stopPropagation(); // Prevent triggering try-on
     
-    const favoriteBtn = event.currentTarget;
+    // Find the favorite button - it might be the currentTarget or a parent
+    let favoriteBtn = event.currentTarget;
+    if (!favoriteBtn || favoriteBtn.tagName !== 'BUTTON') {
+      favoriteBtn = event.target.closest('.favorite-btn');
+    }
+    
+    if (!favoriteBtn) {
+      console.error('❌ Could not find favorite button');
+      return;
+    }
+    
     const heartIcon = favoriteBtn.querySelector('.heart-icon');
     const garmentItem = favoriteBtn.closest('.garment-item-tryon');
     
-    // Show loading state
-    heartIcon.textContent = '⏳';
+    // Show loading state on image
+    if (heartIcon) {
+      heartIcon.style.opacity = '0.5';
+    }
     favoriteBtn.disabled = true;
 
     try {
       if (favoriteBtn.classList.contains('favorited')) {
-        // Remove from wardrobe (implement removeFromWardrobe function if needed)
+        // Remove from wardrobe
         favoriteBtn.classList.remove('favorited');
-        garmentItem.classList.remove('favorited');
-        heartIcon.textContent = '🤍';
+        if (garmentItem) garmentItem.classList.remove('favorited');
+        if (heartIcon) heartIcon.style.filter = 'grayscale(100%)';
         console.log('💔 Removed from wardrobe');
       } else {
         // Add to wardrobe
@@ -476,24 +1315,28 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (result.success) {
           favoriteBtn.classList.add('favorited');
-          garmentItem.classList.add('favorited');
-          heartIcon.textContent = '❤️';
+          if (garmentItem) garmentItem.classList.add('favorited');
+          if (heartIcon) heartIcon.style.filter = 'none';
           console.log('💖 Added to wardrobe');
           
           // Show success feedback
           showFavoriteSuccess();
         } else {
-          heartIcon.textContent = '🤍';
+          if (heartIcon) heartIcon.style.filter = 'grayscale(100%)';
           console.error('Failed to save:', result.message);
           // Show error message to user
           showFavoriteError(result.message);
         }
       }
     } catch (error) {
-      heartIcon.textContent = '🤍';
+      if (heartIcon) heartIcon.style.filter = 'grayscale(100%)';
       console.error('❌ Favorite action failed:', error);
       showFavoriteError('Failed to save garment');
     } finally {
+      // Remove loading state
+      if (heartIcon) {
+        heartIcon.style.opacity = '1';
+      }
       favoriteBtn.disabled = false;
     }
   }
@@ -555,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Favorite Button (already favorited) -->
             <button class="favorite-btn favorited" type="button" disabled>
-              <span class="heart-icon">❤️</span>
+              <img src="love.png" alt="In wardrobe" class="heart-icon" style="width: 24px; height: 24px; object-fit: contain;" />
             </button>
             
             <!-- Garment Type Badge -->
@@ -570,7 +1413,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Try-on Hover Badge -->
             <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
+              Try On
             </div>
             
             <!-- Wardrobe Badge -->
@@ -690,25 +1533,573 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  async function performTryOn(garmentImageData, garmentType) {
-    console.log(`🎯 performTryOn function called globally!`);
-    console.log(`🎯 Starting try-on with ${garmentType} garment`);
-    console.log('📸 Garment image data:', garmentImageData ? 'Present' : 'Missing');
+  // ===== LAYERED TRY-ON VALIDATION & HELPER FUNCTIONS =====
+  
+  // Validate garment combination for layered try-ons
+  function validateLayeredCombination(currentGarmentType, newGarmentType) {
+    console.log('🔍 Validating combination:', {
+      appliedCount: appliedGarments.length,
+      firstType: firstGarmentType,
+      currentType: currentGarmentType,
+      newType: newGarmentType
+    });
+    
+    // Check max layers (2 try-ons = 2 layers)
+    if (tryOnCount >= 2) {
+      return {
+        valid: false,
+        message: '⚠️ Maximum 2 layers reached. Reset to try different combinations.'
+      };
+    }
+    
+    // First try-on - always allowed
+    if (tryOnCount === 0) {
+      return { valid: true };
+    }
+    
+    // Second try-on - check combination rules
+    if (tryOnCount === 1) {
+      // Rule 1: Cannot try two bottoms (lower + lower)
+      if (firstGarmentType === 'lower' && newGarmentType === 'lower') {
+        return {
+          valid: false,
+          message: '❌ Cannot try on 2 bottoms. Allowed: Upper+Upper or Upper+Bottom'
+        };
+      }
+      
+      // Allowed combinations:
+      // - upper + upper ✅
+      // - upper + lower ✅
+      // - lower + upper ✅
+      
+      return { valid: true };
+    }
+    
+    return { valid: false, message: 'Unknown state' };
+  }
+  
+  // Show layered try-on UI (Reset button, Applied garments, Try Another button)
+  function showLayeredTryOnUI() {
+    const tryonResult = document.getElementById('tryon-result');
+    if (!tryonResult) return;
+    
+    // Add applied garments info above result
+    // Update header with layer count display (only X/2 format)
+    let layerCount = document.getElementById('layer-count-display');
+    if (!layerCount) {
+      layerCount = document.createElement('span');
+      layerCount.id = 'layer-count-display';
+      layerCount.style.cssText = `
+        margin-left: 12px;
+        color: #333;
+        font-size: 12px;
+        font-weight: 600;
+      `;
+      const headerLeft = document.querySelector('.header-left');
+      if (headerLeft) {
+        headerLeft.appendChild(layerCount);
+        console.log('✅ Layer count display added to .header-left');
+      } else {
+        // Fallback: add to tryon-result parent
+        const tryonResultParent = document.getElementById('tryon-result')?.parentElement;
+        if (tryonResultParent) {
+          tryonResultParent.insertBefore(layerCount, document.getElementById('tryon-result'));
+          console.log('⚠️ Layer count display added to result parent (fallback)');
+        }
+      }
+    }
+    if (layerCount) {
+      layerCount.textContent = `${tryOnCount}/2`;
+      layerCount.style.display = 'block';
+      console.log('📊 Layer count updated:', `${tryOnCount}/2`);
+    }
+    
+    // Remove the old applied-garments-info div from result area if it exists
+    const oldAppliedInfo = document.getElementById('applied-garments-info');
+    if (oldAppliedInfo) {
+      oldAppliedInfo.remove();
+      console.log('🗑️ Removed old applied info div');
+    }
+    
+    // Show buttons only after first try-on
+    if (tryOnCount >= 1) {
+      const buttonContainer = document.getElementById('layered-tryon-buttons');
+      if (!buttonContainer) {
+        const btnDiv = document.createElement('div');
+        btnDiv.id = 'layered-tryon-buttons';
+        btnDiv.style.cssText = `
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+          justify-content: center;
+        `;
+        tryonResult.parentElement.appendChild(btnDiv);
+      }
+      
+      const btnDiv = document.getElementById('layered-tryon-buttons');
+      btnDiv.innerHTML = '';
+      
+      // Reset button
+      const resetBtn = document.createElement('button');
+      resetBtn.style.cssText = `
+        padding: 8px 12px;
+        background: #ff6b6b;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+      `;
+      
+      // Add refresh icon
+      const resetIcon = document.createElement('img');
+      resetIcon.src = 'refresh.png';
+      resetIcon.alt = 'Reset';
+      resetIcon.style.cssText = 'width: 16px; height: 16px; object-fit: contain;';
+      resetBtn.appendChild(resetIcon);
+      
+      // Add text
+      const resetText = document.createElement('span');
+      resetText.textContent = 'Reset Avatar';
+      resetBtn.appendChild(resetText);
+      
+      resetBtn.addEventListener('click', resetToOriginalAvatar);
+      btnDiv.appendChild(resetBtn);
+      console.log('✅ Reset button created with refresh icon');
+      
+      // Try Another button (only if not at max)
+      if (tryOnCount < 2) {
+        const tryAnotherBtn = document.createElement('button');
+        tryAnotherBtn.textContent = '+ Try Another';
+        tryAnotherBtn.style.cssText = `
+          padding: 8px 16px;
+          background: #4CAF50;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+        `;
+        tryAnotherBtn.addEventListener('click', () => {
+          // Scroll back to garment selection
+          const garmentPreview = document.getElementById('garment-preview');
+          if (garmentPreview) {
+            garmentPreview.scrollIntoView({ behavior: 'smooth' });
+          }
+        });
+        btnDiv.appendChild(tryAnotherBtn);
+      } else {
+        // At max - show disabled state
+        const maxReachedBtn = document.createElement('button');
+        maxReachedBtn.textContent = '✓ 2 Layers Applied';
+        maxReachedBtn.style.cssText = `
+          padding: 8px 16px;
+          background: #ccc;
+          color: #666;
+          border: none;
+          border-radius: 6px;
+          cursor: not-allowed;
+          font-size: 12px;
+          font-weight: 600;
+        `;
+        maxReachedBtn.disabled = true;
+        btnDiv.appendChild(maxReachedBtn);
+      }
+    }
+  }
+  
+  // Reset to original avatar
+  async function resetToOriginalAvatar() {
+    console.log('↻ Resetting to original avatar');
+    
+    // Clear persisted try-on state
+    chrome.storage.local.remove('tryOnState');
+    
+    // Reset state
+    currentWorkingAvatar = null;
+    appliedGarments = [];
+    tryOnCount = 0;
+    firstGarmentType = null;
+    
+    // Reload original avatar
+    if (originalAvatarBase64) {
+      currentWorkingAvatar = originalAvatarBase64;
+      console.log('✅ Reset to original avatar');
+    }
+    
+    // Hide layered try-on UI
+    const appliedInfo = document.getElementById('applied-garments-info');
+    if (appliedInfo) appliedInfo.remove();
+    
+    // Hide layer count badge from header
+    // Hide layer count display from header
+    const layerCountDisplay = document.getElementById('layer-count-display');
+    if (layerCountDisplay) layerCountDisplay.style.display = 'none';
+    
+    const buttonContainer = document.getElementById('layered-tryon-buttons');
+    if (buttonContainer) buttonContainer.remove();
+    
+    // Show original avatar in result
+    const tryonResult = document.getElementById('tryon-result');
+    if (tryonResult && originalAvatarBase64) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'tryon-close-btn';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.addEventListener('click', hideTryonResult);
+      
+      const img = document.createElement('img');
+      img.src = originalAvatarBase64;
+      img.alt = 'Original Avatar';
+      img.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
+      
+      tryonResult.innerHTML = '';
+      tryonResult.appendChild(closeBtn);
+      tryonResult.appendChild(img);
+      showTryonResult();
+    }
+  }
+  
+  // Show error message for invalid combination
+  function showCombinationError(message) {
+    console.log('❌ Combination error:', message);
     
     const tryonResult = document.getElementById('tryon-result');
-    console.log('🔍 tryonResult element exists:', !!tryonResult);
+    if (!tryonResult) return;
     
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tryon-close-btn';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.addEventListener('click', hideTryonResult);
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+      background: #ffebee;
+      border: 2px solid #ff6b6b;
+      color: #c62828;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 14px;
+    `;
+    errorDiv.textContent = message;
+    
+    tryonResult.innerHTML = '';
+    tryonResult.appendChild(closeBtn);
+    tryonResult.appendChild(errorDiv);
+    showTryonResult();
+  }
+
+  // Global try-on function that can be called from anywhere
+  // Helper function to convert data URL to blob
+  function dataURLToBlob(dataURL) {
+    const parts = dataURL.split(',');
+    const contentType = parts[0].match(/:(.*?);/)[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    
+    return new Blob([uInt8Array], { type: contentType });
+  }
+
+  // Helper function to safely convert image data to blob
+  async function safeImageToBlob(imageData) {
+    if (imageData.startsWith('data:')) {
+      // It's a data URL, convert directly to blob
+      return dataURLToBlob(imageData);
+    } else {
+      // It's a regular URL, fetch it
+      return await fetch(imageData).then(res => res.blob());
+    }
+  }
+
+  // ===== GARMENT TYPE SELECTION MODAL FOR 2ND LAYER =====
+  // Show modal to manually select garment type for second try-on
+  function showGarmentTypeSelectionModal() {
+    return new Promise((resolve) => {
+      // Create modal container
+      const modal = document.createElement('div');
+      modal.id = 'garment-type-selection-modal';
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        backdrop-filter: blur(2px);
+      `;
+
+      // Create modal content
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 32px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+        text-align: center;
+        max-width: 340px;
+        animation: modalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+      `;
+
+      // Header icon
+      const headerIcon = document.createElement('div');
+      headerIcon.style.cssText = `
+        font-size: 36px;
+        margin-bottom: 12px;
+      `;
+      headerIcon.textContent = '';
+
+      // Title
+      const title = document.createElement('h3');
+      title.textContent = 'Choose Your Second Layer';
+      title.style.cssText = `
+        margin: 0 0 8px 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: #1a1a1a;
+        letter-spacing: -0.5px;
+      `;
+
+      // Subtitle
+      const subtitle = document.createElement('p');
+      subtitle.textContent = `Layer 2 of 2 • Already applied: ${firstGarmentType.toUpperCase()}`;
+      subtitle.style.cssText = `
+        margin: 0 0 24px 0;
+        font-size: 12px;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      `;
+
+      // Buttons container
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 24px;
+      `;
+
+      // Upper button
+      const upperBtn = document.createElement('button');
+      upperBtn.textContent = 'Upper';
+      upperBtn.style.cssText = `
+        flex: 1;
+        padding: 16px 12px;
+        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+      `;
+      upperBtn.addEventListener('mouseenter', () => {
+        upperBtn.style.transform = 'translateY(-3px)';
+        upperBtn.style.boxShadow = '0 8px 20px rgba(76, 175, 80, 0.4)';
+      });
+      upperBtn.addEventListener('mouseleave', () => {
+        upperBtn.style.transform = 'translateY(0)';
+        upperBtn.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
+      });
+      upperBtn.addEventListener('click', () => {
+        console.log('User selected: upper');
+        modal.remove();
+        resolve('upper');
+      });
+
+      // Lower button
+      const lowerBtn = document.createElement('button');
+      lowerBtn.textContent = 'Lower';
+      lowerBtn.style.cssText = `
+        flex: 1;
+        padding: 16px 12px;
+        background: linear-gradient(135deg, #2196F3 0%, #1976d2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+      `;
+
+      // Disable lower button if first garment was lower
+      if (firstGarmentType === 'lower') {
+        lowerBtn.disabled = true;
+        lowerBtn.style.background = '#d0d0d0';
+        lowerBtn.style.cursor = 'not-allowed';
+        lowerBtn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+        lowerBtn.title = 'Cannot combine 2 bottoms';
+        
+        const disabledOverlay = document.createElement('div');
+        disabledOverlay.style.cssText = `
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(255, 255, 255, 0.5);
+          border-radius: 12px;
+          pointer-events: none;
+        `;
+        disabledOverlay.textContent = '';
+        lowerBtn.style.position = 'relative';
+        lowerBtn.appendChild(disabledOverlay);
+        
+        const disabledText = document.createElement('div');
+        disabledText.style.cssText = `
+          font-size: 10px;
+          color: #999;
+          margin-top: 6px;
+          font-weight: 500;
+        `;
+        disabledText.textContent = 'Cannot use 2 bottoms';
+        
+        const lowerWrapper = document.createElement('div');
+        lowerWrapper.appendChild(lowerBtn);
+        lowerWrapper.appendChild(disabledText);
+        buttonsContainer.appendChild(lowerWrapper);
+      } else {
+        lowerBtn.addEventListener('mouseenter', () => {
+          lowerBtn.style.transform = 'translateY(-3px)';
+          lowerBtn.style.boxShadow = '0 8px 20px rgba(33, 150, 243, 0.4)';
+        });
+        lowerBtn.addEventListener('mouseleave', () => {
+          lowerBtn.style.transform = 'translateY(0)';
+          lowerBtn.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+        });
+        lowerBtn.addEventListener('click', () => {
+          console.log('👖 User selected: lower');
+          modal.remove();
+          resolve('lower');
+        });
+        buttonsContainer.appendChild(lowerBtn);
+      }
+
+      buttonsContainer.insertBefore(upperBtn, buttonsContainer.firstChild);
+
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          console.log('Modal closed by background click');
+          modal.remove();
+          resolve(null); // User closed without selecting
+        }
+      });
+
+      // Add styles for animations
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: scale(0.85) translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+        
+        #garment-type-selection-modal button:active {
+          transform: scale(0.98) !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Assemble modal
+      modalContent.appendChild(headerIcon);
+      modalContent.appendChild(title);
+      modalContent.appendChild(subtitle);
+      modalContent.appendChild(buttonsContainer);
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+
+      console.log('📋 Garment type selection modal shown');
+    });
+  }
+
+  // Main try-on function with layered support
+  async function performTryOn(garmentImageData, garmentType) {
+    console.log(`🎯 performTryOn called with ${garmentType} garment`);
+    console.log('📊 Current state:', { tryOnCount, firstGarmentType, appliedGarments });
+    
+    // Prevent multiple simultaneous try-ons
+    if (tryOnInProgress) {
+      console.log('⏳ Try-on already in progress');
+      return;
+    }
+    
+    const tryonResult = document.getElementById('tryon-result');
     if (!tryonResult) {
       console.error('❌ tryonResult element not found');
       return;
     }
     
+    // ===== FOR SECOND TRY-ON: SHOW MODAL TO SELECT GARMENT TYPE =====
+    let finalGarmentType = garmentType;
+    if (tryOnCount === 1) {
+      console.log('🎯 Second try-on - asking user to manually select garment type');
+      const selectedType = await showGarmentTypeSelectionModal();
+      
+      if (!selectedType) {
+        console.log('⚠️ User cancelled garment type selection');
+        return; // User closed modal without selecting
+      }
+      
+      finalGarmentType = selectedType; // Use user's manual selection instead of auto-detected
+      console.log('✅ User selected garment type:', finalGarmentType);
+    }
+    
+    // ===== VALIDATION FOR LAYERED TRY-ONS =====
+    if (tryOnCount > 0) {
+      // Not the first try-on - validate combination
+      const validation = validateLayeredCombination(firstGarmentType, finalGarmentType);
+      if (!validation.valid) {
+        showCombinationError(validation.message);
+        return;
+      }
+    }
+    
     // Get processed avatar from storage
     return new Promise((resolve, reject) => {
       chrome.storage.local.get(['avatarBgRemovedImg', 'avatarImg'], async function(result) {
-        const avatarData = result.avatarBgRemovedImg || result.avatarImg;
+        // Determine which avatar to use
+        let avatarDataToUse;
+        if (tryOnCount === 0) {
+          // First try-on - use original avatar and store it
+          avatarDataToUse = result.avatarBgRemovedImg || result.avatarImg;
+          if (avatarDataToUse && !originalAvatarBase64) {
+            originalAvatarBase64 = avatarDataToUse;
+            currentWorkingAvatar = avatarDataToUse;
+            console.log('💾 Stored original avatar for reset');
+          }
+        } else {
+          // Subsequent try-on - use previous result or original
+          avatarDataToUse = currentWorkingAvatar || (result.avatarBgRemovedImg || result.avatarImg);
+        }
         
-        if (!avatarData) {
+        if (!avatarDataToUse) {
           tryonResult.innerHTML = '📷 Please upload your photo first';
           showTryonResult();
           reject('No avatar uploaded');
@@ -722,7 +2113,8 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         
-        // Create close button element instead of inline onclick
+        // Show processing state
+        tryOnInProgress = true;
         const processingCloseBtn = document.createElement('button');
         processingCloseBtn.className = 'tryon-close-btn';
         processingCloseBtn.innerHTML = '&times;';
@@ -737,115 +2129,131 @@ document.addEventListener('DOMContentLoaded', function() {
         tryonResult.appendChild(processingText);
         showTryonResult();
         
+        let avatarBlob = null;
+        let garmentBlob = null;
         try {
-          // Try to remove background from garment, but continue if it fails
-          let garmentBgRemovedBlob;
-          try {
-            const garmentBlob = await safeImageToBlob(garmentImageData);
-            const garmentForm = new FormData();
-            garmentForm.append('file', garmentBlob, 'garment.png');
-            const garmentBgResp = await fetch('http://192.168.178.48:5000/api/remove-bg', {
-              method: 'POST',
-              body: garmentForm,
-            });
-            if (garmentBgResp.ok) {
-              garmentBgRemovedBlob = await garmentBgResp.blob();
-              console.log('✅ Garment background removed successfully');
-            } else {
-              throw new Error(`Background removal failed: ${garmentBgResp.status}`);
-            }
-          } catch (bgError) {
-            console.warn('⚠️ Background removal failed, using original garment:', bgError.message);
-            // Use original garment if background removal fails
-            garmentBgRemovedBlob = await safeImageToBlob(garmentImageData);
-          }
+          // Convert avatar and garment images to blobs
+          console.log('🔄 Converting avatar to blob...');
+          avatarBlob = await safeImageToBlob(avatarDataToUse);
+          console.log('✅ Avatar blob created:', { size: avatarBlob.size, type: avatarBlob.type });
           
+          console.log('🔄 Converting garment image to blob...');
+          garmentBlob = await safeImageToBlob(garmentImageData);
+          console.log('✅ Garment blob created:', { size: garmentBlob.size, type: garmentBlob.type });
+
+          // Validate blobs
+          if (!avatarBlob || avatarBlob.size === 0) {
+            tryonResult.innerHTML = '❌ Invalid avatar image data.';
+            showTryonResult();
+            tryOnInProgress = false;
+            reject('Invalid avatar image');
+            return;
+          }
+          if (!garmentBlob || garmentBlob.size === 0) {
+            console.error('❌ Garment blob is empty');
+            tryonResult.innerHTML = '❌ Invalid garment image data.';
+            showTryonResult();
+            tryOnInProgress = false;
+            reject('Invalid garment image');
+            return;
+          }
+
           // Call try-on API
           const formData = new FormData();
-          // Use processed avatar image  
-          const avatarBlob = await safeImageToBlob(avatarData);
-          formData.append('person_image', avatarBlob, 'avatar.png');
-          formData.append('cloth_image', garmentBgRemovedBlob, 'garment.png');
-          formData.append('cloth_type', garmentType); // Use the garment type (upper/lower)
-          formData.append('num_inference_steps',50);
+          formData.append('avatar_image', avatarBlob, 'avatar.png');
+          formData.append('garment_image', garmentBlob, 'garment.png');
+          formData.append('cloth_type', finalGarmentType);
+          formData.append('num_inference_steps', 50);
           
-          console.log('Sending try-on request with garment type:', garmentType);
-          
-          const response = await fetch('http://localhost:5000/api/tryon', {
+          console.log('📦 Sending try-on request...');
+
+          // Retrieve JWT token
+          let jwtToken = null;
+          await new Promise(resolve => {
+            chrome.storage.local.get(['jwtToken'], function(tokenResult) {
+              jwtToken = tokenResult.jwtToken;
+              resolve();
+            });
+          });
+
+          const response = await fetch('http://127.0.0.1:8000/api/tryon-gemini', {
             method: 'POST',
             body: formData,
+            headers: jwtToken ? { 'Authorization': `Bearer ${jwtToken}` } : undefined
           });
+          console.log('📥 API Response status:', response.status);
           
           if (!response.ok) {
-            tryonResult.innerHTML = '❌ Try-on failed';
+            const errorText = await response.text();
+            console.error('❌ Try-on API failed:', response.status);
+            tryonResult.innerHTML = `❌ Try-on failed (${response.status})`;
+            tryOnInProgress = false;
             reject('Try-on API failed');
             return;
           }
           
+          // Handle image response
           const tryonBlob = await response.blob();
-          const url = URL.createObjectURL(tryonBlob);
-
-          if (!formData.has('transparent_background')) {
-            console.log('🔄 Removing background from try-on result...');
+          console.log('✅ Received try-on result blob:', { size: tryonBlob.size });
+          
+          // Convert blob to data URL for storage and reuse
+          const reader = new FileReader();
+          reader.onload = async function(e) {
+            const resultDataUrl = e.target.result;
             
-            // Convert blob to form data for background removal
-            const bgRemovalForm = new FormData();
-            bgRemovalForm.append('file', tryonBlob, 'tryon-result.png');
-            
-            const bgRemovalResp = await fetch('http://localhost:5000/api/remove-bg', {
-              method: 'POST',
-              body: bgRemovalForm,
-            });
-            
-            if (bgRemovalResp.ok) {
-              const transparentBlob = await bgRemovalResp.blob();
-              const transparentUrl = URL.createObjectURL(transparentBlob);
-              
-              const resultCloseBtn = document.createElement('button');
-              resultCloseBtn.className = 'tryon-close-btn';
-              resultCloseBtn.innerHTML = '&times;';
-              resultCloseBtn.addEventListener('click', hideTryonResult);
-              
-              const resultImg = document.createElement('img');
-              resultImg.src = transparentUrl;
-              resultImg.alt = 'Try-On Result';
-              resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
-              
-              tryonResult.innerHTML = '';
-              tryonResult.appendChild(resultCloseBtn);
-              tryonResult.appendChild(resultImg);
-              console.log('✅ Background removed from try-on result');
-              resolve();
-              return;
+            // ===== UPDATE LAYERED TRY-ON STATE =====
+            if (tryOnCount === 0) {
+              firstGarmentType = finalGarmentType;
             }
-          }
+            appliedGarments.push({ type: finalGarmentType, src: garmentImageData });
+            tryOnCount++;
+            currentWorkingAvatar = resultDataUrl; // Store result for next layer
+            
+            console.log('✅ Try-on #' + tryOnCount + ' completed');
+            console.log('   Applied so far:', appliedGarments.map(g => g.type).join(' + '));
 
-          // Fallback: Show result with checkered background to indicate transparency
-          const fallbackCloseBtn = document.createElement('button');
-          fallbackCloseBtn.className = 'tryon-close-btn';
-          fallbackCloseBtn.innerHTML = '&times;';
-          fallbackCloseBtn.addEventListener('click', hideTryonResult);
+            // Display result image
+            const resultCloseBtn = document.createElement('button');
+            resultCloseBtn.className = 'tryon-close-btn';
+            resultCloseBtn.innerHTML = '&times;';
+            resultCloseBtn.addEventListener('click', hideTryonResult);
+            
+            const resultImg = document.createElement('img');
+            resultImg.src = resultDataUrl;
+            resultImg.alt = 'Try-On Result';
+            resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
+            
+            tryonResult.innerHTML = '';
+            tryonResult.appendChild(resultCloseBtn);
+            tryonResult.appendChild(resultImg);
+            
+            // Save try-on state to persist across popup closures
+            saveTryOnState(resultDataUrl);
+            
+            // Show layered try-on UI
+            showLayeredTryOnUI();
+            
+            tryOnInProgress = false;
+            resolve();
+          };
           
-          const resultImg = document.createElement('img');
-          resultImg.src = url;
-          resultImg.alt = 'Try-On Result';
-          resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
+          reader.onerror = function(error) {
+            console.error('Error reading result blob:', error);
+            tryonResult.innerHTML = '❌ Failed to process result';
+            tryOnInProgress = false;
+            reject(error);
+          };
           
-          tryonResult.innerHTML = '';
-          tryonResult.appendChild(fallbackCloseBtn);
-          tryonResult.appendChild(resultImg);
-          console.log('✅ Try-on completed successfully');
-          resolve();
+          reader.readAsDataURL(tryonBlob);
           
         } catch (error) {
-          console.error('Try-on error:', error.message || error);
-          if (error.message && error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-            tryonResult.innerHTML = '🔌 Server connection timed out. Please check if the backend server at localhost:5000 is running and accessible.';
-          } else if (error.message && error.message.includes('Failed to fetch')) {
-            tryonResult.innerHTML = '🔌 Cannot connect to try-on server. Please verify the server is running at localhost:5000.';
+          console.error('Try-on error:', error.message);
+          if (error.message && error.message.includes('Failed to fetch')) {
+            tryonResult.innerHTML = '🔌 Cannot connect to try-on server.';
           } else {
             tryonResult.innerHTML = `❌ Try-on failed: ${error.message || 'Unknown error'}`;
           }
+          tryOnInProgress = false;
           reject(error);
         }
       });
@@ -966,7 +2374,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Favorite Button -->
             <button class="favorite-btn ${isInWardrobe ? 'favorited' : ''}" type="button">
-              <span class="heart-icon">${isInWardrobe ? '❤️' : '🤍'}</span>
+              <img src="love.png" alt="Add to wardrobe" class="heart-icon" style="width: 24px; height: 24px; object-fit: contain; filter: ${isInWardrobe ? 'none' : 'grayscale(100%)'};" />
             </button>
             
             <!-- Image Number Badge -->
@@ -976,7 +2384,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Try-on Hover Badge -->
             <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
+              Try On
             </div>
             
             <!-- Favorite Status -->
@@ -998,16 +2406,18 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add event listeners for try-on functionality and favorite buttons
     const tryonItems = garmentPreview.querySelectorAll('.garment-item-tryon');
+    console.log(`📌 Attaching event listeners to ${tryonItems.length} garment items`);
     tryonItems.forEach((item, index) => {
       const actualIndex = startIndex + index;
       if (actualIndex < allExtractedImages.length) {
         const imgSrc = allExtractedImages[actualIndex].src;
+        console.log(`📎 Item ${index + 1} (actual ${actualIndex + 1}): ${imgSrc.substring(0, 80)}...`);
         
         // Add try-on click listener to the image
         const img = item.querySelector('img');
         if (img) {
           img.addEventListener('click', async () => {
-            console.log('🎯 Try-on clicked for image:', imgSrc);
+            console.log('👕 Try-on clicked for image:', imgSrc.substring(0, 100) + (imgSrc.length > 100 ? '...' : ''));
             await handleImageTryOn(imgSrc);
           });
         }
@@ -1038,7 +2448,8 @@ document.addEventListener('DOMContentLoaded', function() {
         currentUser = {
           userID: result.userId,
           email: result.userEmail,
-          profile: result.userProfile
+          profile: result.userProfile,
+          jwtToken: result.jwtToken
         };
         console.log('👤 Existing user loaded for wardrobe:', currentUser);
         
@@ -1073,7 +2484,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     try {
       // Call the login API
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1086,40 +2497,53 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const result = await response.json();
 
+      console.log('📦 Raw response object:', result);
+      console.log('📦 response.status:', response.status);
+      console.log('📦 response.ok:', response.ok);
+
       if (result.success) {
-        console.log('✅ Login successful:', result.user_data);
-        
-        // Store user session with complete user data
+        console.log('✅ Login successful:', result.data.user);
+        console.log('� Full login response:', JSON.stringify(result, null, 2));
+        console.log('🔐 Token from result.data.token:', result.data.token);
+        console.log('🔐 Token from result.token:', result.token);
+        console.log('🔐 All keys in result.data:', Object.keys(result.data));
+
+        // Store user session with complete user data and JWT token
         const userData = {
           userSignedIn: true,
           userEmail: email,
-          userId: result.user_data.userid,
+          userId: result.data.user.userid,
+          userID: result.data.user.userid,  // Also store as userID for avatar endpoint
           userProfile: {
-            firstname: result.user_data.first_name,
-            lastname: result.user_data.last_name,
-            age: result.user_data.age,
-            gender: result.user_data.gender,
-            weight: result.user_data.weight,
-            height: result.user_data.height,
-            physique: result.user_data.physique
+            firstname: result.data.user.first_name,
+            lastname: result.data.user.last_name,
+            age: result.data.user.age,
+            gender: result.data.user.gender,
+            weight: result.data.user.weight,
+            height: result.data.user.height,
+            physique: result.data.user.physique
           },
-          signInTime: Date.now()
+          signInTime: Date.now(),
+          jwtToken: result.data.token || ''
         };
 
+        console.log('💾 Storing JWT token:', userData.jwtToken);
         chrome.storage.local.set(userData);
 
         // Set current user for wardrobe functionality
         currentUser = {
-          userID: result.user_data.userid,
+          userID: result.data.user.userid,
           email: email,
-          profile: userData.userProfile
+          profile: userData.userProfile,
+          jwtToken: userData.jwtToken
         };
         console.log('👤 User signed in for wardrobe:', currentUser);
+        console.log('✅ currentUser.jwtToken set to:', currentUser.jwtToken);
 
         signinBtn.innerHTML = 'Loading avatar...';
-        
+
         // Load avatar from database if it exists
-        await loadAvatarAfterSignIn(result.user_data.userid);
+        await loadAvatarAfterSignIn(result.data.user.userid);
 
         // Load user's wardrobe items
         await loadUserWardrobe();
@@ -1219,102 +2643,57 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Handle account creation
   if (createAccountBtn) {
-    createAccountBtn.addEventListener('click', function(e) {
+    createAccountBtn.addEventListener('click', async function(e) {
       e.preventDefault();
       handleAccountCreation();
     });
   }
 
-  async function handleAccountCreation() {
-    console.log('Account creation submitted');
-    
-    // Get form values
-    const email = createEmail.value.trim();
-    const firstname = createFirstname.value.trim();
-    const lastname = createLastname.value.trim();
-    const password = createPassword.value;
-    const age = createAge.value;
+  // Account Creation Handler (NEW MODEL)
+  createAccountBtn.addEventListener('click', async function() {
+    const email = createEmail.value;
+    const firstname = createFirstname.value;
+    const lastname = createLastname.value;
     const gender = createGender.value;
-    const weight = createWeight.value;
-    const height = createHeight.value;
-    const physique = document.querySelector('input[name="physique"]:checked')?.value;
-    
-    // Validate required fields
-    if (!email || !firstname || !lastname || !password || !age || !gender || !weight || !height || !physique) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    
-    // Show loading state
-    createAccountBtn.innerHTML = 'Creating Account...';
-    createAccountBtn.disabled = true;
-    
+    const birthdate = document.getElementById('create-birthdate').value;
+    const streetNo = document.getElementById('create-streetno').value;
+    const city = document.getElementById('create-city').value;
+    const postalCode = document.getElementById('create-postalcode').value;
+    const password = createPassword.value;
+    const confirmPassword = document.getElementById('create-confirm-password').value;
+
+    // Remove all other fields from the model
     try {
-      // Prepare account data
-      const accountData = {
-        email: email,
-        firstname: firstname,
-        lastname: lastname,
-        password: password,
-        age: parseInt(age),
-        gender: gender,
-        weight: parseFloat(weight),
-        height: parseFloat(height),
-        physique: physique
+      const userData = {
+        email,
+        first_name: firstname,
+        last_name: lastname,
+        gender,
+        birthdate,
+        street_no: streetNo,
+        city,
+        postal_code: postalCode,
+        password,
+        confirm_password: confirmPassword
       };
-      
-      console.log('Sending account data to API:', accountData);
-      
-      // Call the create account API
-      const response = await fetch('http://localhost:5000/api/create-account', {
+      // Update API call to match new model
+      const response = await fetch(`${API_BASE_URL}/api/create-account`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(accountData)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
       });
-      
       const result = await response.json();
-      
       if (result.success) {
-        console.log('Account created successfully:', result);
-        
-        // Store user data in Chrome storage
-        chrome.storage.local.set({
-          userEmail: result.user_data.email,
-          userId: result.user_data.userid,
-          userSignedIn: true,
-          userProfile: {
-            firstname: result.user_data.first_name,
-            lastname: result.user_data.last_name,
-            age: result.user_data.age,
-            gender: result.user_data.gender,
-            weight: result.user_data.weight,
-            height: result.user_data.height,
-            physique: result.user_data.physique
-          },
-          signInTime: Date.now()
-        });
-        
-        alert('Account created successfully! Welcome to Enable Virtual Try-On.');
-        
-        // Show main app
-        showMainApp();
-        
+        alert('Account created successfully! Please sign in.');
+        accountCreationPage.style.display = 'none';
+        signinPage.style.display = 'block';
       } else {
-        console.error('Account creation failed:', result.error);
-        alert(`Account creation failed: ${result.error}`);
+        alert('Account creation failed: ' + (result.message || 'Unknown error'));
       }
-      
     } catch (error) {
-      console.error('Account creation error:', error);
-      alert('Account creation failed. Please check your connection and try again.');
-    } finally {
-      // Reset button state
-      createAccountBtn.innerHTML = 'Create Account';
-      createAccountBtn.disabled = false;
+      alert('Account creation error: ' + error.message);
     }
-  }
+  });
 
   async function saveAvatarToDatabase(imageData, userId) {
     try {
@@ -1355,7 +2734,8 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       console.log('📥 Loading avatar from database for user:', userId);
       
-      const response = await fetch(`http://localhost:5000/api/get-avatar/${userId}`);
+      // Use the new /api/avatar/<userid> endpoint that looks up the actual filename from the database
+      const response = await fetch(`${API_BASE_URL}/api/avatar/${userId}`);
       
       if (response.ok) {
         const blob = await response.blob();
@@ -1427,6 +2807,269 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // ===== WARDROBE PAGE INITIALIZATION =====
+  // Menu wardrobe button handler
+  const menuWardrobeBtn = document.getElementById('menu-wardrobe');
+  if (menuWardrobeBtn) {
+    menuWardrobeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      showWardrobePage();
+      // Mark button as active
+      document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+      menuWardrobeBtn.classList.add('active');
+    });
+  }
+
+  // Menu home button handler
+  const menuHomeBtn = document.getElementById('menu-home');
+  if (menuHomeBtn) {
+    menuHomeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      showMainApp();
+      // Mark button as active
+      document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+      menuHomeBtn.classList.add('active');
+    });
+  }
+
+  // Menu saved button handler
+  const menuBookmarkBtn = document.getElementById('menu-bookmark');
+  if (menuBookmarkBtn) {
+    menuBookmarkBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      showSavedPage();
+      // Mark button as active
+      document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+      menuBookmarkBtn.classList.add('active');
+    });
+  }
+
+  // Show saved page function
+  function showSavedPage() {
+    // Hide all other pages
+    signinPage.style.display = 'none';
+    if (accountCreationPage) accountCreationPage.style.display = 'none';
+    if (userProfilePage) userProfilePage.style.display = 'none';
+    if (wardrobePage) wardrobePage.style.display = 'none';
+    if (mainApp) mainApp.style.display = 'none';
+    
+    // Show saved page and header
+    const savedPage = document.getElementById('saved-page');
+    if (savedPage) {
+      savedPage.style.display = 'flex';
+      // Load and display saved try-ons
+      displaySavedTryOns();
+    }
+    if (menuBar) menuBar.style.display = 'flex';
+    const extensionHeader = document.querySelector('.extension-header');
+    if (extensionHeader) extensionHeader.style.display = 'flex';
+  }
+
+  // Wardrobe tab handlers
+  wardrobeTabs.forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      e.preventDefault();
+      const tabName = this.getAttribute('data-tab');
+      
+      // Remove active class from all tabs and contents
+      wardrobeTabs.forEach(t => t.classList.remove('active'));
+      wardrobeTabContents.forEach(content => content.classList.remove('active'));
+      
+      // Add active class to clicked tab and corresponding content
+      this.classList.add('active');
+      const tabId = tabName === 'upper' ? 'upper-garments-tab' : 'lower-garments-tab';
+      const tabContent = document.getElementById(tabId);
+      if (tabContent) tabContent.classList.add('active');
+      
+      // Filter displayed items based on tab
+      filterWardrobeByType(tabName);
+    });
+  });
+
+  // Wardrobe search handler
+  if (wardrobeSearchInput) {
+    wardrobeSearchInput.addEventListener('input', function(e) {
+      const searchTerm = e.target.value.toLowerCase();
+      filterWardrobeBySearch(searchTerm);
+    });
+  }
+
+  // Function to load wardrobe items from backend
+  async function loadWardrobeItems() {
+    try {
+      if (!currentUser || !currentUser.userID) {
+        console.log('❌ No user logged in');
+        upperEmptyState.style.display = 'flex';
+        lowerEmptyState.style.display = 'flex';
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/items`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser.jwtToken || ''}`
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        wardrobeItems = result.data || [];
+        console.log('✅ Loaded wardrobe items:', wardrobeItems.length);
+        renderWardrobeItems();
+      } else {
+        console.error('Failed to load wardrobe items:', response.status);
+        upperEmptyState.style.display = 'flex';
+        lowerEmptyState.style.display = 'flex';
+      }
+    } catch (error) {
+      console.error('❌ Error loading wardrobe:', error);
+      upperEmptyState.style.display = 'flex';
+      lowerEmptyState.style.display = 'flex';
+    }
+  }
+
+  // Function to render wardrobe items in grids
+  function renderWardrobeItems() {
+    const upperItems = wardrobeItems.filter(item => item.garment_type === 'upper');
+    const lowerItems = wardrobeItems.filter(item => item.garment_type === 'lower');
+
+    // Clear existing items
+    upperGarmentsGrid.innerHTML = '';
+    lowerGarmentsGrid.innerHTML = '';
+
+    // Render upper garments
+    if (upperItems.length === 0) {
+      upperEmptyState.style.display = 'flex';
+    } else {
+      upperEmptyState.style.display = 'none';
+      upperItems.forEach(item => {
+        const garmentElement = createWardrobeGarmentElement(item);
+        upperGarmentsGrid.appendChild(garmentElement);
+      });
+    }
+
+    // Render lower garments
+    if (lowerItems.length === 0) {
+      lowerEmptyState.style.display = 'flex';
+    } else {
+      lowerEmptyState.style.display = 'none';
+      lowerItems.forEach(item => {
+        const garmentElement = createWardrobeGarmentElement(item);
+        lowerGarmentsGrid.appendChild(garmentElement);
+      });
+    }
+  }
+
+  // Function to create a wardrobe garment element
+  function createWardrobeGarmentElement(item) {
+    const div = document.createElement('div');
+    div.className = 'garment-item-wardrobe';
+    div.dataset.id = item.garment_id;
+    div.dataset.type = item.garment_type;
+
+    const img = document.createElement('img');
+    img.src = item.garment_image || item.garment_url;
+    img.alt = 'Garment';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.innerHTML = '×';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeGarmentFromWardrobe(item.garment_id);
+    });
+
+    const useBtn = document.createElement('button');
+    useBtn.className = 'use-btn';
+    useBtn.textContent = 'Use';
+    useBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      useGarmentFromWardrobe(item);
+    });
+
+    div.appendChild(img);
+    div.appendChild(removeBtn);
+    div.appendChild(useBtn);
+
+    return div;
+  }
+
+  // Function to filter wardrobe by garment type
+  function filterWardrobeByType(type) {
+    const upperGrid = upperGarmentsGrid.querySelectorAll('.garment-item-wardrobe');
+    const lowerGrid = lowerGarmentsGrid.querySelectorAll('.garment-item-wardrobe');
+
+    if (type === 'upper') {
+      upperGrid.forEach(item => item.style.display = 'flex');
+      lowerGrid.forEach(item => item.style.display = 'none');
+    } else {
+      upperGrid.forEach(item => item.style.display = 'none');
+      lowerGrid.forEach(item => item.style.display = 'flex');
+    }
+  }
+
+  // Function to filter wardrobe by search term
+  function filterWardrobeBySearch(searchTerm) {
+    const allItems = document.querySelectorAll('.garment-item-wardrobe');
+    allItems.forEach(item => {
+      // For now, show all items if search is empty, otherwise could implement image-based filtering
+      if (searchTerm === '') {
+        item.style.display = 'flex';
+      } else {
+        // This is a placeholder - in a real app you'd search by metadata
+        item.style.display = 'flex';
+      }
+    });
+  }
+
+  // Function to remove garment from wardrobe
+  async function removeGarmentFromWardrobe(garmentId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/delete/${garmentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser.jwtToken || ''}`
+        }
+      });
+
+      if (response.ok) {
+        console.log('✅ Garment removed from wardrobe');
+        wardrobeItems = wardrobeItems.filter(item => item.garment_id !== garmentId);
+        renderWardrobeItems();
+      } else {
+        console.error('Failed to remove garment:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error removing garment:', error);
+    }
+  }
+
+  // Function to use garment from wardrobe (load it into try-on)
+  function useGarmentFromWardrobe(item) {
+    console.log('Using garment from wardrobe:', item);
+    // Load the garment for try-on
+    garmentImgData = item.garment_image || item.garment_url;
+    selectedGarmentType = item.garment_type;
+    
+    // Show in garment section
+    const garmentPreview = document.getElementById('garment-preview');
+    if (garmentPreview) {
+      garmentPreview.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = garmentImgData;
+      img.alt = 'Selected Garment';
+      garmentPreview.appendChild(img);
+    }
+
+    // Go back to main app
+    showMainApp();
+    document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+    const menuHomeBtn = document.getElementById('menu-home');
+    if (menuHomeBtn) menuHomeBtn.classList.add('active');
+  }
+
   if (editProfileBtn) {
     editProfileBtn.addEventListener('click', function(e) {
       e.preventDefault();
@@ -1453,6 +3096,14 @@ document.addEventListener('DOMContentLoaded', function() {
     mainApp.style.display = 'none';
     if (accountCreationPage) accountCreationPage.style.display = 'none';
     if (userProfilePage) userProfilePage.style.display = 'none';
+    if (wardrobePage) wardrobePage.style.display = 'none';
+    const savedPage = document.getElementById('saved-page');
+    if (savedPage) savedPage.style.display = 'none';
+    if (menuBar) menuBar.style.display = 'none';
+    
+    // Hide header on signin
+    const extensionHeader = document.querySelector('.extension-header');
+    if (extensionHeader) extensionHeader.style.display = 'none';
   }
 
   function showAccountCreationPage() {
@@ -1460,7 +3111,15 @@ document.addEventListener('DOMContentLoaded', function() {
     signinPage.style.display = 'none';
     mainApp.style.display = 'none';
     if (userProfilePage) userProfilePage.style.display = 'none';
+    if (wardrobePage) wardrobePage.style.display = 'none';
+    const savedPage = document.getElementById('saved-page');
+    if (savedPage) savedPage.style.display = 'none';
     accountCreationPage.style.display = 'flex';
+    if (menuBar) menuBar.style.display = 'none';
+    
+    // Hide header on account creation
+    const extensionHeader = document.querySelector('.extension-header');
+    if (extensionHeader) extensionHeader.style.display = 'none';
   }
 
   function showUserProfilePage() {
@@ -1468,7 +3127,15 @@ document.addEventListener('DOMContentLoaded', function() {
     signinPage.style.display = 'none';
     mainApp.style.display = 'none';
     if (accountCreationPage) accountCreationPage.style.display = 'none';
+    if (wardrobePage) wardrobePage.style.display = 'none';
+    const savedPage = document.getElementById('saved-page');
+    if (savedPage) savedPage.style.display = 'none';
     userProfilePage.style.display = 'flex';
+    
+    // Hide header on profile page
+    const extensionHeader = document.querySelector('.extension-header');
+    if (extensionHeader) extensionHeader.style.display = 'none';
+    if (menuBar) menuBar.style.display = 'none';
     
     // Load user data when showing profile page
     loadUserProfile();
@@ -1562,6 +3229,50 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== DOM ELEMENTS =====
     // URL and Use Garment logic
     const pageUrlInput = document.getElementById('page-url');
+    const saveTryonBtn = document.getElementById('save-tryon-btn');
+    
+    // Add event listener to save button
+    if (saveTryonBtn) {
+      saveTryonBtn.addEventListener('click', async () => {
+        console.log('❤️ Save try-on button clicked');
+        
+        // Check if there's a current try-on result
+        if (!currentWorkingAvatar || !appliedGarments || appliedGarments.length === 0) {
+          alert('Please complete a try-on first before saving.');
+          return;
+        }
+        
+        // Get the result image
+        const resultImg = document.querySelector('#tryon-result img');
+        if (!resultImg || !resultImg.src) {
+          alert('No try-on result to save.');
+          return;
+        }
+        
+        saveTryonBtn.disabled = true;
+        const heartIcon = saveTryonBtn.querySelector('.heart-icon');
+        if (heartIcon) heartIcon.style.opacity = '0.5';
+        
+        const success = await saveResultToDatabase(resultImg.src);
+        
+        if (success) {
+          if (heartIcon) {
+            heartIcon.style.filter = 'none';
+            saveTryonBtn.classList.add('favorited');
+          }
+          console.log('✅ Try-on saved successfully');
+          setTimeout(() => {
+            saveTryonBtn.disabled = false;
+            if (heartIcon) heartIcon.style.opacity = '1';
+          }, 2000);
+        } else {
+          saveTryonBtn.disabled = false;
+          if (heartIcon) heartIcon.style.opacity = '1';
+          console.log('❌ Failed to save try-on');
+          alert('Failed to save. Please try again.');
+        }
+      });
+    }
     
     // ===== VARIABLES =====
     // Avatar upload and persistence
@@ -1573,8 +3284,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // UI containers
     const tryonBody = document.querySelector('.tryon-body');
     const tryonResult = document.getElementById('tryon-result');
-    const signoutBtn = document.getElementById('signout-btn');
-    const refreshBtn = document.getElementById('refresh-btn');
 
     // Garment upload elements
     const upperGarmentBtn = document.getElementById('upper-garment-btn');
@@ -1687,8 +3396,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const file = event.target.files[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = async function(e) {
-          const imageData = e.target.result;
+        reader.onload = async function(evt) {
+          const imageData = evt.target.result;
           
           // Store in local storage
           chrome.storage.local.set({ avatarImg: imageData });
@@ -1703,6 +3412,8 @@ document.addEventListener('DOMContentLoaded', function() {
               if (saved) {
                 console.log('✅ Avatar synchronized with database from camera input');
               }
+            } else {
+              console.log('ℹ️ No user ID found, avatar saved locally only');
             }
           });
         };
@@ -1901,7 +3612,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Favorite Button -->
             <button class="favorite-btn ${isInWardrobe ? 'favorited' : ''}" type="button">
-              <span class="heart-icon">${isInWardrobe ? '❤️' : '🤍'}</span>
+              <img src="love.png" alt="Add to wardrobe" class="heart-icon" style="width: 24px; height: 24px; object-fit: contain; filter: ${isInWardrobe ? 'none' : 'grayscale(100%)'}; " />
             </button>
             
             <button class="garment-remove-btn" data-remove-index="${i}" title="Remove garment">
@@ -1914,7 +3625,7 @@ document.addEventListener('DOMContentLoaded', function() {
               ${i + 1}
             </div>
             <div class="tryon-hover-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;">
-              👕 Try On
+              Try On
             </div>
             
             <!-- Favorite Status -->
@@ -2257,9 +3968,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ===== UI CONTROL HANDLERS =====  
 
-  // Signout button logic
-  if (signoutBtn) {
-    signoutBtn.addEventListener('click', () => {
+  // Signout button logic - use event delegation to handle both signout buttons
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'signout-btn' || e.target.closest('#signout-btn')) {
+      const signoutBtn = e.target.id === 'signout-btn' ? e.target : e.target.closest('#signout-btn');
+      
       if (confirm('Sign out and return to login?')) {
         console.log('User confirmed signout');
         
@@ -2281,14 +3994,12 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         console.log('User cancelled signout');
       }
-    });
-  } else {
-    console.log('Note: signout-btn element not found');
-  }
+    }
+  });
 
-  // Refresh button logic (if it exists separately)
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
+  // Refresh button logic - use event delegation to handle both refresh buttons
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'refresh-btn' || e.target.closest('#refresh-btn')) {
       console.log('Refresh button clicked - resetting current session');
       
       if (confirm('Reset current session? This will clear uploaded images but keep you signed in.')) {
@@ -2296,24 +4007,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Reset avatar data
         // renderAvatarPreview();
-        // avatarFile = null;
-        // avatarBgRemovedBlob = null;
-        
-        // Reset garment data
-        uploadedGarments = [];
-        garmentImgData = null;
-        garmentBgRemovedBlob = null;
-        renderGarmentPlaceholders('default');
-        
-        // Reset try-on result
-        if (tryonResult) {
-          tryonResult.innerHTML = '';
-          hideTryonResult();
-        }
-        
-        if (tryonBody) {
-          tryonBody.style.display = 'flex';
-        }
+        clearAllGarments();
         
         // Reset useGarmentCheckbox variable
         useGarmentCheckbox = false;
@@ -2331,10 +4025,8 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         console.log('User cancelled refresh');
       }
-    });
-  } else {
-    console.log('Note: refresh-btn element not found');
-  }
+    }
+  });
 
   // Debug Try-On Button Handler
   const debugTryonBtn = document.getElementById('debug-tryon-btn');
@@ -2431,10 +4123,22 @@ document.addEventListener('DOMContentLoaded', function() {
   } // End of initializeMainApp function
 
   function showMainApp() {
+    // Hide all other pages
     signinPage.style.display = 'none';
     if (accountCreationPage) accountCreationPage.style.display = 'none';
     if (userProfilePage) userProfilePage.style.display = 'none';
+    if (wardrobePage) wardrobePage.style.display = 'none';
+    const savedPage = document.getElementById('saved-page');
+    if (savedPage) savedPage.style.display = 'none';
+    
+    // Show main app and header
     mainApp.style.display = 'flex';
+    if (menuBar) menuBar.style.display = 'flex';
+    const extensionHeader = document.querySelector('.extension-header');
+    if (extensionHeader) extensionHeader.style.display = 'flex';
+    
+    // Restore previous try-on state if it exists
+    restoreTryOnState();
     
     // Update toggle button state based on user status
     updateToggleButtonState();

@@ -26,21 +26,7 @@ tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 @tryon_bp.route('/tryon', methods=['POST'])
 @require_auth  # JWT decorator validates token and sets request.user_id from token
 def create_tryon_job():
-    """
-    Create a new try-on job (async)
-    Uses User model for avatar operations
-    user_id is extracted from JWT token by @require_auth decorator
-    
-    Per context.md API contract (lines 121-139):
-    - Accepts: selfie (multipart), item_urls[] (JSON array), options (optional)
-    - Returns: job_id, status: queued
-    """
-    # user_id comes from JWT token via @require_auth decorator
-    user_id = request.user_id
-    logger.info(f"create_tryon_job: ENTRY - user_id={user_id} (from JWT)")
-    
     try:
-        
         # Get person image (selfie, person_image file, or use current user's saved avatar)
         # Priority: 1) selfie file, 2) person_image file, 3) current user's saved avatar (no need to send from frontend)
         person_image = None
@@ -50,6 +36,27 @@ def create_tryon_job():
         elif 'person_image' in request.files:
             person_image = request.files['person_image'].read()
             logger.info(f"create_tryon_job: Using person_image file for person image")
+        # ...existing code...
+        # Log all critical variables before job creation
+        logger.info(f"create_tryon_job: person_image type={type(person_image)}, length={len(person_image) if isinstance(person_image, bytes) else 'N/A'}")
+        logger.info(f"create_tryon_job: garment_image type={type(garment_image)}, length={len(garment_image) if isinstance(garment_image, bytes) else 'N/A'}")
+        logger.info(f"create_tryon_job: garment_type={garment_type}")
+        logger.info(f"create_tryon_job: options={options}")
+        logger.info(f"create_tryon_job: garment_details={garment_details}")
+        try:
+            job_queue = get_job_queue()
+            job_id = job_queue.create_job(
+                user_id=user_id,
+                person_image=person_image,
+                garment_image=garment_image,
+                garment_type=garment_type,
+                garment_details=garment_details,  # Pass garment details to Gemini
+                options=options
+            )
+            logger.info(f"create_tryon_job: Job created successfully: {job_id}")
+        except Exception as job_error:
+            logger.exception(f"create_tryon_job: Job creation failed: {str(job_error)}")
+            return error_response_from_string(f'Job creation failed: {str(job_error)}', 400, 'JOB_CREATION_ERROR')
         else:
             # Use current user's saved avatar (already stored in backend, no need to send from frontend)
             # Security: Always use the authenticated user's avatar, not arbitrary avatar_id
@@ -737,18 +744,27 @@ def create_tryon_job():
         if not garment_image:
             return error_response_from_string('garment_image, wardrobe_item_id, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
         
-        # Preprocess garment image(s) - handle both single image and list
+        # Preprocess garment image(s) and remove background using rembg
         try:
+            from features.tryon.service import _remove_background_local
             if isinstance(garment_image, list):
-                # Preprocess each image in the list
                 garment_image = [preprocess_image(img, resize=True, normalize=True) for img in garment_image]
-                logger.info(f"create_tryon_job: Preprocessed {len(garment_image)} garment images")
+                garment_image = [_remove_background_local(img) for img in garment_image]
+                logger.info(f"create_tryon_job: Preprocessed and background removed for {len(garment_image)} garment images")
             else:
-                # Single image
                 garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                garment_image = _remove_background_local(garment_image)
+                logger.info("create_tryon_job: Preprocessed and background removed for garment image")
+            # Add detailed logging for garment image after preprocessing
+            if garment_image is None or (isinstance(garment_image, bytes) and len(garment_image) == 0):
+                logger.error("create_tryon_job: ERROR - Garment image is None or empty after preprocessing/background removal")
+            elif isinstance(garment_image, bytes):
+                logger.info(f"create_tryon_job: Garment image bytes length after preprocessing: {len(garment_image)}")
+            elif isinstance(garment_image, list):
+                logger.info(f"create_tryon_job: Garment image list length after preprocessing: {len(garment_image)}")
         except Exception as e:
-            logger.exception(f"create_tryon_job: Garment image preprocessing failed: {str(e)}")
-            return error_response_from_string(f'Garment image validation failed: {str(e)}', 400, 'VALIDATION_ERROR')
+            logger.exception(f"create_tryon_job: Garment image preprocessing or background removal failed: {str(e)}")
+            return error_response_from_string(f'Garment image validation or background removal failed: {str(e)}', 400, 'VALIDATION_ERROR')
         
         # Get garment_type from form or options, or use detected type
         if 'garment_type' in request.form:
@@ -1008,349 +1024,321 @@ def create_multi_tryon_job():
 @require_auth  # JWT decorator validates token and sets request.user_id from token
 def tryon_gemini_remote():
     """
-    Synchronous try-on using remote Gemini API
-    Forwards request to remote API and returns result directly
+    Synchronous try-on using local Gemini API
+    Processes try-on request locally and returns result image directly
     
     Optional:
     - avatar_image: File (PNG/JPG/JPEG) - The person's photo to dress (if not provided, uses user's saved avatar)
     
-    Optional (at least one required):
+    Required (at least one):
     - garment_image: File (PNG/JPG/JPEG) - Direct garment image file
-    - garment_url: String - Product URL to scrape for garment images
-    - garment_images[]: Array of Files - Multiple direct garment images
-    - garment_urls[]: Array of Strings - Multiple product URLs to scrape
+    - cloth_type: String - 'upper' or 'lower' garment type
     
     Optional Parameters:
-    - ai_model: String (default "gemini") - "gemini" or "gemini3"
     - num_inference_steps: Integer (default 50) - Number of inference steps
     
     Returns:
-    - PNG image directly with headers
+    - PNG image directly (binary content)
     """
-    logger.info("tryon_gemini_remote: ENTRY")
+    logger.info("🎯 tryon_gemini_remote: ENTRY - Starting synchronous try-on")
     
     try:
+        user_id = request.user_id
+        logger.info(f"👤 tryon_gemini_remote: User ID: {user_id}")
+        
         # Get avatar image - use provided file or user's saved avatar
-        avatar_file = None
         avatar_bytes = None
         
         if 'avatar_image' in request.files:
             avatar_file = request.files['avatar_image']
             if avatar_file and avatar_file.filename:
-                logger.info("tryon_gemini_remote: Using provided avatar_image file")
-                avatar_file.seek(0)
+                logger.info("📸 tryon_gemini_remote: Using provided avatar_image file")
                 avatar_bytes = avatar_file.read()
-                avatar_file.seek(0)
             else:
-                avatar_file = None
+                logger.warning("⚠️  tryon_gemini_remote: avatar_image file is empty")
         
         # If no avatar file provided, use user's saved avatar
         if not avatar_bytes:
-            # user_id is extracted from JWT token by @require_auth decorator
-            user_id = request.user_id
             current_user = User.get_by_id(user_id)
             if current_user and current_user.avatar:
                 avatar_bytes = current_user.avatar
-                logger.info(f"tryon_gemini_remote: Using user's saved avatar (user_id={user_id})")
+                logger.info(f"✅ tryon_gemini_remote: Using user's saved avatar")
             else:
-                logger.warning(f"tryon_gemini_remote: No avatar_image provided and user has no saved avatar (user_id={user_id})")
+                logger.warning(f"❌ tryon_gemini_remote: No avatar_image provided and user has no saved avatar")
                 return error_response_from_string(
                     'No avatar image provided. Please upload an avatar_image file or save an avatar first using /api/save-avatar',
                     400,
                     'INVALID_INPUT'
                 )
         
-        # Create file-like object from avatar bytes for remote API
-        from io import BytesIO
-        avatar_file_obj = BytesIO(avatar_bytes)
-        avatar_filename = avatar_file.filename if avatar_file else 'avatar.png'
-        avatar_content_type = avatar_file.content_type if avatar_file else 'image/png'
-        
-        # Collect garment images from multiple sources
-        garment_images = []
-        
-        # 1. Handle direct garment image files (single or multiple)
-        if 'garment_image' in request.files:
-            garment_file = request.files['garment_image']
-            if garment_file and garment_file.filename:
-                garment_file.seek(0)
-                garment_images.append(('file', garment_file))
-                logger.info("tryon_gemini_remote: Found single garment_image file")
-        
-        # Handle multiple garment images
-        if 'garment_images[]' in request.files:
-            garment_files = request.files.getlist('garment_images[]')
-            for garment_file in garment_files:
-                if garment_file and garment_file.filename:
-                    garment_file.seek(0)
-                    garment_images.append(('file', garment_file))
-            logger.info(f"tryon_gemini_remote: Found {len(garment_files)} garment_images[] files")
-        
-        # 2. Handle product URLs (single or multiple) - scrape to get images
-        garment_urls = []
-        if 'garment_url' in request.form:
-            garment_url = request.form.get('garment_url')
-            if garment_url:
-                garment_urls.append(garment_url)
-                logger.info(f"tryon_gemini_remote: Found single garment_url: {garment_url[:100]}")
-        
-        if 'garment_urls[]' in request.form:
-            urls = request.form.getlist('garment_urls[]')
-            garment_urls.extend([url for url in urls if url])
-            logger.info(f"tryon_gemini_remote: Found {len(urls)} garment_urls[]")
-        
-        # Scrape product URLs to get garment images - reuse existing scraping logic
-        if garment_urls:
-            from features.garments.scraper import is_image_url
-            from features.wardrobe.extractors import BrandExtractorFactory
-            from io import BytesIO
-            # fetch_image_from_url is already imported from shared.image_processing at the top
-            
-            for garment_url in garment_urls:
-                try:
-                    # Check if it's a direct image URL
-                    if is_image_url(garment_url):
-                        logger.info(f"tryon_gemini_remote: Fetching direct image from URL: {garment_url[:100]}")
-                        garment_img_bytes = fetch_image_from_url(garment_url)
-                        garment_file_obj = BytesIO(garment_img_bytes)
-                        garment_images.append(('bytes', (garment_url.split('/')[-1] or 'garment.png', garment_file_obj, 'image/png')))
-                        logger.info(f"tryon_gemini_remote: Successfully fetched image from URL")
-                    else:
-                        # Product page - use same scraping logic as create_tryon_job
-                        logger.info(f"tryon_gemini_remote: Scraping product page: {garment_url[:100]}")
-                        product_info = None
-                        
-                        # Try brand extractor first (same as create_tryon_job)
-                        try:
-                            extractor = BrandExtractorFactory.get_extractor(garment_url)
-                            product_info = extractor.extract_product_info(garment_url)
-                        except Exception as extractor_error:
-                            logger.warning(f"tryon_gemini_remote: Brand extractor failed: {str(extractor_error)}, trying simple scraping")
-                            # Fallback to simple scraping (same as create_tryon_job)
-                            from features.garments.scraper import fetch_html, extract_images_from_html, extract_title_from_html
-                            try:
-                                html_content = fetch_html(garment_url)
-                                if html_content:
-                                    image_urls = extract_images_from_html(html_content, garment_url, max_images=10)
-                                    logger.info(f"tryon_gemini_remote: Simple scraping found {len(image_urls)} image URLs")
-                                    if image_urls:
-                                        product_info = {
-                                            'images': image_urls,
-                                            'title': extract_title_from_html(html_content)
-                                        }
-                                    else:
-                                        logger.warning(f"tryon_gemini_remote: Simple scraping found no images from HTML")
-                                        product_info = None
-                                else:
-                                    logger.warning(f"tryon_gemini_remote: Simple scraping failed to fetch HTML")
-                                    product_info = None
-                            except Exception as simple_scrape_error:
-                                logger.warning(f"tryon_gemini_remote: Simple scraping also failed: {str(simple_scrape_error)}")
-                                product_info = None
-                        
-                        # Extract garment images from product info (same as create_tryon_job)
-                        if product_info and product_info.get('images'):
-                            images = product_info.get('images', [])
-                            # Fetch only the first image from each URL (as requested)
-                            if images:
-                                try:
-                                    img_url = images[0]  # Get only the first image
-                                    garment_img_bytes = fetch_image_from_url(img_url)
-                                    garment_file_obj = BytesIO(garment_img_bytes)
-                                    garment_images.append(('bytes', (img_url.split('/')[-1] or 'garment.png', garment_file_obj, 'image/png')))
-                                    logger.info(f"tryon_gemini_remote: Successfully scraped and fetched garment image from URL: {img_url[:100]}")
-                                except Exception as img_fetch_error:
-                                    logger.warning(f"tryon_gemini_remote: Failed to fetch first image {images[0]}: {str(img_fetch_error)}")
-                                    continue
-                        else:
-                            logger.warning(f"tryon_gemini_remote: No images found in product URL: {garment_url[:100]}")
-                except Exception as url_error:
-                    logger.warning(f"tryon_gemini_remote: Failed to process garment_url {garment_url[:100]}: {str(url_error)}")
-                    continue
-        
-        # Check if we have at least one garment
-        if not garment_images:
-            logger.warning("tryon_gemini_remote: No garment images found - need garment_image, garment_url, garment_images[], or garment_urls[]")
+        # Get garment image - this is required
+        if 'garment_image' not in request.files:
+            logger.warning("❌ tryon_gemini_remote: garment_image is required")
             return error_response_from_string(
-                'At least one garment image or URL is required. Provide garment_image, garment_url, garment_images[], or garment_urls[]',
+                'garment_image file is required',
                 400,
                 'INVALID_INPUT'
             )
         
-        logger.info(f"tryon_gemini_remote: Collected {len(garment_images)} garment image(s)")
+        garment_file = request.files['garment_image']
+        if not garment_file or not garment_file.filename:
+            logger.warning("❌ tryon_gemini_remote: garment_image file is empty")
+            return error_response_from_string(
+                'garment_image file is empty',
+                400,
+                'INVALID_INPUT'
+            )
         
-        # Get optional parameters
-        ai_model = request.form.get('ai_model', 'gemini')
+        garment_bytes = garment_file.read()
+        logger.info(f"📦 tryon_gemini_remote: Garment image size: {len(garment_bytes)} bytes")
+        
+        # Get garment type
+        cloth_type = request.form.get('cloth_type', 'upper')
+        if cloth_type not in ['upper', 'lower']:
+            logger.warning(f"⚠️  tryon_gemini_remote: Invalid cloth_type: {cloth_type}, using 'upper'")
+            cloth_type = 'upper'
+        logger.info(f"👕 tryon_gemini_remote: Garment type: {cloth_type}")
+        
+        # Get num_inference_steps
         num_inference_steps = request.form.get('num_inference_steps', '50')
-        
-        # Validate ai_model
-        if ai_model not in ['gemini', 'gemini3']:
-            logger.warning(f"tryon_gemini_remote: Invalid ai_model: {ai_model}, using default 'gemini'")
-            ai_model = 'gemini'
-        
-        # Validate num_inference_steps
         try:
             num_inference_steps = int(num_inference_steps)
             if num_inference_steps < 1 or num_inference_steps > 100:
-                logger.warning(f"tryon_gemini_remote: num_inference_steps out of range: {num_inference_steps}, using default 50")
                 num_inference_steps = 50
         except (ValueError, TypeError):
-            logger.warning(f"tryon_gemini_remote: Invalid num_inference_steps: {num_inference_steps}, using default 50")
             num_inference_steps = 50
+        logger.info(f"⚙️  tryon_gemini_remote: num_inference_steps: {num_inference_steps}")
         
-        logger.info(f"tryon_gemini_remote: Forwarding to remote API - ai_model={ai_model}, num_inference_steps={num_inference_steps}, garment_count={len(garment_images)}")
+        # Preprocess images
+        logger.info("🔄 tryon_gemini_remote: Preprocessing avatar...")
+        avatar_bytes = preprocess_image(avatar_bytes, resize=True, normalize=True)
+        logger.info(f"✅ tryon_gemini_remote: Avatar preprocessed: {len(avatar_bytes)} bytes")
         
-        # Prepare files and data for remote API
-        files = {
-            'avatar_image': (avatar_filename, avatar_file_obj, avatar_content_type)
-        }
+        logger.info("🔄 tryon_gemini_remote: Preprocessing garment...")
+        garment_bytes = preprocess_image(garment_bytes, resize=True, normalize=True)
+        logger.info(f"✅ tryon_gemini_remote: Garment preprocessed: {len(garment_bytes)} bytes")
         
-        # Add garment images (support multiple)
-        # Remote API format: single garment uses 'garment_image', multiple use 'garment_images[]'
-        garment_file_list = []
-        
-        for idx, (img_type, img_data) in enumerate(garment_images):
-            if img_type == 'file':
-                # Direct file upload - read into bytes
-                img_file = img_data
-                img_file.seek(0)
-                img_bytes = img_file.read()
-                img_file.seek(0)
-                
-                garment_file_list.append((img_file.filename, BytesIO(img_bytes), img_file.content_type))
-            else:
-                # Bytes from URL scraping
-                filename, file_obj, content_type = img_data
-                file_obj.seek(0)
-                img_bytes = file_obj.read()
-                file_obj.seek(0)
-                
-                garment_file_list.append((filename, BytesIO(img_bytes), content_type))
-        
-        # Add to files dict - single vs multiple
-        # The requests library handles multiple files with the same field name by accepting a list
-        # But we need to ensure the BytesIO objects are fresh (position 0)
-        if len(garment_file_list) == 1:
-            files['garment_image'] = garment_file_list[0]
-        else:
-            # For multiple files, pass as a list - requests will handle it correctly
-            # Each tuple in the list should be (filename, fileobj, content_type)
-            files['garment_images[]'] = garment_file_list
-        
-        data = {
-            'ai_model': ai_model,
-            'num_inference_steps': str(num_inference_steps)
-        }
-        
-        # Forward request to remote API
-        remote_url = Config.REMOTE_TRYON_API_URL
-        logger.info(f"tryon_gemini_remote: Calling remote API: {remote_url}")
-        
+        # Remove background from garment
+        logger.info("🎨 tryon_gemini_remote: Removing garment background...")
         try:
-            response = requests.post(
-                remote_url,
-                files=files,
-                data=data,
-                timeout=120  # 2 minute timeout for image generation
-            )
-        except requests.Timeout:
-            logger.error("tryon_gemini_remote: Remote API timeout")
-            return error_response_from_string(
-                'Remote API request timed out',
-                500,
-                'GENERATION_ERROR'
-            )
-        except requests.RequestException as e:
-            logger.exception(f"tryon_gemini_remote: Remote API request failed: {str(e)}")
-            return error_response_from_string(
-                f'Remote API request failed: {str(e)}',
-                500,
-                'GENERATION_ERROR'
-            )
+            from features.tryon.service import _remove_background_local
+            garment_bytes = _remove_background_local(garment_bytes)
+            logger.info(f"✅ tryon_gemini_remote: Garment background removed: {len(garment_bytes)} bytes")
+        except Exception as e:
+            logger.warning(f"⚠️  tryon_gemini_remote: Background removal failed: {str(e)}, continuing without removal")
         
-        # Handle response
-        if response.status_code == 200:
-            # Success - return image directly
-            logger.info(f"tryon_gemini_remote: Success - received image, size: {len(response.content)} bytes")
+        # Call local Gemini try-on service
+        logger.info("🤖 tryon_gemini_remote: Calling local Gemini try-on service...")
+        try:
+            from features.tryon.service import process_tryon
+            result_data_url = process_tryon(
+                person_image=avatar_bytes,
+                garment_image=garment_bytes,
+                garment_type=cloth_type,
+                garment_details=None,
+                options={'num_inference_steps': num_inference_steps}
+            )
+            logger.info(f"✅ tryon_gemini_remote: Gemini try-on completed")
             
-            # Extract headers from remote response if available
-            headers = {}
-            if 'X-AI-Model' in response.headers:
-                headers['X-AI-Model'] = response.headers['X-AI-Model']
-            if 'X-Generation-Method' in response.headers:
-                headers['X-Generation-Method'] = response.headers['X-Generation-Method']
-            if 'X-Garment-Count' in response.headers:
-                headers['X-Garment-Count'] = response.headers['X-Garment-Count']
-            if 'X-Total-Reference-Images' in response.headers:
-                headers['X-Total-Reference-Images'] = response.headers['X-Total-Reference-Images']
-            
-            # Return PNG image with headers
-            return Response(
-                response.content,
-                mimetype='image/png',
-                headers=headers
-            )
-        
-        elif response.status_code == 400:
-            # Bad request - try to parse error message
-            try:
-                error_data = response.json()
-                error_code = error_data.get('code', 'INVALID_INPUT')
-                error_message = error_data.get('message', 'Bad request')
-                
-                # Handle content blocked case
-                if error_code == 'CONTENT_BLOCKED':
-                    logger.warning(f"tryon_gemini_remote: Content blocked - {error_message}")
-                    return error_response_from_string(
-                        error_message,
-                        400,
-                        error_code
-                    )
-                else:
-                    logger.warning(f"tryon_gemini_remote: Invalid input - {error_message}")
-                    return error_response_from_string(
-                        error_message,
-                        400,
-                        error_code
-                    )
-            except (ValueError, json.JSONDecodeError):
-                # If response is not JSON, return raw text
-                logger.warning(f"tryon_gemini_remote: Invalid input - {response.text}")
+            # Convert data URL to bytes
+            if result_data_url.startswith('data:image/png;base64,'):
+                result_bytes = base64.b64decode(result_data_url.split(',')[1])
+                logger.info(f"✅ tryon_gemini_remote: Converted data URL to bytes: {len(result_bytes)} bytes")
+            else:
+                logger.error(f"❌ tryon_gemini_remote: Invalid result format from service")
                 return error_response_from_string(
-                    response.text or 'Invalid input',
-                    400,
-                    'INVALID_INPUT'
-                )
-        
-        elif response.status_code == 500:
-            # Server error
-            try:
-                error_data = response.json()
-                error_message = error_data.get('message', 'Generation failed')
-                logger.error(f"tryon_gemini_remote: Generation error - {error_message}")
-                return error_response_from_string(
-                    f'Gemini generation failed: {error_message}',
+                    'Try-on service returned invalid format',
                     500,
                     'GENERATION_ERROR'
                 )
-            except (ValueError, json.JSONDecodeError):
-                logger.error(f"tryon_gemini_remote: Generation error - {response.text}")
-                return error_response_from_string(
-                    f'Gemini generation failed: {response.text or "Unknown error"}',
-                    500,
-                    'GENERATION_ERROR'
-                )
-        
-        else:
-            # Other status codes
-            logger.error(f"tryon_gemini_remote: Unexpected status code: {response.status_code}")
+        except Exception as e:
+            logger.exception(f"❌ tryon_gemini_remote: Gemini try-on failed: {str(e)}")
             return error_response_from_string(
-                f'Remote API returned unexpected status: {response.status_code}',
+                f'Try-on processing failed: {str(e)}',
                 500,
                 'GENERATION_ERROR'
             )
+        
+        # Return PNG image directly
+        logger.info("📤 tryon_gemini_remote: Returning result image")
+        return Response(
+            result_bytes,
+            mimetype='image/png'
+        )
     
     except Exception as e:
-        logger.exception(f"tryon_gemini_remote: EXIT - Error: {str(e)}")
+        logger.exception(f"❌ tryon_gemini_remote: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500, 'GENERATION_ERROR')
 
+
+@tryon_bp.route('/tryon-results', methods=['POST'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def save_tryon_result():
+    """
+    Save a try-on result to database
+    user_id is extracted from JWT token by @require_auth decorator
+    
+    Required:
+    - result_image: Base64 encoded PNG
+    - applied_garments: JSON array of applied garments (e.g., [{"id": 123, "type": "upper"}, ...])
+    - try_on_count: Integer (1 or 2)
+    - original_avatar: Base64 encoded original avatar
+    """
+    user_id = request.user_id
+    logger.info(f"save_tryon_result: ENTRY - user_id={user_id}")
+    
+    try:
+        # Get required fields from JSON body
+        data = request.get_json() or {}
+        result_image = data.get('result_image')
+        applied_garments = data.get('applied_garments')
+        try_on_count = data.get('try_on_count')
+        original_avatar = data.get('original_avatar')
+        
+        # Validation
+        if not result_image or not applied_garments or try_on_count is None or not original_avatar:
+            logger.warning(f"save_tryon_result: Missing required fields")
+            return error_response_from_string(
+                'Missing required fields: result_image, applied_garments, try_on_count, original_avatar',
+                400,
+                'VALIDATION_ERROR'
+            )
+        
+        if try_on_count not in [1, 2]:
+            logger.warning(f"save_tryon_result: Invalid try_on_count={try_on_count}")
+            return error_response_from_string('try_on_count must be 1 or 2', 400, 'VALIDATION_ERROR')
+        
+        # Convert applied_garments to JSON if it's a list
+        if isinstance(applied_garments, list):
+            import json as json_lib
+            applied_garments = json_lib.dumps(applied_garments)
+        
+        # Insert into database
+        query = """
+            INSERT INTO tryon_results (user_id, result_image, applied_garments, try_on_count, original_avatar)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        result = db_manager.execute_query(query, (user_id, result_image, applied_garments, try_on_count, original_avatar))
+        
+        logger.info(f"save_tryon_result: EXIT - Successfully saved try-on result")
+        return success_response(data={'id': result}, message='Try-on result saved successfully')
+        
+    except Exception as e:
+        logger.exception(f"save_tryon_result: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Failed to save try-on result: {str(e)}', 500, 'DATABASE_ERROR')
+
+
+@tryon_bp.route('/tryon-results', methods=['GET'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def get_tryon_results():
+    """
+    Get all saved try-on results for authenticated user
+    user_id is extracted from JWT token by @require_auth decorator
+    
+    Returns:
+    - List of try-on results with id, result_image (thumbnail), applied_garments, try_on_count, created_at
+    """
+    user_id = request.user_id
+    logger.info(f"get_tryon_results: ENTRY - user_id={user_id}")
+    
+    try:
+        query = """
+            SELECT id, result_image, applied_garments, try_on_count, created_at
+            FROM tryon_results
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """
+        results = db_manager.execute_query(query, (user_id,), fetch_all=True)
+        
+        if not results:
+            logger.info(f"get_tryon_results: No results found for user_id={user_id}")
+            return success_response(data=[])
+        
+        # Convert results to list of dicts
+        import json as json_lib
+        results_list = []
+        for row in results:
+            result_dict = dict(row) if hasattr(row, 'keys') else row
+            # Parse applied_garments from JSON string
+            if isinstance(result_dict.get('applied_garments'), str):
+                result_dict['applied_garments'] = json_lib.loads(result_dict['applied_garments'])
+            results_list.append(result_dict)
+        
+        logger.info(f"get_tryon_results: EXIT - Found {len(results_list)} results")
+        return success_response(data=results_list)
+        
+    except Exception as e:
+        logger.exception(f"get_tryon_results: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Failed to fetch try-on results: {str(e)}', 500, 'DATABASE_ERROR')
+
+
+@tryon_bp.route('/tryon-results/<int:result_id>', methods=['DELETE'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def delete_tryon_result(result_id):
+    """
+    Delete a saved try-on result
+    user_id is extracted from JWT token by @require_auth decorator
+    Only allows deletion of results belonging to authenticated user
+    """
+    user_id = request.user_id
+    logger.info(f"delete_tryon_result: ENTRY - result_id={result_id}, user_id={user_id}")
+    
+    try:
+        # First verify the result belongs to the user
+        query = "SELECT user_id FROM tryon_results WHERE id = ?"
+        result = db_manager.execute_query(query, (result_id,))
+        
+        if not result:
+            logger.warning(f"delete_tryon_result: Result not found - result_id={result_id}")
+            return error_response_from_string('Result not found', 404, 'NOT_FOUND')
+        
+        result_user_id = result.get('user_id') if hasattr(result, 'get') else result['user_id']
+        if str(result_user_id).strip() != str(user_id).strip():
+            logger.warning(f"delete_tryon_result: Unauthorized - result_id={result_id} belongs to user_id={result_user_id}, not {user_id}")
+            return error_response_from_string('Unauthorized to delete this result', 403, 'AUTHORIZATION_ERROR')
+        
+        # Delete the result
+        delete_query = "DELETE FROM tryon_results WHERE id = ?"
+        db_manager.execute_query(delete_query, (result_id,))
+        
+        logger.info(f"delete_tryon_result: EXIT - Successfully deleted result_id={result_id}")
+        return success_response(message='Try-on result deleted successfully')
+        
+    except Exception as e:
+        logger.exception(f"delete_tryon_result: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Failed to delete try-on result: {str(e)}', 500, 'DATABASE_ERROR')
+
+
+@tryon_bp.route('/tryon-results/<int:result_id>', methods=['GET'])
+@require_auth  # JWT decorator validates token and sets request.user_id from token
+def get_tryon_result_details(result_id):
+    """
+    Get full details of a specific try-on result including original_avatar
+    user_id is extracted from JWT token by @require_auth decorator
+    """
+    user_id = request.user_id
+    logger.info(f"get_tryon_result_details: ENTRY - result_id={result_id}, user_id={user_id}")
+    
+    try:
+        query = """
+            SELECT id, result_image, original_avatar, applied_garments, try_on_count, created_at
+            FROM tryon_results
+            WHERE id = ? AND user_id = ?
+        """
+        result = db_manager.execute_query(query, (result_id, user_id), fetch_one=True)
+        
+        if not result:
+            logger.warning(f"get_tryon_result_details: Result not found - result_id={result_id}")
+            return error_response_from_string('Result not found', 404, 'NOT_FOUND')
+        
+        # Parse JSON if needed
+        import json as json_lib
+        if isinstance(result.get('applied_garments'), str):
+            result['applied_garments'] = json_lib.loads(result['applied_garments'])
+        
+        logger.info(f"get_tryon_result_details: EXIT - Found result_id={result_id}")
+        return success_response(data=result)
+        
+    except Exception as e:
+        logger.exception(f"get_tryon_result_details: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Failed to fetch result details: {str(e)}', 500, 'DATABASE_ERROR')

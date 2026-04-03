@@ -104,12 +104,21 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    console.log('Content script received message:', msg);
+    console.log('📨 Content script received message:', msg);
     if (msg && msg.type === 'GET_IMAGES_ON_PAGE') {
       const images = getImagesOnPage();
-      console.log('Found images:', images.length, images);
+      console.log('✅ Content script found', images.length, 'garment images');
+      images.forEach((img, idx) => {
+        console.log(`   Image ${idx + 1}:`, {
+          src: img.src.substring(0, 100) + (img.src.length > 100 ? '...' : ''),
+          width: img.width,
+          height: img.height,
+          type: img.type,
+          alt: img.alt
+        });
+      });
       sendResponse({ images: images });
-      return true; // Keep message channel open for async response
+      return true;
     }
   });
 })();

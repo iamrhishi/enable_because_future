@@ -57,7 +57,9 @@ class Config:
     SCRAPE_DO_ENABLED = os.environ.get('SCRAPE_DO_ENABLED', 'False').lower() == 'true'
     
     # Remote Try-On API Configuration
+    # NOTE: This is disabled - local processing is used instead
     REMOTE_TRYON_API_URL = os.environ.get('REMOTE_TRYON_API_URL', 'http://35.198.124.100:5000/api/tryon-gemini')
+    REMOTE_TRYON_API_ENABLED = os.environ.get('REMOTE_TRYON_API_ENABLED', 'False').lower() == 'true'
 
     # Mixer-Service API Configuration (specialized virtual try-on model)
     MIXER_SERVICE_URL = os.environ.get('MIXER_SERVICE_URL', 'https://api.becausefuture.tech/mixer-service/tryon')

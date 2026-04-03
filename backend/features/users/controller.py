@@ -1,9 +1,46 @@
-"""
-User Profile API endpoints
-CRUD operations for user profile data
-Uses User model for data operations
-JWT authentication via @require_auth decorator extracts user_id from token
-"""
+from flask import Blueprint, request
+from shared.models.user import User
+from shared.response import success_response, error_response_from_string
+from shared.middleware import require_auth
+from shared.logger import logger
+
+users_bp = Blueprint('users', __name__, url_prefix='/api/users')
+
+# ...existing endpoints...
+
+@users_bp.route('/avatar', methods=['GET'])
+@require_auth
+def get_avatar():
+    """
+    Get current user's avatar URL (file path)
+    Returns the URL path to the avatar image that can be served via /images endpoint
+    """
+    user_id = request.user_id
+    logger.info(f"get_avatar: ENTRY - user_id={user_id} (from JWT)")
+    try:
+        user = User.get_by_id(user_id)
+        if not user:
+            logger.warning(f"get_avatar: User not found - user_id={user_id}")
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        if user.avatar_path:
+            # Return the URL path to the avatar image
+            avatar_url = f"/images/{user.avatar_path}"
+            logger.info(f"get_avatar: EXIT - Avatar URL retrieved for user_id={user_id}")
+            return success_response(data={
+                'avatar_url': avatar_url,
+                'avatar_path': user.avatar_path,
+                'message': 'Avatar URL retrieved successfully'
+            })
+        else:
+            logger.info(f"get_avatar: EXIT - No avatar for user_id={user_id}")
+            return success_response(data={
+                'avatar_url': None,
+                'avatar_path': None,
+                'message': 'No avatar found for user'
+            })
+    except Exception as e:
+        logger.exception(f"get_avatar: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
 
 from flask import Blueprint, request
 from shared.models.user import User

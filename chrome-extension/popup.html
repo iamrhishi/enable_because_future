@@ -8,6 +8,27 @@
 </head>
 <body>
   <div id="tryon-popup">
+    <!-- Fixed Header (applies to all pages) -->
+    <header class="extension-header">
+      <div class="header-left">
+        <img src="bcf_green_logo.png" alt="Enable Logo" class="tryon-logo" />
+      </div>
+      <div class="header-right">
+        <button id="refresh-btn" class="refresh-btn" title="Refresh">
+          <img src="refresh.png" alt="Refresh" />
+        </button>
+        <button id="bg-theme-btn" class="bg-theme-btn" title="Background Theme">
+          <img src="dark-mode.png" alt="Background" />
+        </button>
+        <button id="user-btn" class="user-btn" title="User Profile">
+          <img src="user.png" alt="User" />
+        </button>
+        <button id="signout-btn" class="signout-btn" title="Sign Out">
+          <img src="logout (2).png" alt="Sign Out" style="width: 20px; height: 20px; object-fit: contain;" />
+        </button>
+      </div>
+    </header>
+
     <!-- Sign In Page -->
     <div id="signin-page" class="signin-page">
       <div class="signin-header">
@@ -48,7 +69,6 @@
         <div class="input-group">
           <input type="email" id="create-email" class="signin-input" placeholder="Email address" required />
         </div>
-        
         <div class="input-row">
           <div class="input-group half-width">
             <input type="text" id="create-firstname" class="signin-input" placeholder="First Name" required />
@@ -57,51 +77,35 @@
             <input type="text" id="create-lastname" class="signin-input" placeholder="Last Name" required />
           </div>
         </div>
-        
-        <div class="input-group">
-          <input type="password" id="create-password" class="signin-input" placeholder="Password" required />
-        </div>
-        
         <div class="input-row">
           <div class="input-group half-width">
-            <input type="number" id="create-age" class="signin-input" placeholder="Age" min="13" max="100" required />
-          </div>
-          <div class="input-group half-width">
             <select id="create-gender" class="signin-input" required>
-              <option value="">Select Gender</option>
+              <option value="">Gender</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
-              <option value="prefer-not-to-say">Prefer not to say</option>
             </select>
           </div>
+          <div class="input-group half-width">
+            <input type="date" id="create-birthdate" class="signin-input" placeholder="Birthdate" required />
+          </div>
         </div>
-        
         <div class="input-row">
           <div class="input-group half-width">
-            <input type="number" id="create-weight" class="signin-input" placeholder="Weight (kg)" min="30" max="300" step="0.1" required />
+            <input type="text" id="create-streetno" class="signin-input" placeholder="Street No" required />
           </div>
           <div class="input-group half-width">
-            <input type="number" id="create-height" class="signin-input" placeholder="Height (cm)" min="100" max="250" step="0.1" required />
+            <input type="text" id="create-city" class="signin-input" placeholder="City" required />
           </div>
         </div>
-        
         <div class="input-group">
-          <label class="input-label">Body Physique Type</label>
-          <div class="physique-options">
-            <label class="physique-option">
-              <input type="radio" name="physique" value="slim" required />
-              <span class="physique-text">Slim/Thin</span>
-            </label>
-            <label class="physique-option">
-              <input type="radio" name="physique" value="muscular" required />
-              <span class="physique-text">Muscular/Athletic</span>
-            </label>
-            <label class="physique-option">
-              <input type="radio" name="physique" value="thick" required />
-              <span class="physique-text">Thick/Solid</span>
-            </label>
-          </div>
+          <input type="text" id="create-postalcode" class="signin-input" placeholder="Postal Code" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="create-password" class="signin-input" placeholder="Password" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="create-confirm-password" class="signin-input" placeholder="Confirm Password" required />
         </div>
         
         <button id="create-account-btn" class="signin-btn">Create Account</button>
@@ -188,27 +192,68 @@
       </div>
     </div>
 
-    <!-- Main App (hidden initially) -->
-    <div id="main-app" class="main-app" style="display:none;">
-      <div class="tryon-header">
-        <div class="header-left">
-          <img src="bcf_green_logo.png" alt="Enable Logo" class="tryon-logo" />
+    <!-- Wardrobe Page -->
+    <div id="wardrobe-page" class="wardrobe-page" style="display:none;">
+      <div class="wardrobe-body">
+        <div class="wardrobe-header">
+          <h2>My Wardrobe</h2>
         </div>
-        <div class="header-right">
-          <!-- <span id="user-email" class="user-email"></span> -->
-          <!-- Replace the signout button around line 48-50: -->
-            <button id="refresh-btn" class="refresh-btn" title="Refresh Session">
-            <img src="refresh.png" alt="Refresh" />
+
+        <!-- Search Bar -->
+        <div class="wardrobe-search-container">
+          <input type="text" id="wardrobe-search" class="wardrobe-search-input" placeholder="Search garments..." />
+        </div>
+
+        <!-- Tabs -->
+        <div class="wardrobe-tabs">
+          <button class="wardrobe-tab active" data-tab="upper">
+            <span>Upper</span>
           </button>
-          <button id="user-btn" class="user-btn" title="User Profile">
-            <img src="user.png" alt="User" />
+          <button class="wardrobe-tab" data-tab="lower">
+            <span>Lower</span>
           </button>
-          <button id="signout-btn" class="signout-btn" title="Sign Out">
-            <img src="logout (2).png" alt="Sign Out" style="width: 20px; height: 20px; object-fit: contain;" />
-          </button>
+        </div>
+
+        <!-- Upper Garments Grid -->
+        <div id="upper-garments-tab" class="wardrobe-tab-content active">
+          <div id="upper-garments-grid" class="garment-grid">
+            <!-- Garment items will be dynamically loaded here -->
+          </div>
+          <div id="upper-empty-state" class="empty-state">
+            <p>No upper garments in your wardrobe</p>
+          </div>
+        </div>
+
+        <!-- Lower Garments Grid -->
+        <div id="lower-garments-tab" class="wardrobe-tab-content">
+          <div id="lower-garments-grid" class="garment-grid">
+            <!-- Garment items will be dynamically loaded here -->
+          </div>
+          <div id="lower-empty-state" class="empty-state">
+            <p>No lower garments in your wardrobe</p>
+          </div>
         </div>
       </div>
-      
+    </div>
+
+    <!-- Saved Try-ons Page -->
+    <div id="saved-page" class="saved-page" style="display:none;">
+      <div class="saved-body">
+        <div class="saved-container">
+          <h2>Saved Try-ons</h2>
+          <div id="saved-results-list" class="saved-results-list">
+            <!-- Saved results will be loaded here -->
+            <div class="saved-empty-state">
+              <p>No saved try-ons yet</p>
+              <p class="saved-empty-hint">Try-ons you save will appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App (hidden initially) -->
+    <div id="main-app" class="main-app" style="display:none;">
       <div class="tryon-body">
         <!-- Main Container with Figma-like Layout -->
         <div class="main-container">
@@ -217,10 +262,9 @@
           <div class="page-info-section">
             <div class="page-url-container">
               <input type="text" id="page-url" class="page-url-input" readonly />
-              <!-- <label class="use-garment-toggle" for="use-garment-checkbox">
-                <input type="checkbox" id="use-garment-checkbox"/>
-                <span class="toggle-text">get garments from this page</span>
-              </label> -->
+              <button id="save-tryon-btn" class="favorite-btn" type="button">
+                <img src="love.png" alt="Add to wardrobe" class="heart-icon" style="width: 24px; height: 24px; object-fit: contain; filter: grayscale(100%);">
+              </button>
             </div>
           </div>
 
@@ -249,10 +293,6 @@
             <div class="garment-section">
                 <div class="garment-header">
                     <h3 class="garment-section-title">Try-on Garments</h3>
-                    <button id="garment-source-toggle" class="garment-source-toggle">
-                        <span id="toggle-text">Switch to Wardrobe</span>
-                        <span id="toggle-icon">👗</span>
-                    </button>
                 </div>
                 
                 <!-- Pagination Navigation -->
@@ -299,5 +339,18 @@
     </div>
   </div>
   <script src="popup.js"></script>
+</div>
+  <!-- Bottom Menu Bar -->
+  <nav class="bottom-menu-bar" id="bottom-menu-bar">
+    <button class="menu-btn" id="menu-bookmark" title="Saved">
+      <span class="menu-icon"><img src="bookmark-white.png" alt="Saved" style="width:15px;height:15px;object-fit:contain;"></span>
+    </button>
+    <button class="menu-btn active" id="menu-home" title="Home">
+      <span class="menu-icon"><img src="home.png" alt="Home" style="width:15px;height:15px;object-fit:contain;"></span>
+    </button>
+    <button class="menu-btn" id="menu-wardrobe" title="Wardrobe">
+      <span class="menu-icon"><img src="clothing-hanger.png" alt="Wardrobe" style="width:15px;height:15px;object-fit:contain;"></span>
+    </button>
+  </nav>
 </body>
 </html>
