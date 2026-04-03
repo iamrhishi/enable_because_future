@@ -123,7 +123,7 @@ def scrape_product():
             data = request.get_json(silent=True, force=False) or {}
         else:
             data = request.form
-        url = validate_url(data.get('url', '').strip())
+        url = validate_url((data.get('url') or '').strip())
         
         # Check for force_refresh parameter
         force_refresh = False
@@ -235,7 +235,7 @@ def refresh_product():
             data = request.get_json(silent=True, force=False) or {}
         else:
             data = request.form
-        url = validate_url(data.get('url', '').strip())
+        url = validate_url((data.get('url') or '').strip())
         
         # Always delete existing cache and re-scrape
         logger.info(f"refresh_product: Force refresh - deleting cache and re-scraping")
@@ -312,7 +312,7 @@ def extract_images():
             data = request.get_json(silent=True, force=False) or {}
         else:
             data = request.form
-        url = validate_url(data.get('url', '').strip())
+        url = validate_url((data.get('url') or '').strip())
         
         # Use brand-specific extractor (same as /scrape endpoint)
         from features.wardrobe.extractors import BrandExtractorFactory

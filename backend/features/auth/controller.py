@@ -25,16 +25,17 @@ def create_account():
         data = request.get_json() if request.is_json else request.form
         
         # ===== Personal Information =====
-        email = validate_email(data.get('email', '').strip())
-        password = validate_password(data.get('password', ''))
-        confirm_password = data.get('confirm_password', '')
-        first_name = data.get('first_name', '').strip()
-        last_name = data.get('last_name', '').strip()
-        gender = data.get('gender', '').strip()
-        birthday = data.get('birthday', '').strip()  # Format: YYYY-MM-DD
-        street = data.get('street', '').strip()
-        city = data.get('city', '').strip()
-        postal_code = data.get('postal_code', '').strip() or data.get('postal-code', '').strip()  # Support both formats
+        # Use (data.get('field') or '') to handle both missing keys and null values
+        email = validate_email((data.get('email') or '').strip())
+        password = validate_password(data.get('password') or '')
+        confirm_password = data.get('confirm_password') or ''
+        first_name = (data.get('first_name') or '').strip()
+        last_name = (data.get('last_name') or '').strip()
+        gender = (data.get('gender') or '').strip()
+        birthday = (data.get('birthday') or '').strip()  # Format: YYYY-MM-DD
+        street = (data.get('street') or '').strip()
+        city = (data.get('city') or '').strip()
+        postal_code = (data.get('postal_code') or data.get('postal-code') or '').strip()  # Support both formats
         
         # Validate password confirmation
         if password != confirm_password:
@@ -244,8 +245,8 @@ def login():
     try:
         data = request.get_json() if request.is_json else request.form
         
-        email = data.get('email', '').strip()
-        password = data.get('password', '')
+        email = (data.get('email') or '').strip()
+        password = data.get('password') or ''
         
         if not email or not password:
             logger.warning("login: Missing email or password")

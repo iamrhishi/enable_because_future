@@ -108,12 +108,12 @@ def create_category():
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
-        name = data.get('name', '').strip()
+        name = (data.get('name') or '').strip()
         if not name:
             return error_response_from_string('Category name is required', 400, 'VALIDATION_ERROR')
-        
+
         # Validate category_section (required)
-        category_section = data.get('category_section', '').strip()
+        category_section = (data.get('category_section') or '').strip()
         if not category_section:
             return error_response_from_string('Category section is required', 400, 'VALIDATION_ERROR')
         
@@ -135,7 +135,7 @@ def create_category():
         category = WardrobeCategory(
             user_id=user_id,
             name=name,
-            description=data.get('description', '').strip(),
+            description=(data.get('description') or '').strip(),
             category_section=category_section
         )
         category.save()
@@ -257,17 +257,17 @@ def create_category_section():
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
-        name = data.get('name', '').strip()
+        name = (data.get('name') or '').strip()
         if not name:
             return error_response_from_string('Section name is required', 400, 'VALIDATION_ERROR')
-        
-        display_name = data.get('display_name', '').strip()
+
+        display_name = (data.get('display_name') or '').strip()
         if not display_name:
             display_name = name  # Use name as display_name if not provided
-        
-        description = data.get('description', '').strip()
-        icon_name = data.get('icon_name', '').strip()  # Icon identifier (e.g., 'custom_section_1')
-        icon_url = data.get('icon_url', '').strip()  # Optional icon URL
+
+        description = (data.get('description') or '').strip()
+        icon_name = (data.get('icon_name') or '').strip()  # Icon identifier (e.g., 'custom_section_1')
+        icon_url = (data.get('icon_url') or '').strip()  # Optional icon URL
         sort_order = data.get('sort_order', 999)
         
         # Create user section
@@ -908,7 +908,7 @@ def extract_garment_from_url():
     
     try:
         data = request.get_json() or request.form
-        url = validate_url(data.get('url', '').strip())
+        url = validate_url((data.get('url') or '').strip())
         
         # Check cache first
         from shared.database import db_manager
