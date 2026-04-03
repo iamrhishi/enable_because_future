@@ -155,6 +155,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // ===== BACKEND URL CONFIGURATION =====
   // Use dev branch backend
   const API_BASE_URL = 'http://localhost:8000'; // Ensure this matches backend port
+  // const API_BASE_URL = 'http://34.32.121.88:5001';
+
 
   // ===== GLOBAL VARIABLES =====
   // Wardrobe functionality
@@ -652,141 +654,26 @@ document.addEventListener('DOMContentLoaded', function() {
                          e.target.id === 'bg-theme-btn-saved' || e.target.closest('#bg-theme-btn-saved');
     
     if (isBgThemeBtn) {
-      console.log('Background theme button clicked');
-      showBackgroundThemeModal();
+      console.log('Background theme button clicked - cycling background');
+      cycleBackgroundTheme();
     }
   });
 
-  // Function to show background theme selection modal
+  // Function to cycle through background themes
+  function cycleBackgroundTheme() {
+    const themes = ['image', 'white', 'blue'];
+    const currentIndex = themes.indexOf(currentBackground);
+    const nextIndex = (currentIndex + 1) % themes.length;
+    setBackground(themes[nextIndex]);
+    console.log(`🎨 Cycled to background: ${themes[nextIndex]}`);
+  }
   function showBackgroundThemeModal() {
     return new Promise((resolve) => {
-      // Create modal container
-      const modal = document.createElement('div');
-      modal.id = 'bg-theme-modal';
-      modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-        backdrop-filter: blur(2px);
-      `;
-
-      // Create modal content
-      const modalContent = document.createElement('div');
-      modalContent.style.cssText = `
-        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-        padding: 32px;
-        border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        text-align: center;
-        max-width: 360px;
-        animation: modalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-      `;
-
-      // Title
-      const title = document.createElement('h3');
-      title.textContent = 'Background Theme';
-      title.style.cssText = `
-        margin: 0 0 24px 0;
-        font-size: 20px;
-        font-weight: 700;
-        color: #1a1a1a;
-      `;
-
-      // Options container
-      const optionsContainer = document.createElement('div');
-      optionsContainer.style.cssText = `
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      `;
-
-      // Image option
-      const imageBtn = document.createElement('button');
-      imageBtn.textContent = 'Image (Default)';
-      imageBtn.style.cssText = `
-        padding: 14px 16px;
-        background: ${currentBackground === 'image' ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)' : '#e8e8e8'};
-        color: ${currentBackground === 'image' ? 'white' : '#333'};
-        border: 2px solid ${currentBackground === 'image' ? '#45a049' : '#d0d0d0'};
-        border-radius: 10px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      `;
-      imageBtn.addEventListener('click', () => {
-        setBackground('image');
-        modal.remove();
-        resolve();
-      });
-
-      // White option
-      const whiteBtn = document.createElement('button');
-      whiteBtn.textContent = 'White';
-      whiteBtn.style.cssText = `
-        padding: 14px 16px;
-        background: ${currentBackground === 'white' ? 'linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%)' : '#e8e8e8'};
-        color: #333;
-        border: 2px solid ${currentBackground === 'white' ? '#999' : '#d0d0d0'};
-        border-radius: 10px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      `;
-      whiteBtn.addEventListener('click', () => {
-        setBackground('white');
-        modal.remove();
-        resolve();
-      });
-
-      // Blue option
-      const blueBtn = document.createElement('button');
-      blueBtn.textContent = 'Blue (#A2B5B8)';
-      blueBtn.style.cssText = `
-        padding: 14px 16px;
-        background: ${currentBackground === 'blue' ? 'linear-gradient(135deg, #A2B5B8 0%, #8fa3a6 100%)' : '#e8e8e8'};
-        color: ${currentBackground === 'blue' ? 'white' : '#333'};
-        border: 2px solid ${currentBackground === 'blue' ? '#8fa3a6' : '#d0d0d0'};
-        border-radius: 10px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      `;
-      blueBtn.addEventListener('click', () => {
-        setBackground('blue');
-        modal.remove();
-        resolve();
-      });
-
-      // Close on background click
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          modal.remove();
-          resolve();
-        }
-      });
-
-      // Assemble modal
-      optionsContainer.appendChild(imageBtn);
-      optionsContainer.appendChild(whiteBtn);
-      optionsContainer.appendChild(blueBtn);
-      modalContent.appendChild(title);
-      modalContent.appendChild(optionsContainer);
-      modal.appendChild(modalContent);
-      document.body.appendChild(modal);
-
-      console.log('🎨 Background theme modal shown');
+      // Modal function removed - now cycles directly on button click
+      resolve();
     });
   }
+
 
   // Function to set background
   function setBackground(theme) {
@@ -798,14 +685,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const wardrobePage = document.getElementById('wardrobe-page');
 
     if (theme === 'image') {
-      if (mainApp) mainApp.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat';
-      if (wardrobePage) wardrobePage.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat';
+      if (mainApp) mainApp.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat fixed';
+      if (wardrobePage) wardrobePage.style.background = 'url("Hintegrund Dressing Room cut 1.png") center/cover no-repeat fixed';
     } else if (theme === 'white') {
-      if (mainApp) mainApp.style.background = '#ffffff';
-      if (wardrobePage) wardrobePage.style.background = '#ffffff';
+      if (mainApp) mainApp.style.background = '#ffffff fixed';
+      if (wardrobePage) wardrobePage.style.background = '#ffffff fixed';
     } else if (theme === 'blue') {
-      if (mainApp) mainApp.style.background = '#A2B5B8';
-      if (wardrobePage) wardrobePage.style.background = '#A2B5B8';
+      if (mainApp) mainApp.style.background = '#A2B5B8 fixed';
+      if (wardrobePage) wardrobePage.style.background = '#A2B5B8 fixed';
     }
   }
 
@@ -1357,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       if (!currentUser || !currentUser.userID) return;
       
-      const response = await fetch(`http://localhost:5000/api/wardrobe/user/${currentUser.userID}`);
+      const response = await fetch(`${API_BASE_URL}/api/wardrobe/user/${currentUser.userID}`);
       if (response.ok) {
         wardrobeItems = await response.json();
         console.log('👗 Loaded wardrobe items:', wardrobeItems.length);
@@ -2640,15 +2527,6 @@ document.addEventListener('DOMContentLoaded', function() {
       showSignInPage();
     });
   }
-
-  // Handle account creation
-  if (createAccountBtn) {
-    createAccountBtn.addEventListener('click', async function(e) {
-      e.preventDefault();
-      handleAccountCreation();
-    });
-  }
-
   // Account Creation Handler (NEW MODEL)
   createAccountBtn.addEventListener('click', async function() {
     const email = createEmail.value;
@@ -2702,7 +2580,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Convert data URL to base64
       const base64Data = imageData.split(',')[1];
       
-      const response = await fetch('http://localhost:5000/api/update-avatar', {
+      const response = await fetch(`${API_BASE_URL}/api/update-avatar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -3174,7 +3052,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const avatarForm = new FormData();
       avatarForm.append('file', avatarBlob, 'avatar.png');
       
-      const avatarBgResp = await fetch('http://localhost:5000/api/remove-bg', {
+      const avatarBgResp = await fetch(`${API_BASE_URL}/api/remove-bg`, {
         method: 'POST',
         body: avatarForm,
       });
@@ -4052,7 +3930,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
         
-        const testResponse = await fetch('http://localhost:5000/api/tryon', {
+        const testResponse = await fetch(`${API_BASE_URL}/api/tryon`, {
           method: 'OPTIONS',
           signal: controller.signal
         });
@@ -4085,11 +3963,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       } catch (error) {
         if (error.name === 'AbortError') {
-          tryonResult.innerHTML = '⏱️ Connection timeout: Server at localhost:5000 is not responding. Please check if the backend server is running.';
+          tryonResult.innerHTML = '⏱️ Connection timeout: Server is not responding. Please check if the backend server is running.';
         } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {
-          tryonResult.innerHTML = '🚫 Connection refused: Server at localhost:5000 is not accepting connections. Please start the backend server.';
+          tryonResult.innerHTML = '🚫 Connection refused: Server is not accepting connections. Please start the backend server.';
         } else if (error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-          tryonResult.innerHTML = '⏱️ Connection timed out: Cannot reach server at localhost:5000. Check network connectivity.';
+          tryonResult.innerHTML = '⏱️ Connection timed out: Cannot reach server. Check network connectivity.';
         } else {
           tryonResult.innerHTML = `❌ Try-on API connection failed: ${error.message}`;
         }
@@ -4198,7 +4076,7 @@ document.addEventListener('DOMContentLoaded', function() {
         editProfileBtn.disabled = true;
 
         // Call API to get user data by email
-        const response = await fetch(`http://localhost:5000/api/get-user-data-by-email/${encodeURIComponent(result.userEmail)}`);
+        const response = await fetch(`${API_BASE_URL}/api/get-user-data-by-email/${encodeURIComponent(result.userEmail)}`);
         const data = await response.json();
 
         if (data.success) {
@@ -4325,7 +4203,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const userid = profileUserid.value;
 
       // Call update API
-      const response = await fetch(`http://localhost:5000/api/update-user-data/${userid}`, {
+      const response = await fetch(`${API_BASE_URL}/api/update-user-data/${userid}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
