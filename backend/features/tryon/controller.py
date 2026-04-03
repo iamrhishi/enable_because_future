@@ -1286,13 +1286,13 @@ def delete_tryon_result(result_id):
     try:
         # First verify the result belongs to the user
         query = "SELECT user_id FROM tryon_results WHERE id = ?"
-        result = db_manager.execute_query(query, (result_id,))
+        result = db_manager.execute_query(query, (result_id,), fetch_one=True)
         
         if not result:
             logger.warning(f"delete_tryon_result: Result not found - result_id={result_id}")
             return error_response_from_string('Result not found', 404, 'NOT_FOUND')
         
-        result_user_id = result.get('user_id') if hasattr(result, 'get') else result['user_id']
+        result_user_id = result.get('user_id')
         if str(result_user_id).strip() != str(user_id).strip():
             logger.warning(f"delete_tryon_result: Unauthorized - result_id={result_id} belongs to user_id={result_user_id}, not {user_id}")
             return error_response_from_string('Unauthorized to delete this result', 403, 'AUTHORIZATION_ERROR')

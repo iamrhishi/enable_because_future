@@ -908,7 +908,7 @@ body {
 
 .tryon-result {
   position: absolute;
-  top: 60px;
+  top: 80px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -917,7 +917,7 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  transform: scale(1);
+  transform: scale(1.2);
   width: 100%;
   height: auto;
 }
