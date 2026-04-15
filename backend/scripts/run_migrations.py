@@ -52,6 +52,8 @@ def main():
         (21, 'add_url_to_wardrobe', load_migration(21, 'add_url_to_wardrobe')),
         (22, 'add_avatar_path', load_migration(22, 'add_avatar_path')),
         (23, 'add_tryon_results', load_migration(23, 'add_tryon_results')),
+        (24, 'clean_users_table', load_migration(24, 'clean_users_table')),
+        (25, 'update_body_measurements_ranges', load_migration(25, 'update_body_measurements_ranges')),
     ]
     
     migration_manager.run_migrations(migrations)

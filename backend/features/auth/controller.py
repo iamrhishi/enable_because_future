@@ -70,6 +70,7 @@ def create_account():
         # Circumference measurements (all in cm)
         shoulder_circumference = data.get('shoulder_circumference')
         arm_length = data.get('arm_length')
+        biceps_circumference = data.get('biceps_circumference')
         breast_circumference = data.get('breast_circumference')
         under_breast_circumference = data.get('under_breast_circumference')
         waist_circumference = data.get('waist_circumference')
@@ -78,12 +79,12 @@ def create_account():
         
         # Additional detailed measurements
         neck_circumference = data.get('neck_circumference')
-        biceps_circumference = data.get('biceps_circumference')
         upper_hip_circumference = data.get('upper_hip_circumference')
         wide_hip_circumference = data.get('wide_hip_circumference')
         calf_circumference = data.get('calf_circumference')
         
         # Length measurements (all in cm)
+        collarbone_to_belly_button_length = data.get('collarbone_to_belly_button_length')
         waist_to_crotch_front_length = data.get('waist_to_crotch_front_length')
         waist_to_crotch_back_length = data.get('waist_to_crotch_back_length')
         inner_leg_length = data.get('inner_leg_length')
@@ -103,46 +104,47 @@ def create_account():
         
         # Validate basic measurements
         if height:
-            error = validate_measurement(height, 'Height', 50, 300)
+            error = validate_measurement(height, 'Height', 50, 250)
             if error:
                 return error_response_from_string(error, 400, 'VALIDATION_ERROR')
         if weight:
-            error = validate_measurement(weight, 'Weight', 20, 500)
+            error = validate_measurement(weight, 'Weight', 20, 250)
             if error:
                 return error_response_from_string(error, 400, 'VALIDATION_ERROR')
         
-        # Validate circumference measurements (20-200 cm range)
+        # Validate circumference measurements with specific ranges
         circumference_fields = {
-            'shoulder_circumference': shoulder_circumference,
-            'arm_length': arm_length,
-            'breast_circumference': breast_circumference,
-            'under_breast_circumference': under_breast_circumference,
-            'waist_circumference': waist_circumference,
-            'hip_circumference': hip_circumference,
-            'upper_thigh_circumference': upper_thigh_circumference,
-            'neck_circumference': neck_circumference,
-            'biceps_circumference': biceps_circumference,
-            'upper_hip_circumference': upper_hip_circumference,
-            'wide_hip_circumference': wide_hip_circumference,
-            'calf_circumference': calf_circumference,
+            'shoulder_circumference': (shoulder_circumference, 60, 200),
+            'arm_length': (arm_length, 25, 100),
+            'biceps_circumference': (biceps_circumference, 10, 100),
+            'breast_circumference': (breast_circumference, 50, 300),
+            'under_breast_circumference': (under_breast_circumference, 40, 300),
+            'neck_circumference': (neck_circumference, 20, 100),
+            'upper_hip_circumference': (upper_hip_circumference, 40, 200),
+            'waist_circumference': (waist_circumference, 30, 300),
+            'hip_circumference': (hip_circumference, 50, 300),
+            'upper_thigh_circumference': (upper_thigh_circumference, 25, 300),
+            'wide_hip_circumference': (wide_hip_circumference, 40, 200),
+            'calf_circumference': (calf_circumference, 20, 100),
         }
-        for field_name, value in circumference_fields.items():
+        for field_name, (value, min_val, max_val) in circumference_fields.items():
             if value:
-                error = validate_measurement(value, field_name.replace('_', ' ').title(), 20, 200)
+                error = validate_measurement(value, field_name.replace('_', ' ').title(), min_val, max_val)
                 if error:
                     return error_response_from_string(error, 400, 'VALIDATION_ERROR')
         
-        # Validate length measurements (10-200 cm range)
+        # Validate length measurements with specific ranges
         length_fields = {
-            'waist_to_crotch_front_length': waist_to_crotch_front_length,
-            'waist_to_crotch_back_length': waist_to_crotch_back_length,
-            'inner_leg_length': inner_leg_length,
-            'foot_length': foot_length,
-            'foot_width': foot_width,
+            'collarbone_to_belly_button_length': (collarbone_to_belly_button_length, 30, 150),
+            'waist_to_crotch_front_length': (waist_to_crotch_front_length, 15, 100),
+            'waist_to_crotch_back_length': (waist_to_crotch_back_length, 15, 100),
+            'inner_leg_length': (inner_leg_length, 50, 200),
+            'foot_length': (foot_length, 10, 60),
+            'foot_width': (foot_width, 5, 20),
         }
-        for field_name, value in length_fields.items():
+        for field_name, (value, min_val, max_val) in length_fields.items():
             if value:
-                error = validate_measurement(value, field_name.replace('_', ' ').title(), 10, 200)
+                error = validate_measurement(value, field_name.replace('_', ' ').title(), min_val, max_val)
                 if error:
                     return error_response_from_string(error, 400, 'VALIDATION_ERROR')
         
@@ -174,12 +176,12 @@ def create_account():
         
         # Create body measurements if any are provided
         measurements_provided = any([
-            height, weight, shoulder_circumference, arm_length, breast_circumference,
-            under_breast_circumference, waist_circumference, hip_circumference,
-            upper_thigh_circumference, neck_circumference, biceps_circumference,
+            height, weight, shoulder_circumference, arm_length, biceps_circumference,
+            breast_circumference, under_breast_circumference, waist_circumference, 
+            hip_circumference, upper_thigh_circumference, neck_circumference, 
             upper_hip_circumference, wide_hip_circumference, calf_circumference,
-            waist_to_crotch_front_length, waist_to_crotch_back_length,
-            inner_leg_length, foot_length, foot_width
+            collarbone_to_belly_button_length, waist_to_crotch_front_length, 
+            waist_to_crotch_back_length, inner_leg_length, foot_length, foot_width
         ])
         
         if measurements_provided:
@@ -189,16 +191,17 @@ def create_account():
                 'weight': weight,
                 'shoulder_circumference': shoulder_circumference,
                 'arm_length': arm_length,
+                'biceps_circumference': biceps_circumference,
                 'breast_circumference': breast_circumference,
                 'under_breast_circumference': under_breast_circumference,
                 'waist_circumference': waist_circumference,
                 'hip_circumference': hip_circumference,
                 'upper_thigh_circumference': upper_thigh_circumference,
                 'neck_circumference': neck_circumference,
-                'biceps_circumference': biceps_circumference,
                 'upper_hip_circumference': upper_hip_circumference,
                 'wide_hip_circumference': wide_hip_circumference,
                 'calf_circumference': calf_circumference,
+                'collarbone_to_belly_button_length': collarbone_to_belly_button_length,
                 'waist_to_crotch_front_length': waist_to_crotch_front_length,
                 'waist_to_crotch_back_length': waist_to_crotch_back_length,
                 'inner_leg_length': inner_leg_length,

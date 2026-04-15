@@ -1,6 +1,6 @@
 // content-script.js
 (function() {
-  console.log('✅ [Enable] Content script loaded on:', window.location.href);
+  console.log('Content script loaded on:', window.location.href);
 
   // ===== GARMENT API CONFIGURATION =====
   const GARMENT_API_BASE_URL = 'https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1';
@@ -9,49 +9,41 @@
   // ===== INJECT STYLES FOR INFO BUTTON AND MODAL =====
   function injectStyles() {
     const styleId = 'enable-garment-info-styles';
-    if (document.getElementById(styleId)) {
-      console.log('✅ [Enable] Styles already injected');
-      return;
-    }
+    if (document.getElementById(styleId)) return; // Already injected
 
     const styles = document.createElement('style');
     styles.id = styleId;
     styles.textContent = `
       .enable-info-btn {
         position: fixed;
-        top: 20px;
-        left: 20px;
-        width: 44px;
-        height: 44px;
-        background: white;
-        border: 2px solid #333;
+        top: 50%;
+        right: 20px;
+        transform: translateY(-50%);
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        border: 3px solid white;
         border-radius: 50%;
         cursor: pointer;
-        display: flex !important;
+        display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 22px;
-        z-index: 2147483647;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        transition: all 0.2s ease;
+        font-size: 28px;
+        z-index: 999999;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        transition: all 0.3s ease;
         font-weight: bold;
-        color: #333;
-        padding: 0;
-        margin: 0;
+        color: white;
       }
 
       .enable-info-btn:hover {
-        background: #f5f5f5;
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+        transform: translateY(-50%) scale(1.15);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
       }
 
       .enable-info-btn:active {
-        transform: scale(0.95);
-      }
-
-      .enable-info-btn:disabled {
-        opacity: 0.7;
+        transform: translateY(-50%) scale(0.9);
       }
 
       .enable-garment-modal {
@@ -64,7 +56,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 999998;
+        z-index: 10001;
         animation: fadeIn 0.2s ease-out;
       }
 
@@ -184,28 +176,12 @@
         color: #333;
       }
 
-      .enable-measurements-sizes {
+      .enable-loading {
         display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .enable-size-section {
-        background: #f9f9f9;
-        border: 1px solid #e8e8e8;
-        border-radius: 8px;
-        padding: 12px;
-      }
-
-      .enable-size-title {
-        font-weight: 700;
-        color: #333;
-        font-size: 13px;
-        margin-bottom: 10px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #ddd;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        color: #666;
       }
 
       .enable-error {
@@ -217,7 +193,6 @@
       }
     `;
     document.head.appendChild(styles);
-    console.log('✅ [Enable] Styles injected successfully');
   }
 
   // ===== FETCH GARMENT DATA FROM API =====
@@ -300,49 +275,30 @@
     infoDiv.appendChild(basicSection);
 
     // Measurements section
-    const measurementsBySize = garmentData.measurements_by_size || {};
-    const hasMeasurements = Object.keys(measurementsBySize).length > 0;
-    
-    if (hasMeasurements) {
+    const measurements = garmentData.garment_measurements || [];
+    if (measurements.length > 0) {
       const measSection = document.createElement('div');
       measSection.className = 'enable-garment-info-section';
 
       const measLabel = document.createElement('div');
       measLabel.className = 'enable-garment-label';
-      measLabel.textContent = 'Measurements by Size';
+      measLabel.textContent = 'Measurements';
       measSection.appendChild(measLabel);
 
-      // Create a size tabs/sections container
-      const sizesContainer = document.createElement('div');
-      sizesContainer.className = 'enable-measurements-sizes';
-      
-      Object.entries(measurementsBySize).forEach(([size, measurements]) => {
-        const sizeSection = document.createElement('div');
-        sizeSection.className = 'enable-size-section';
-        
-        const sizeTitle = document.createElement('div');
-        sizeTitle.className = 'enable-size-title';
-        sizeTitle.textContent = `Size: ${size}`;
-        sizeSection.appendChild(sizeTitle);
+      const measGrid = document.createElement('div');
+      measGrid.className = 'enable-measurements-grid';
 
-        const measGrid = document.createElement('div');
-        measGrid.className = 'enable-measurements-grid';
-
-        Object.entries(measurements).forEach(([measType, value]) => {
-          const item = document.createElement('div');
-          item.className = 'enable-measurement-item';
-          item.innerHTML = `
-            <div class="enable-measurement-type">${measType.replace(/_/g, ' ')}</div>
-            <div class="enable-measurement-value">${value} cm</div>
-          `;
-          measGrid.appendChild(item);
-        });
-
-        sizeSection.appendChild(measGrid);
-        sizesContainer.appendChild(sizeSection);
+      measurements.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'enable-measurement-item';
+        item.innerHTML = `
+          <div class="enable-measurement-type">${m.measurement_type.replace(/_/g, ' ')}</div>
+          <div class="enable-measurement-value">${m.value_cm} cm</div>
+        `;
+        measGrid.appendChild(item);
       });
 
-      measSection.appendChild(sizesContainer);
+      measSection.appendChild(measGrid);
       infoDiv.appendChild(measSection);
     }
 
@@ -371,7 +327,6 @@
     btn.className = 'enable-info-btn';
     btn.innerHTML = 'ⓘ';
     btn.title = 'View Garment Information';
-    btn.type = 'button';
 
     btn.addEventListener('click', async () => {
       console.log('🔘 [Enable] Info button clicked');
@@ -422,52 +377,59 @@
       }
     });
 
-    // Try to add to body, fallback to documentElement
-    const container = document.body || document.documentElement;
-    container.appendChild(btn);
-    console.log('✅ [Enable] Info button added to DOM at:', container.tagName);
-    console.log('✅ [Enable] Button visible:', btn.offsetHeight > 0);
+    document.body.appendChild(btn);
+    console.log('✅ [Enable] Info button created and added to DOM');
+  }
+        
+        // Show error in modal
+        const modal = document.createElement('div');
+        modal.className = 'enable-garment-modal';
+        const content = document.createElement('div');
+        content.className = 'enable-garment-modal-content';
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'enable-modal-close';
+        closeBtn.innerHTML = '×';
+        closeBtn.addEventListener('click', () => modal.remove());
+        
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'enable-error';
+        errorDiv.innerHTML = `<strong>Error:</strong> Failed to load garment info. ${error.message}`;
+        
+        content.appendChild(closeBtn);
+        content.appendChild(errorDiv);
+        modal.appendChild(content);
+        
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) modal.remove();
+        });
+        
+        document.body.appendChild(modal);
+        
+        btn.innerHTML = '❌';
+        setTimeout(() => {
+          btn.innerHTML = 'ⓘ';
+          btn.disabled = false;
+        }, 1500);
+      }
+    });
+
+    document.body.appendChild(btn);
   }
 
   // ===== INITIALIZE ON PAGE LOAD =====
   function initializeGarmentInfo() {
-    console.log('🚀 [Enable] Initializing garment info...');
     injectStyles();
     createInfoButton();
-    console.log('🚀 [Enable] Initialization complete');
   }
 
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {
-    console.log('⏳ [Enable] DOM loading, waiting for DOMContentLoaded event');
     document.addEventListener('DOMContentLoaded', initializeGarmentInfo);
   } else {
-    console.log('✅ [Enable] DOM already loaded, initializing immediately');
     initializeGarmentInfo();
   }
-
-  // Also retry after a delay to ensure button is visible
-  setTimeout(() => {
-    if (!document.querySelector('.enable-info-btn')) {
-      console.log('⚠️ [Enable] Button not found on first attempt, retrying...');
-      initializeGarmentInfo();
-    } else {
-      console.log('✅ [Enable] Button is present');
-    }
-  }, 500);
-
-  // Final check after page is fully loaded
-  window.addEventListener('load', () => {
-    if (!document.querySelector('.enable-info-btn')) {
-      console.log('⚠️ [Enable] Button not found at page load, creating now...');
-      injectStyles();
-      createInfoButton();
-    } else {
-      console.log('✅ [Enable] Button confirmed visible at page load');
-    }
-  });
-
-  // ===== ORIGINAL FUNCTIONALITY: IMAGE COLLECTION =====
+  
   function getImagesOnPage() {
     console.log('getImagesOnPage called');
     // If the page is a direct image (jpg/png/webp/gif/svg), return that

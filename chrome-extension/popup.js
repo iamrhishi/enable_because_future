@@ -230,26 +230,6 @@ document.addEventListener('DOMContentLoaded', function() {
     resultImg.alt = 'Try-On Result';
     resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
     
-    // Create close button
-    const resultCloseBtn = document.createElement('button');
-    resultCloseBtn.className = 'tryon-close-btn';
-    resultCloseBtn.innerHTML = '&times;';
-    resultCloseBtn.style.cssText = 'position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(255, 0, 0, 0.8); color: white; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; z-index: 1002; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);';
-    resultCloseBtn.addEventListener('click', () => {
-      hideTryonResult();
-      // Clear persisted state when user closes result
-      chrome.storage.local.remove('tryOnState');
-      resetTryOnState();
-    });
-    resultCloseBtn.addEventListener('mouseover', function() {
-      this.style.background = 'rgba(255, 0, 0, 1)';
-      this.style.transform = 'scale(1.1)';
-    });
-    resultCloseBtn.addEventListener('mouseout', function() {
-      this.style.background = 'rgba(255, 0, 0, 0.8)';
-      this.style.transform = 'scale(1)';
-    });
-    
     // Create save button
     const saveBtn = document.createElement('button');
     saveBtn.className = 'tryon-save-btn';
@@ -293,11 +273,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Create button container for vertical stacking
     const buttonContainer = document.createElement('div');
     buttonContainer.style.cssText = 'position: absolute; top: 0; right: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1001;';
-    buttonContainer.appendChild(resultCloseBtn);
     buttonContainer.appendChild(saveBtn);
     
     // Give buttons pointer events
-    resultCloseBtn.style.pointerEvents = 'auto';
     saveBtn.style.pointerEvents = 'auto';
     
     imgWrapper.appendChild(resultImg);
@@ -765,14 +743,33 @@ document.addEventListener('DOMContentLoaded', function() {
   const cancelEditBtn = document.getElementById('cancel-edit-btn');
 
   // User Profile Form Fields
-  const profileUserid = document.getElementById('profile-userid');
   const profileEmail = document.getElementById('profile-email');
   const profileFirstname = document.getElementById('profile-firstname');
   const profileLastname = document.getElementById('profile-lastname');
-  const profileAge = document.getElementById('profile-age');
   const profileGender = document.getElementById('profile-gender');
-  const profileWeight = document.getElementById('profile-weight');
+  const profileBirthday = document.getElementById('profile-birthday');
+  const profileStreet = document.getElementById('profile-street');
+  const profileCity = document.getElementById('profile-city');
+  const profilePostalCode = document.getElementById('profile-postal-code');
+  
+  // Body Measurements Fields
   const profileHeight = document.getElementById('profile-height');
+  const profileWeight = document.getElementById('profile-weight');
+  const profileShoulderCircumference = document.getElementById('profile-shoulder-circumference');
+  const profileArmLength = document.getElementById('profile-arm-length');
+  const profileBicepsCircumference = document.getElementById('profile-biceps-circumference');
+  const profileBreastCircumference = document.getElementById('profile-breast-circumference');
+  const profileUnderBreastCircumference = document.getElementById('profile-under-breast-circumference');
+  const profileCollarboneToBellyButtonLength = document.getElementById('profile-collarbone-to-belly-button-length');
+  const profileWaistCircumference = document.getElementById('profile-waist-circumference');
+  const profileHipCircumference = document.getElementById('profile-hip-circumference');
+  const profileUpperThighCircumference = document.getElementById('profile-upper-thigh-circumference');
+  const profileNeckCircumference = document.getElementById('profile-neck-circumference');
+  const profileWaistToCrotchFrontLength = document.getElementById('profile-waist-to-crotch-front-length');
+  const profileWaistToCrotchBackLength = document.getElementById('profile-waist-to-crotch-back-length');
+  const profileInnerLegLength = document.getElementById('profile-inner-leg-length');
+  const profileFootLength = document.getElementById('profile-foot-length');
+  const profileFootWidth = document.getElementById('profile-foot-width');
 
   // Wardrobe Page Elements
   const wardrobePage = document.getElementById('wardrobe-page');
@@ -1244,7 +1241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       if (!currentUser || !currentUser.userID) return;
       
-      const response = await fetch(`${API_BASE_URL}/api/wardrobe/user/${currentUser.userID}`);
+      const response = await fetch(`http://localhost:8000/api/wardrobe/user/${currentUser.userID}`);
       if (response.ok) {
         wardrobeItems = await response.json();
         console.log('👗 Loaded wardrobe items:', wardrobeItems.length);
@@ -1631,6 +1628,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const buttonContainer = document.getElementById('layered-tryon-buttons');
     if (buttonContainer) buttonContainer.remove();
     
+    // Hide garment info button and container
+    const garmentInfoBtn = document.getElementById('garment-info-btn');
+    if (garmentInfoBtn) {
+      garmentInfoBtn.style.display = 'none';
+    }
+    
+    const garmentInfoContainer = document.getElementById('garment-info-container');
+    if (garmentInfoContainer) {
+      garmentInfoContainer.style.display = 'none';
+    }
+    
     // Show original avatar in result
     const tryonResult = document.getElementById('tryon-result');
     if (tryonResult && originalAvatarBase64) {
@@ -1885,6 +1893,40 @@ document.addEventListener('DOMContentLoaded', function() {
 
       buttonsContainer.insertBefore(upperBtn, buttonsContainer.firstChild);
 
+      // Fit Analysis button
+      const fitAnalysisBtn = document.createElement('button');
+      fitAnalysisBtn.textContent = 'Fit Analysis';
+      fitAnalysisBtn.style.cssText = `
+        width: 100%;
+        padding: 14px 16px;
+        background: #ffffff;
+        color: #2c3e50;
+        border: 1.5px solid #e0e0e0;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        margin-top: 16px;
+      `;
+      fitAnalysisBtn.addEventListener('mouseenter', () => {
+        fitAnalysisBtn.style.background = '#f8f9fa';
+        fitAnalysisBtn.style.borderColor = '#9e9e9e';
+        fitAnalysisBtn.style.transform = 'translateY(-2px)';
+        fitAnalysisBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      });
+      fitAnalysisBtn.addEventListener('mouseleave', () => {
+        fitAnalysisBtn.style.background = '#ffffff';
+        fitAnalysisBtn.style.borderColor = '#e0e0e0';
+        fitAnalysisBtn.style.transform = 'translateY(0)';
+        fitAnalysisBtn.style.boxShadow = 'none';
+      });
+      fitAnalysisBtn.addEventListener('click', () => {
+        console.log('Fit Analysis clicked');
+        modal.remove();
+        resolve('fit-analysis');
+      });
+
       // Close on background click
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {
@@ -1919,6 +1961,7 @@ document.addEventListener('DOMContentLoaded', function() {
       modalContent.appendChild(title);
       modalContent.appendChild(subtitle);
       modalContent.appendChild(buttonsContainer);
+      modalContent.appendChild(fitAnalysisBtn);
       modal.appendChild(modalContent);
       document.body.appendChild(modal);
 
@@ -1952,6 +1995,14 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!selectedType) {
         console.log('⚠️ User cancelled garment type selection');
         return; // User closed modal without selecting
+      }
+      
+      // Handle Fit Analysis selection
+      if (selectedType === 'fit-analysis') {
+        console.log('📊 Fit Analysis selected - implementing fit analysis feature');
+        // TODO: Implement fit analysis functionality here
+        // This could show garment sizing comparison, recommendations, etc.
+        return;
       }
       
       finalGarmentType = selectedType; // Use user's manual selection instead of auto-detected
@@ -2100,18 +2151,12 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('   Applied so far:', appliedGarments.map(g => g.type).join(' + '));
 
             // Display result image
-            const resultCloseBtn = document.createElement('button');
-            resultCloseBtn.className = 'tryon-close-btn';
-            resultCloseBtn.innerHTML = '&times;';
-            resultCloseBtn.addEventListener('click', hideTryonResult);
-            
             const resultImg = document.createElement('img');
             resultImg.src = resultDataUrl;
             resultImg.alt = 'Try-On Result';
             resultImg.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px;';
             
             tryonResult.innerHTML = '';
-            tryonResult.appendChild(resultCloseBtn);
             tryonResult.appendChild(resultImg);
             
             // Save try-on state to persist across popup closures
@@ -2527,6 +2572,15 @@ document.addEventListener('DOMContentLoaded', function() {
       showSignInPage();
     });
   }
+
+  // Handle account creation
+  if (createAccountBtn) {
+    createAccountBtn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      handleAccountCreation();
+    });
+  }
+
   // Account Creation Handler (NEW MODEL)
   createAccountBtn.addEventListener('click', async function() {
     const email = createEmail.value;
@@ -2580,7 +2634,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Convert data URL to base64
       const base64Data = imageData.split(',')[1];
       
-      const response = await fetch(`${API_BASE_URL}/api/update-avatar`, {
+      const response = await fetch('http://localhost:8000/api/update-avatar', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -3052,7 +3106,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const avatarForm = new FormData();
       avatarForm.append('file', avatarBlob, 'avatar.png');
       
-      const avatarBgResp = await fetch(`${API_BASE_URL}/api/remove-bg`, {
+      const avatarBgResp = await fetch('http://localhost:8000/api/remove-bg', {
         method: 'POST',
         body: avatarForm,
       });
@@ -3930,7 +3984,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
         
-        const testResponse = await fetch(`${API_BASE_URL}/api/tryon`, {
+        const testResponse = await fetch('http://localhost:8000/api/tryon', {
           method: 'OPTIONS',
           signal: controller.signal
         });
@@ -3963,11 +4017,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       } catch (error) {
         if (error.name === 'AbortError') {
-          tryonResult.innerHTML = '⏱️ Connection timeout: Server is not responding. Please check if the backend server is running.';
+          tryonResult.innerHTML = '⏱️ Connection timeout: Server at localhost:8000 is not responding. Please check if the backend server is running.';
         } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {
-          tryonResult.innerHTML = '🚫 Connection refused: Server is not accepting connections. Please start the backend server.';
+          tryonResult.innerHTML = '🚫 Connection refused: Server at localhost:8000 is not accepting connections. Please start the backend server.';
         } else if (error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
-          tryonResult.innerHTML = '⏱️ Connection timed out: Cannot reach server. Check network connectivity.';
+          tryonResult.innerHTML = '⏱️ Connection timed out: Cannot reach server at localhost:8000. Check network connectivity.';
         } else {
           tryonResult.innerHTML = `❌ Try-on API connection failed: ${error.message}`;
         }
@@ -4055,8 +4109,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // User Profile Management Functions
   async function loadUserProfile() {
     try {
-      // Get current user email from storage
-      chrome.storage.local.get(['userEmail', 'isGuest'], async function(result) {
+      // Get current user email and JWT token from storage
+      chrome.storage.local.get(['userEmail', 'isGuest', 'jwtToken'], async function(result) {
         if (result.isGuest) {
           alert('Profile not available for guest users. Please sign in with an account.');
           showMainApp();
@@ -4075,26 +4129,73 @@ document.addEventListener('DOMContentLoaded', function() {
         editProfileBtn.innerHTML = 'Loading...';
         editProfileBtn.disabled = true;
 
-        // Call API to get user data by email
-        const response = await fetch(`${API_BASE_URL}/api/get-user-data-by-email/${encodeURIComponent(result.userEmail)}`);
-        const data = await response.json();
-
-        if (data.success) {
-          console.log('✅ User profile loaded successfully:', data.user_data);
-          populateProfileForm(data.user_data);
-        } else {
-          console.error('❌ Failed to load user profile:', data.error);
-          if (data.error === 'User not found') {
-            alert('Profile not found. This may be because you signed in as a guest or your account was created before the profile system. Please create a new account or sign in with a valid account.');
-          } else {
-            alert(`Failed to load profile: ${data.error}`);
-          }
-          showMainApp();
+        if (!result.jwtToken) {
+          alert('You are not authenticated. Please sign in again.');
+          showSignInPage();
+          editProfileBtn.innerHTML = 'Edit Profile';
+          editProfileBtn.disabled = false;
+          return;
         }
 
-        // Reset loading state
-        editProfileBtn.innerHTML = 'Edit Profile';
-        editProfileBtn.disabled = false;
+        try {
+          // Fetch user data using JWT authentication
+          const userResponse = await fetch('http://localhost:8000/api/users/profile', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${result.jwtToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!userResponse.ok) {
+            throw new Error(`Failed to load user data: ${userResponse.status}`);
+          }
+
+          const userData = await userResponse.json();
+
+          if (!userData.success) {
+            throw new Error(userData.error || 'Failed to load user data');
+          }
+
+          // Fetch body measurements if JWT token available
+          let bodyMeasurementsData = null;
+          try {
+            const measResponse = await fetch('http://localhost:8000/api/body-measurements', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${result.jwtToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (measResponse.ok) {
+              const measData = await measResponse.json();
+              if (measData.success) {
+                bodyMeasurementsData = measData.data;
+                console.log('✅ Body measurements loaded:', bodyMeasurementsData);
+              }
+            } else if (measResponse.status === 404) {
+              // No measurements exist yet - this is fine
+              console.log('ℹ️ No body measurements found yet for this user');
+            } else {
+              console.warn('⚠️ Unexpected response loading body measurements:', measResponse.status);
+            }
+          } catch (measError) {
+            console.warn('⚠️ Could not load body measurements:', measError);
+            // Don't fail the whole profile load if measurements fail
+          }
+
+          console.log('✅ User profile loaded successfully:', userData.data);
+          populateProfileForm(userData.data, bodyMeasurementsData);
+        } catch (error) {
+          console.error('❌ Failed to load user profile:', error);
+          alert(`Failed to load profile: ${error.message}`);
+          showMainApp();
+        } finally {
+          // Reset loading state
+          editProfileBtn.innerHTML = 'Edit Profile';
+          editProfileBtn.disabled = false;
+        }
       });
 
     } catch (error) {
@@ -4108,23 +4209,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function populateProfileForm(userData) {
-    // Populate form fields with user data
-    if (profileUserid) profileUserid.value = userData.userid || '';
+  function populateProfileForm(userData, bodyMeasurementsData) {
+    // Populate user profile form fields
     if (profileEmail) profileEmail.value = userData.email || '';
     if (profileFirstname) profileFirstname.value = userData.first_name || '';
     if (profileLastname) profileLastname.value = userData.last_name || '';
-    if (profileAge) profileAge.value = userData.age || '';
     if (profileGender) profileGender.value = userData.gender || '';
-    if (profileWeight) profileWeight.value = userData.weight || '';
-    if (profileHeight) profileHeight.value = userData.height || '';
+    if (profileBirthday) profileBirthday.value = userData.birthday || '';
+    if (profileStreet) profileStreet.value = userData.street || '';
+    if (profileCity) profileCity.value = userData.city || '';
+    if (profilePostalCode) profilePostalCode.value = userData.postal_code || '';
 
-    // Set physique radio button
-    if (userData.physique) {
-      const physiqueRadio = document.querySelector(`input[name="profile-physique"][value="${userData.physique}"]`);
-      if (physiqueRadio) {
-        physiqueRadio.checked = true;
-      }
+    // Populate body measurements if available
+    if (bodyMeasurementsData) {
+      if (profileHeight) profileHeight.value = bodyMeasurementsData.height || '';
+      if (profileWeight) profileWeight.value = bodyMeasurementsData.weight || '';
+      if (profileShoulderCircumference) profileShoulderCircumference.value = bodyMeasurementsData.shoulder_circumference || '';
+      if (profileArmLength) profileArmLength.value = bodyMeasurementsData.arm_length || '';
+      if (profileBicepsCircumference) profileBicepsCircumference.value = bodyMeasurementsData.biceps_circumference || '';
+      if (profileBreastCircumference) profileBreastCircumference.value = bodyMeasurementsData.breast_circumference || '';
+      if (profileUnderBreastCircumference) profileUnderBreastCircumference.value = bodyMeasurementsData.under_breast_circumference || '';
+      if (profileCollarboneToBellyButtonLength) profileCollarboneToBellyButtonLength.value = bodyMeasurementsData.collarbone_to_belly_button_length || '';
+      if (profileWaistCircumference) profileWaistCircumference.value = bodyMeasurementsData.waist_circumference || '';
+      if (profileHipCircumference) profileHipCircumference.value = bodyMeasurementsData.hip_circumference || '';
+      if (profileUpperThighCircumference) profileUpperThighCircumference.value = bodyMeasurementsData.upper_thigh_circumference || '';
+      if (profileNeckCircumference) profileNeckCircumference.value = bodyMeasurementsData.neck_circumference || '';
+      if (profileWaistToCrotchFrontLength) profileWaistToCrotchFrontLength.value = bodyMeasurementsData.waist_to_crotch_front_length || '';
+      if (profileWaistToCrotchBackLength) profileWaistToCrotchBackLength.value = bodyMeasurementsData.waist_to_crotch_back_length || '';
+      if (profileInnerLegLength) profileInnerLegLength.value = bodyMeasurementsData.inner_leg_length || '';
+      if (profileFootLength) profileFootLength.value = bodyMeasurementsData.foot_length || '';
+      if (profileFootWidth) profileFootWidth.value = bodyMeasurementsData.foot_width || '';
     }
 
     // Make sure fields are in read-only mode initially
@@ -4156,64 +4270,159 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function setProfileFieldsReadOnly(readOnly) {
-    // Set readonly attribute for input fields (keep userid and email always readonly)
+    // Set readonly attribute for input fields (keep email always readonly)
+    // User profile fields
     if (profileFirstname) profileFirstname.readOnly = readOnly;
     if (profileLastname) profileLastname.readOnly = readOnly;
-    if (profileAge) profileAge.readOnly = readOnly;
-    if (profileWeight) profileWeight.readOnly = readOnly;
+    if (profileBirthday) profileBirthday.readOnly = readOnly;
+    if (profileStreet) profileStreet.readOnly = readOnly;
+    if (profileCity) profileCity.readOnly = readOnly;
+    if (profilePostalCode) profilePostalCode.readOnly = readOnly;
+    
+    // Body measurements fields
     if (profileHeight) profileHeight.readOnly = readOnly;
+    if (profileWeight) profileWeight.readOnly = readOnly;
+    if (profileShoulderCircumference) profileShoulderCircumference.readOnly = readOnly;
+    if (profileArmLength) profileArmLength.readOnly = readOnly;
+    if (profileBicepsCircumference) profileBicepsCircumference.readOnly = readOnly;
+    if (profileBreastCircumference) profileBreastCircumference.readOnly = readOnly;
+    if (profileUnderBreastCircumference) profileUnderBreastCircumference.readOnly = readOnly;
+    if (profileCollarboneToBellyButtonLength) profileCollarboneToBellyButtonLength.readOnly = readOnly;
+    if (profileWaistCircumference) profileWaistCircumference.readOnly = readOnly;
+    if (profileHipCircumference) profileHipCircumference.readOnly = readOnly;
+    if (profileUpperThighCircumference) profileUpperThighCircumference.readOnly = readOnly;
+    if (profileNeckCircumference) profileNeckCircumference.readOnly = readOnly;
+    if (profileWaistToCrotchFrontLength) profileWaistToCrotchFrontLength.readOnly = readOnly;
+    if (profileWaistToCrotchBackLength) profileWaistToCrotchBackLength.readOnly = readOnly;
+    if (profileInnerLegLength) profileInnerLegLength.readOnly = readOnly;
+    if (profileFootLength) profileFootLength.readOnly = readOnly;
+    if (profileFootWidth) profileFootWidth.readOnly = readOnly;
     
-    // Set disabled attribute for select and radio inputs
+    // Set disabled attribute for select inputs
     if (profileGender) profileGender.disabled = readOnly;
-    
-    // Handle physique radio buttons
-    const physiqueRadios = document.querySelectorAll('input[name="profile-physique"]');
-    physiqueRadios.forEach(radio => {
-      radio.disabled = readOnly;
-    });
   }
 
   async function handleProfileUpdate() {
     try {
       console.log('💾 Saving profile changes');
       
-      // Get form data
-      const formData = {
+      // Get user profile form data (only fields in cleaned users table)
+      const userData = {
         first_name: profileFirstname.value.trim(),
         last_name: profileLastname.value.trim(),
-        age: parseInt(profileAge.value),
         gender: profileGender.value,
-        weight: parseFloat(profileWeight.value),
-        height: parseFloat(profileHeight.value),
-        physique: document.querySelector('input[name="profile-physique"]:checked')?.value
+        birthday: profileBirthday.value,
+        street: profileStreet.value.trim(),
+        city: profileCity.value.trim(),
+        postal_code: profilePostalCode.value.trim()
       };
 
       // Validate required fields
-      if (!formData.first_name || !formData.last_name || !formData.age || !formData.gender || 
-          !formData.weight || !formData.height || !formData.physique) {
-        alert('Please fill in all required fields');
+      if (!userData.first_name || !userData.last_name || !userData.gender) {
+        alert('Please fill in all required profile fields');
         return;
       }
+
+      // Get body measurements form data
+      const bodyMeasurementsData = {
+        height: profileHeight.value ? parseFloat(profileHeight.value) : null,
+        weight: profileWeight.value ? parseFloat(profileWeight.value) : null,
+        shoulder_circumference: profileShoulderCircumference.value ? parseFloat(profileShoulderCircumference.value) : null,
+        arm_length: profileArmLength.value ? parseFloat(profileArmLength.value) : null,
+        biceps_circumference: profileBicepsCircumference.value ? parseFloat(profileBicepsCircumference.value) : null,
+        breast_circumference: profileBreastCircumference.value ? parseFloat(profileBreastCircumference.value) : null,
+        under_breast_circumference: profileUnderBreastCircumference.value ? parseFloat(profileUnderBreastCircumference.value) : null,
+        collarbone_to_belly_button_length: profileCollarboneToBellyButtonLength.value ? parseFloat(profileCollarboneToBellyButtonLength.value) : null,
+        waist_circumference: profileWaistCircumference.value ? parseFloat(profileWaistCircumference.value) : null,
+        hip_circumference: profileHipCircumference.value ? parseFloat(profileHipCircumference.value) : null,
+        upper_thigh_circumference: profileUpperThighCircumference.value ? parseFloat(profileUpperThighCircumference.value) : null,
+        neck_circumference: profileNeckCircumference.value ? parseFloat(profileNeckCircumference.value) : null,
+        waist_to_crotch_front_length: profileWaistToCrotchFrontLength.value ? parseFloat(profileWaistToCrotchFrontLength.value) : null,
+        waist_to_crotch_back_length: profileWaistToCrotchBackLength.value ? parseFloat(profileWaistToCrotchBackLength.value) : null,
+        inner_leg_length: profileInnerLegLength.value ? parseFloat(profileInnerLegLength.value) : null,
+        foot_length: profileFootLength.value ? parseFloat(profileFootLength.value) : null,
+        foot_width: profileFootWidth.value ? parseFloat(profileFootWidth.value) : null
+      };
 
       // Show loading state
       saveProfileBtn.innerHTML = 'Saving...';
       saveProfileBtn.disabled = true;
 
-      // Get userid from form
-      const userid = profileUserid.value;
-
-      // Call update API
-      const response = await fetch(`${API_BASE_URL}/api/update-user-data/${userid}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
+      // Get JWT token for API call
+      let jwtToken = null;
+      await new Promise((resolve) => {
+        chrome.storage.local.get('jwtToken', (result) => {
+          jwtToken = result.jwtToken;
+          resolve();
+        });
       });
 
-      const result = await response.json();
+      if (!jwtToken) {
+        alert('You are not authenticated. Please sign in again.');
+        saveProfileBtn.innerHTML = 'Save Changes';
+        saveProfileBtn.disabled = false;
+        return;
+      }
 
-      if (result.success) {
+      let updateSuccess = true;
+      let errorMessage = '';
+
+      // Call user profile update API using JWT
+      try {
+        console.log('📤 Sending user profile data:', userData);
+        const userResponse = await fetch('http://localhost:8000/api/users/profile', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${jwtToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userData)
+        });
+
+        const userResult = await userResponse.json();
+
+        if (!userResult.success) {
+          updateSuccess = false;
+          errorMessage = userResult.error || 'Failed to update user profile';
+          console.error('❌ Failed to update user profile:', errorMessage);
+        } else {
+          console.log('✅ User profile updated successfully');
+        }
+      } catch (error) {
+        updateSuccess = false;
+        errorMessage = `User profile update error: ${error.message}`;
+        console.error('❌ Error updating user profile:', error);
+      }
+
+      // Call body measurements update API if JWT available
+      if (jwtToken && updateSuccess) {
+        try {
+          console.log('📤 Sending body measurements data:', bodyMeasurementsData);
+          console.log('📝 Update success status:', updateSuccess);
+          const measResponse = await fetch('http://localhost:8000/api/body-measurements', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${jwtToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bodyMeasurementsData)
+          });
+
+          const measResult = await measResponse.json();
+
+          if (!measResult.success) {
+            console.warn('⚠️ Warning: Body measurements update failed:', measResult.error);
+            // Don't fail the whole update if body measurements update fails
+          } else {
+            console.log('✅ Body measurements updated successfully');
+          }
+        } catch (error) {
+          console.warn('⚠️ Warning: Error updating body measurements:', error);
+          // Don't fail the whole update if body measurements update fails
+        }
+      }
+
+      if (updateSuccess) {
         console.log('✅ Profile updated successfully');
         alert('Profile updated successfully!');
         
@@ -4223,9 +4432,10 @@ document.addEventListener('DOMContentLoaded', function() {
         saveProfileBtn.style.display = 'none';
         cancelEditBtn.style.display = 'none';
         
+        // Reload profile to ensure data is synchronized
+        loadUserProfile();
       } else {
-        console.error('❌ Failed to update profile:', result.error);
-        alert(`Failed to update profile: ${result.error}`);
+        alert(`Failed to update profile: ${errorMessage}`);
       }
 
     } catch (error) {
@@ -4248,6 +4458,11 @@ document.addEventListener('DOMContentLoaded', function() {
       if (mainContainer) {
         mainContainer.classList.add('tryon-active');
       }
+      // Show garment info button
+      const garmentInfoBtn = document.getElementById('garment-info-btn');
+      if (garmentInfoBtn) {
+        garmentInfoBtn.style.display = 'block';
+      }
     }
   }
 
@@ -4259,6 +4474,16 @@ document.addEventListener('DOMContentLoaded', function() {
       const mainContainer = document.querySelector('.main-container');
       if (mainContainer) {
         mainContainer.classList.remove('tryon-active');
+      }
+      // Hide garment info button
+      const garmentInfoBtn = document.getElementById('garment-info-btn');
+      if (garmentInfoBtn) {
+        garmentInfoBtn.style.display = 'none';
+      }
+      // Hide info container if it exists
+      const garmentInfoContainer = document.getElementById('garment-info-container');
+      if (garmentInfoContainer) {
+        garmentInfoContainer.style.display = 'none';
       }
     }
   }
@@ -4276,7 +4501,738 @@ document.addEventListener('DOMContentLoaded', function() {
   // Add listeners after a small delay to ensure DOM is fully loaded
   setTimeout(addUploadPlaceholderListeners, 100);
 
+  // ===== GARMENT API FUNCTIONALITY =====
+  // Garment API configuration
+  const GARMENT_API_BASE_URL = 'https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1';
+  const GARMENT_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjamR4eGdvYWhmc3hubHRoeG1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MTE0MTUsImV4cCI6MjA5MTA4NzQxNX0.nS0QYp-_ubvp9uwvQhS1ElLVVeMAbgKxAXWeG0jRayw';
+
+  // Get current tab URL
+  async function getCurrentTabUrl() {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs.length === 0) {
+          reject(new Error('No active tab found'));
+        } else {
+          resolve(tabs[0].url);
+        }
+      });
+    });
+  }
+
+  // Fetch garment data from Garment API
+  async function getGarmentFromAPI(url) {
+    try {
+      const encodedUrl = encodeURIComponent(url);
+      const apiUrl = `${GARMENT_API_BASE_URL}/get-garment?url=${encodedUrl}`;
+      
+      console.log('🔗 Fetching garment from API:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': GARMENT_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API returned status ${response.status}`);
+      }
+
+      const garmentData = await response.json();
+      console.log('✅ Garment data received:', garmentData);
+      return garmentData;
+    } catch (error) {
+      console.error('❌ Error fetching garment:', error);
+      throw error;
+    }
+  }
+
+  // Determine garment type (upper or lower) from category
+  function determinGarmentType(garmentData) {
+    const category = (garmentData.category || '').toLowerCase();
+    const subcategory = (garmentData.subcategory || '').toLowerCase();
+    
+    // Lower garments
+    const lowerCategories = ['pants', 'jeans', 'skirt', 'shorts', 'trouser', 'leggings', 'bottom', 'lower'];
+    const lowerSubcategories = ['pants', 'jeans', 'skirt', 'shorts', 'trouser', 'leggings', 'bottom'];
+    
+    if (lowerCategories.includes(category) || lowerSubcategories.includes(subcategory)) {
+      return 'lower';
+    }
+    
+    // Default to upper
+    return 'upper';
+  }
+  
+  // Call fit analysis API
+  async function callFitAnalysisAPI(garmentType, garmentMeasurements, garmentSize) {
+    // Get auth token (stored as jwtToken in extension)
+    const token = await new Promise(resolve => {
+      chrome.storage.local.get('jwtToken', result => {
+        resolve(result.jwtToken);
+      });
+    });
+    
+    if (!token) {
+      throw new Error('Authentication token not found. Please sign in first.');
+    }
+    
+    // Get server URL
+    const serverUrl = await new Promise(resolve => {
+      chrome.storage.local.get('serverUrl', result => {
+        resolve(result.serverUrl || 'http://localhost:8000');
+      });
+    });
+    
+    const apiUrl = `${serverUrl}/api/fit-analysis`;
+    
+    const payload = {
+      garment_type: garmentType,
+      garment_measurements: garmentMeasurements,
+      garment_size: garmentSize
+    };
+    
+    console.log('📤 Calling FIT API:', apiUrl, payload);
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `FIT API returned status ${response.status}`);
+    }
+    
+    const fitResult = await response.json();
+    console.log('✅ FIT Analysis result:', fitResult);
+    return fitResult;
+  }
+  
+  // Display fit analysis results with body visualization
+  function displayFitAnalysisResults(fitResult, garmentName, selectedSize) {
+    // Create or get modal container
+    let modal = document.getElementById('fit-analysis-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'fit-analysis-modal';
+      document.body.appendChild(modal);
+    }
+    
+    // Determine overall color based on fit status
+    let overallFitColor;
+    if (fitResult.overall_fit === 'body fit') {
+      overallFitColor = '#4CAF50';  // Green - perfect
+    } else if (fitResult.overall_fit === 'good fit') {
+      overallFitColor = '#4CAF50';  // Green - good
+    } else if (fitResult.overall_fit === 'loose fit') {
+      overallFitColor = '#FF9800';  // Orange - loose
+    } else {  // tight
+      overallFitColor = '#ff6b6b';  // Red - tight
+    }
+    
+    // Color mapping for individual measurements
+    const statusColorMap = {
+      'body fit': { text: '#2E7D32', bg: '#E8F5E9', border: '#4CAF50' },  // Green
+      'good fit': { text: '#558B2F', bg: '#E8F5E9', border: '#7CB342' },  // Light green
+      'loose fit': { text: '#E65100', bg: '#FFE0B2', border: '#FF9800' },  // Orange
+      'tight': { text: '#C62828', bg: '#FFEBEE', border: '#ff6b6b' }       // Red
+    };
+    
+    // Get color for a specific fit status
+    const getStatusColor = (status) => {
+      return statusColorMap[status] || { text: '#666', bg: '#f5f5f5', border: '#999' };
+    };
+    
+    // Group measurements by body part for visual positioning
+    const bodyPartMap = {
+      'breast_width': { label: 'Chest', y: '35%', color: '#ff6b6b' },
+      'arm_width': { label: 'Arms', y: '40%', color: '#ff9800' },
+      'shirt_length': { label: 'Length', y: '75%', color: '#2196F3' },
+      'arm_length': { label: 'Sleeve', y: '45%', color: '#ff9800' },
+      'shoulder_width': { label: 'Shoulder', y: '25%', color: '#4CAF50' },
+      'waist': { label: 'Waist', y: '52%', color: '#ff6b6b' },
+      'hip': { label: 'Hips', y: '62%', color: '#ff6b6b' },
+      'leg_length': { label: 'Inseam', y: '85%', color: '#2196F3' },
+      'front_rise': { label: 'Rise', y: '58%', color: '#ff9800' },
+      'inseam': { label: 'Inseam', y: '85%', color: '#2196F3' },
+      'thigh': { label: 'Thigh', y: '68%', color: '#ff9800' }
+    };
+    
+    // Map measurements to positions and colors
+    const mappedMeasurements = (fitResult.measurements || []).map(m => {
+      const bodyPart = bodyPartMap[m.metric] || { label: m.metric.replace(/_/g, ' '), y: '50%', color: '#666' };
+      const statusColor = getStatusColor(m.fit_status);
+      return {
+        ...m,
+        ...bodyPart,
+        statusColor
+      };
+    });
+    
+    const statusCounts = {
+      body_fit: fitResult.body_fit_count || 0,
+      good_fit: fitResult.good_fits || 0,
+      loose_fit: fitResult.loose_fit_count || 0,
+      tight: fitResult.tight_count || 0
+    };
+    
+    // Create body outline SVG
+    const bodySVG = `
+      <svg viewBox="0 0 100 200" style="width: 100%; max-width: 150px; height: auto;">
+        <!-- Head -->
+        <circle cx="50" cy="25" r="12" fill="none" stroke="#333" stroke-width="2"/>
+        <!-- Neck -->
+        <rect x="48" y="37" width="4" height="6" fill="#333"/>
+        <!-- Chest -->
+        <path d="M 48 43 L 35 65 L 35 85 L 65 85 L 65 65 L 52 43 Z" fill="none" stroke="#333" stroke-width="2"/>
+        <!-- Arms -->
+        <line x1="35" y1="50" x2="15" y2="65" stroke="#333" stroke-width="2"/>
+        <line x1="65" y1="50" x2="85" y2="65" stroke="#333" stroke-width="2"/>
+        <!-- Waist/Hips -->
+        <ellipse cx="50" cy="95" rx="18" ry="12" fill="none" stroke="#333" stroke-width="2"/>
+        <!-- Legs -->
+        <line x1="42" y1="107" x2="40" y2="180" stroke="#333" stroke-width="2"/>
+        <line x1="58" y1="107" x2="60" y2="180" stroke="#333" stroke-width="2"/>
+        <!-- Feet -->
+        <line x1="35" y1="180" x2="45" y2="180" stroke="#333" stroke-width="2"/>
+        <line x1="55" y1="180" x2="65" y2="180" stroke="#333" stroke-width="2"/>
+      </svg>
+    `;
+    
+    // Build detailed measurements list
+    const measurementsList = mappedMeasurements.map(m => `
+      <div style="
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 8px;
+        padding: 8px;
+        margin-bottom: 6px;
+        background: ${m.statusColor.bg};
+        border-left: 3px solid ${m.statusColor.border};
+        border-radius: 4px;
+        font-size: 12px;
+      ">
+        <span style="font-weight: 600; color: ${m.statusColor.text}; min-width: 80px;">${m.metric.replace(/_/g, ' ')}</span>
+        <span style="color: #666;">
+          Body: <strong>${m.body_value}</strong> cm | 
+          Garment: <strong>${m.garment_value}</strong> cm
+        </span>
+      </div>
+    `).join('');
+    
+    modal.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      " id="fit-modal-overlay">
+        <div style="
+          background: white;
+          border-radius: 12px;
+          padding: 24px;
+          max-width: 900px;
+          max-height: 85vh;
+          overflow-y: auto;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        ">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="margin: 0; font-size: 22px; color: #333; font-weight: 700;">Fit Analysis: ${garmentName}</h2>
+            <button id="fit-modal-close" style="
+              background: none;
+              border: none;
+              font-size: 28px;
+              cursor: pointer;
+              color: #999;
+              padding: 0;
+              width: 32px;
+              height: 32px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">&times;</button>
+          </div>
+          
+          <!-- Overall Assessment Badge -->
+          <div style="
+            background: ${overallFitColor}15;
+            border: 2px solid ${overallFitColor};
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 24px;
+            text-align: center;
+          ">
+            <div style="font-size: 12px; color: #999; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Overall Assessment</div>
+            <div style="font-size: 28px; font-weight: 700; color: ${overallFitColor}; margin-bottom: 8px;">
+              ${fitResult.overall_fit.toUpperCase()}
+            </div>
+            <div style="font-size: 13px; color: #666;">
+              Size ${selectedSize} | ${statusCounts.body_fit} perfect, ${statusCounts.good_fit} good, ${statusCounts.loose_fit} loose, ${statusCounts.tight} tight
+            </div>
+          </div>
+          
+          <!-- Main Fit Visualization -->
+          <div style="
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+            align-items: flex-start;
+          ">
+            <!-- Left: User Size Info -->
+            <div style="
+              background: #f5f5f5;
+              border-radius: 8px;
+              padding: 16px;
+              text-align: center;
+            ">
+              <div style="font-size: 12px; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Your Measurements</div>
+              <div style="font-size: 32px; font-weight: 700; color: #4CAF50; margin-bottom: 8px;">
+                ${fitResult.measurements && fitResult.measurements[0] ? fitResult.measurements[0].body_value : '--'}
+              </div>
+              <div style="font-size: 12px; color: #333; margin-bottom: 12px; font-weight: 500;">Reference</div>
+              <div style="
+                font-size: 11px;
+                color: #666;
+                padding-top: 12px;
+                border-top: 1px solid #ddd;
+                line-height: 1.6;
+              ">
+                Your body measurements on file
+              </div>
+            </div>
+            
+            <!-- Center: Body Outline -->
+            <div style="
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+            ">
+              <div style="margin-bottom: 12px;">${bodySVG}</div>
+              <div style="
+                font-size: 11px;
+                color: #999;
+                text-align: center;
+                padding-top: 8px;
+              ">Fit Analysis</div>
+            </div>
+            
+            <!-- Right: Size Info -->
+            <div style="
+              background: #f5f5f5;
+              border-radius: 8px;
+              padding: 16px;
+              text-align: center;
+            ">
+              <div style="font-size: 12px; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Garment Size ${selectedSize}</div>
+              <div style="font-size: 32px; font-weight: 700; color: #2196F3; margin-bottom: 8px;">
+                ${fitResult.measurements && fitResult.measurements[0] ? fitResult.measurements[0].garment_value : '--'}
+              </div>
+              <div style="font-size: 12px; color: #333; margin-bottom: 12px; font-weight: 500;">Specification</div>
+              <div style="
+                font-size: 11px;
+                color: #666;
+                padding-top: 12px;
+                border-top: 1px solid #ddd;
+                line-height: 1.6;
+              ">
+                Size ${selectedSize} garment measurements
+              </div>
+            </div>
+          </div>
+          
+          <!-- Detailed Measurements -->
+          <div style="margin-bottom: 24px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #333; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Measurement Details</h3>
+            <div style="
+              background: #fafafa;
+              border-radius: 8px;
+              padding: 12px;
+              max-height: 200px;
+              overflow-y: auto;
+            ">
+              ${measurementsList}
+            </div>
+          </div>
+          
+          <!-- Legend -->
+          <div style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+            font-size: 12px;
+          ">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 16px; height: 16px; background: #4CAF50; border-radius: 3px;"></div>
+              <span style="color: #666;">Body Fit (Perfect)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 16px; height: 16px; background: #7CB342; border-radius: 3px;"></div>
+              <span style="color: #666;">Good Fit</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 16px; height: 16px; background: #FF9800; border-radius: 3px;"></div>
+              <span style="color: #666;">Loose Fit</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 16px; height: 16px; background: #ff6b6b; border-radius: 3px;"></div>
+              <span style="color: #666;">Tight</span>
+            </div>
+          </div>
+          
+          <button id="fit-modal-close-btn" style="
+            width: 100%;
+            padding: 14px 16px;
+            background: ${overallFitColor};
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          ">Close</button>
+        </div>
+      </div>
+    `;
+    
+    modal.style.display = 'block';
+    
+    // Close button handlers
+    const closeBtn = document.getElementById('fit-modal-close');
+    const closeBtnAlt = document.getElementById('fit-modal-close-btn');
+    const overlay = document.getElementById('fit-modal-overlay');
+    
+    const closeModal = () => {
+      modal.style.display = 'none';
+    };
+    
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeBtnAlt) closeBtnAlt.addEventListener('click', closeModal);
+    if (overlay) overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+    
+    // Add hover effect to close button
+    if (closeBtn) {
+      closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.color = '#333';
+      });
+      closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.color = '#999';
+      });
+    }
+    
+    console.log('🎨 FIT Analysis results displayed with body visualization');
+  }
+
+  // Display garment information
+  function displayGarmentInfo(garmentData) {
+    // Create a container for garment info if it doesn't exist
+    let garmentInfoContainer = document.getElementById('garment-info-container');
+    if (!garmentInfoContainer) {
+      garmentInfoContainer = document.createElement('div');
+      garmentInfoContainer.id = 'garment-info-container';
+      garmentInfoContainer.style.cssText = `
+        padding: 20px;
+        background: #ffffff;
+        border-radius: 12px;
+        margin: 16px 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border: 1px solid #f0f0f0;
+        max-height: 500px;
+        overflow-y: auto;
+      `;
+      
+      // Insert after the main app or at the beginning of the visible area
+      const mainApp = document.getElementById('main-app');
+      if (mainApp) {
+        mainApp.insertAdjacentElement('afterbegin', garmentInfoContainer);
+      }
+    }
+
+    // Extract garment information
+    const measurementsBySize = garmentData.measurements_by_size || {};
+    const hasMeasurements = Object.keys(measurementsBySize).length > 0;
+    
+    // Build measurements HTML organized by size
+    const measurementsHtml = hasMeasurements ? Object.entries(measurementsBySize).map(([size, measurements]) => `
+      <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0; font-size: 13px;">Size ${size}</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          ${Object.entries(measurements).map(([measType, value]) => `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 6px 0; font-size: 12px;">
+              <span style="color: #666;">${measType.replace(/_/g, ' ')}</span>
+              <span style="color: #333; font-weight: 500;">${value} cm</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('') : '';
+
+    // Build HTML for garment info with elegant styling
+    const html = `
+      <div style="margin-bottom: 20px;">
+        <h3 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.3px;">
+          ${garmentData.name || 'Garment'}
+        </h3>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        <div>
+          <div style="margin-bottom: 12px;">
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">SKU</span>
+            <span style="font-size: 14px; color: #333;">${garmentData.sku || 'N/A'}</span>
+          </div>
+          <div>
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Brand</span>
+            <span style="font-size: 14px; color: #333;">${garmentData.brand_partners?.brand_name || 'Unknown'}</span>
+          </div>
+        </div>
+        <div>
+          <div style="margin-bottom: 12px;">
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Category</span>
+            <span style="font-size: 14px; color: #333; text-transform: capitalize;">${garmentData.category || 'N/A'} ${garmentData.subcategory ? '— ' + garmentData.subcategory : ''}</span>
+          </div>
+          <div>
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Color</span>
+            <span style="font-size: 14px; color: #333;">${garmentData.color || 'N/A'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #f0f0f0;">
+        <div>
+          <div style="margin-bottom: 12px;">
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Fit Type</span>
+            <span style="font-size: 14px; color: #333; text-transform: capitalize;">${garmentData.fit_type || 'N/A'}</span>
+          </div>
+        </div>
+        <div>
+          <div>
+            <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Material Stretch</span>
+            <span style="font-size: 14px; color: #333; text-transform: capitalize;">${garmentData.material_stretch || 'N/A'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600;">Sizes Available</span>
+        <span style="font-size: 14px; color: #333;">${garmentData.size_label || 'N/A'}</span>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <span style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 600;">Measurements</span>
+        <div style="background: #fafafa; border-radius: 8px; padding: 12px; border: 1px solid #f0f0f0;">
+          ${measurementsHtml || '<span style="color: #999; font-size: 13px;">No measurements available</span>'}
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px; display: ${hasMeasurements ? 'block' : 'none'};">
+        <label style="display: block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600;">Select Size</label>
+        <select id="garment-size-selector" style="
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          font-size: 14px;
+          background: white;
+          color: #333;
+          cursor: pointer;
+        ">
+          <option value="">-- Choose a size --</option>
+          ${Object.keys(measurementsBySize).map(size => `<option value="${size}">${size}</option>`).join('')}
+        </select>
+      </div>
+
+      <button id="garment-fit-analysis-btn" style="
+        width: 100%;
+        padding: 14px 16px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(76, 175, 80, 0.2);
+        ${!hasMeasurements ? 'background: #cccccc; cursor: not-allowed;' : ''}
+      " ${!hasMeasurements ? 'disabled' : ''}>Fit Analysis</button>
+    `;
+
+    garmentInfoContainer.innerHTML = html;
+    garmentInfoContainer.style.display = 'block';
+
+    // Add event listener for Fit Analysis button
+    const fitAnalysisBtn = document.getElementById('garment-fit-analysis-btn');
+    const sizeSelector = document.getElementById('garment-size-selector');
+    
+    if (fitAnalysisBtn) {
+      fitAnalysisBtn.addEventListener('mouseenter', () => {
+        if (!fitAnalysisBtn.disabled) {
+          fitAnalysisBtn.style.background = '#45a049';
+          fitAnalysisBtn.style.transform = 'translateY(-2px)';
+          fitAnalysisBtn.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
+        }
+      });
+      fitAnalysisBtn.addEventListener('mouseleave', () => {
+        if (!fitAnalysisBtn.disabled) {
+          fitAnalysisBtn.style.background = '#4CAF50';
+          fitAnalysisBtn.style.transform = 'translateY(0)';
+          fitAnalysisBtn.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.2)';
+        }
+      });
+      fitAnalysisBtn.addEventListener('click', async () => {
+        console.log('📊 Fit Analysis clicked for garment:', garmentData.name);
+        
+        // Validate size selection
+        if (!sizeSelector || !sizeSelector.value) {
+          alert('Please select a size first');
+          return;
+        }
+        
+        const selectedSize = sizeSelector.value;
+        const measurements = measurementsBySize[selectedSize];
+        
+        if (!measurements) {
+          alert('Measurements not available for selected size');
+          return;
+        }
+        
+        try {
+          // Determine garment type from category
+          const garmentType = determinGarmentType(garmentData);
+          
+          console.log('📤 Starting fit analysis:', {
+            garmentName: garmentData.name,
+            selectedSize,
+            garmentType,
+            measurements
+          });
+          
+          // Call fit analysis API
+          const fitResult = await callFitAnalysisAPI(garmentType, measurements, selectedSize);
+          
+          // Display fit analysis results
+          displayFitAnalysisResults(fitResult, garmentData.name, selectedSize);
+          
+        } catch (error) {
+          console.error('❌ Fit analysis error:', error);
+          alert('Error analyzing fit: ' + error.message);
+        }
+      });
+      
+      // Enable/disable button based on size selection
+      if (sizeSelector) {
+        sizeSelector.addEventListener('change', () => {
+          fitAnalysisBtn.disabled = !sizeSelector.value;
+          fitAnalysisBtn.style.background = sizeSelector.value ? '#4CAF50' : '#cccccc';
+          fitAnalysisBtn.style.cursor = sizeSelector.value ? 'pointer' : 'not-allowed';
+        });
+      }
+    }
+
+    console.log('🖼️ Garment info displayed');
+  }
+
+  // Fetch and display garment from current URL
+  window.fetchGarmentFromCurrentUrl = async function() {
+    const fetchBtn = document.getElementById('fetch-garment-btn');
+    if (fetchBtn) {
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = 'Loading...';
+    }
+
+    try {
+      const currentUrl = await getCurrentTabUrl();
+      console.log('📍 Current URL:', currentUrl);
+
+      const garmentData = await getGarmentFromAPI(currentUrl);
+      displayGarmentInfo(garmentData);
+
+      if (fetchBtn) {
+        fetchBtn.innerHTML = '✓ Garment Loaded';
+        setTimeout(() => {
+          fetchBtn.innerHTML = 'Load Garment Info';
+          fetchBtn.disabled = false;
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert(`Failed to fetch garment: ${error.message}`);
+      if (fetchBtn) {
+        fetchBtn.innerHTML = 'Load Garment Info';
+        fetchBtn.disabled = false;
+      }
+    }
+  };
+
+  // Fetch garment info and display
+  window.toggleGarmentInfo = async function() {
+    const garmentInfoContainer = document.getElementById('garment-info-container');
+    
+    // If already showing, just toggle visibility
+    if (garmentInfoContainer && garmentInfoContainer.style.display !== 'none') {
+      garmentInfoContainer.style.display = garmentInfoContainer.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+    
+    // Otherwise, fetch the garment info
+    const garmentInfoBtn = document.getElementById('garment-info-btn');
+    if (garmentInfoBtn) {
+      garmentInfoBtn.disabled = true;
+      garmentInfoBtn.style.opacity = '0.6';
+    }
+
+    try {
+      const currentUrl = await getCurrentTabUrl();
+      console.log('📍 Current URL:', currentUrl);
+
+      const garmentData = await getGarmentFromAPI(currentUrl);
+      displayGarmentInfo(garmentData);
+
+      if (garmentInfoBtn) {
+        garmentInfoBtn.style.opacity = '1';
+        garmentInfoBtn.disabled = false;
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      // Remove the info container on error
+      const infoContainer = document.getElementById('garment-info-container');
+      if (infoContainer) {
+        infoContainer.remove();
+      }
+      
+      if (garmentInfoBtn) {
+        garmentInfoBtn.style.opacity = '1';
+        garmentInfoBtn.disabled = false;
+      }
+    }
+  };
+
   // Make functions globally available
   window.showTryonResult = showTryonResult;
   window.hideTryonResult = hideTryonResult;
+
+  // Add event listener for garment info button
+  const garmentInfoBtn = document.getElementById('garment-info-btn');
+  if (garmentInfoBtn) {
+    garmentInfoBtn.addEventListener('click', window.toggleGarmentInfo);
+  }
 });

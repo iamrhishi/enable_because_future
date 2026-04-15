@@ -141,10 +141,63 @@ def update_profile():
                 )
         
         # Handle other string fields
-        for field in ['first_name', 'last_name', 'street', 'city']:
+        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
             if field in data:
                 value = str(data[field]).strip() if data[field] else None
                 update_data[field] = value
+        
+        # Validate age if provided
+        if 'age' in data and data['age'] is not None:
+            try:
+                age = int(data['age'])
+                if not (13 <= age <= 120):
+                    return error_response_from_string(
+                        'Age must be between 13 and 120',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['age'] = age
+            except (ValueError, TypeError):
+                return error_response_from_string('Age must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate weight if provided
+        if 'weight' in data and data['weight'] is not None:
+            try:
+                weight = float(data['weight'])
+                if not (30 <= weight <= 300):
+                    return error_response_from_string(
+                        'Weight must be between 30 and 300 kg',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['weight'] = weight
+            except (ValueError, TypeError):
+                return error_response_from_string('Weight must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate height if provided
+        if 'height' in data and data['height'] is not None:
+            try:
+                height = float(data['height'])
+                if not (100 <= height <= 250):
+                    return error_response_from_string(
+                        'Height must be between 100 and 250 cm',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['height'] = height
+            except (ValueError, TypeError):
+                return error_response_from_string('Height must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate physique if provided
+        if 'physique' in data:
+            valid_physiques = ['slim', 'muscular', 'thick']
+            if data['physique'] not in valid_physiques:
+                return error_response_from_string(
+                    f'Invalid physique. Must be one of: {", ".join(valid_physiques)}',
+                    400,
+                    'VALIDATION_ERROR'
+                )
+            update_data['physique'] = data['physique']
         
         if not update_data:
             return error_response_from_string('No valid fields to update', 400, 'VALIDATION_ERROR')
