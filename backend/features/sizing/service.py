@@ -8,9 +8,8 @@ from typing import Dict, List, Optional, Any
 from shared.logger import logger
 from config import Config
 
-# Lovable/Supabase API configuration
-LOVABLE_API_BASE = "https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1"
-LOVABLE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjamR4eGdvYWhmc3hubHRoeG1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MTE0MTUsImV4cCI6MjA5MTA4NzQxNX0.nS0QYp-_ubvp9uwvQhS1ElLVVeMAbgKxAXWeG0jRayw"
+# Lovable/Supabase API configuration (loaded from Config/environment)
+# Set LOVABLE_API_KEY in .env file
 
 
 def fetch_garment_from_lovable(url: str = None, garment_id: str = None, sku: str = None) -> Optional[Dict]:
@@ -40,9 +39,9 @@ def fetch_garment_from_lovable(url: str = None, garment_id: str = None, sku: str
 
     try:
         response = requests.get(
-            f"{LOVABLE_API_BASE}/get-garment?{param}",
+            f"{Config.LOVABLE_API_BASE}/get-garment?{param}",
             headers={
-                "apikey": LOVABLE_API_KEY,
+                "apikey": Config.LOVABLE_API_KEY,
                 "Content-Type": "application/json"
             },
             timeout=30

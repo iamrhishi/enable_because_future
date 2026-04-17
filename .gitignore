@@ -62,3 +62,6 @@ chrome-extension/*.zip
 # Images
 backend/images/
 
+# Deprecated files (to be deleted later)
+_deprecated/
+

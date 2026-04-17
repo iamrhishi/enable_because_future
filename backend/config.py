@@ -65,6 +65,10 @@ class Config:
     MIXER_SERVICE_URL = os.environ.get('MIXER_SERVICE_URL', 'https://api.becausefuture.tech/mixer-service/tryon')
     MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', 'becausefuture')
     MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', 'becausefuture!2025')
+
+    # Lovable/Supabase API Configuration (for sizing/garment data)
+    LOVABLE_API_BASE = os.environ.get('LOVABLE_API_BASE', 'https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1')
+    LOVABLE_API_KEY = os.environ.get('LOVABLE_API_KEY', '')
     
     @staticmethod
     def validate():
