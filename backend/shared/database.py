@@ -39,6 +39,7 @@ class DatabaseManager:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row  # Enable dictionary-like access
+        conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
         return conn
     
     @contextmanager

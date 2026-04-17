@@ -35,6 +35,8 @@ def create_or_update_measurements():
         else:
             data = {}
         
+        logger.info(f"create_or_update_measurements: Raw request data: {data}")
+        
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
         
@@ -57,29 +59,41 @@ def create_or_update_measurements():
         
         # Basic measurements
         if 'height' in data:
-            measurement_data['height'] = validate_measurement(data['height'], 'height', 50, 300)
+            measurement_data['height'] = validate_measurement(data['height'], 'Height (cm)', 50, 250)
         if 'weight' in data:
-            measurement_data['weight'] = validate_measurement(data['weight'], 'weight', 20, 500)
+            measurement_data['weight'] = validate_measurement(data['weight'], 'Weight (kg)', 20, 250)
         
-        # Circumference measurements (20-200 cm range)
-        circumference_fields = [
-            'shoulder_circumference', 'arm_length', 'breast_circumference',
-            'under_breast_circumference', 'waist_circumference', 'hip_circumference',
-            'upper_thigh_circumference', 'neck_circumference', 'biceps_circumference',
-            'upper_hip_circumference', 'wide_hip_circumference', 'calf_circumference'
-        ]
-        for field in circumference_fields:
+        # Circumference measurements with specific ranges
+        circumference_fields = {
+            'shoulder_circumference': (60, 200),
+            'arm_length': (25, 100),
+            'biceps_circumference': (10, 100),
+            'breast_circumference': (50, 300),
+            'under_breast_circumference': (40, 300),
+            'neck_circumference': (20, 100),
+            'upper_hip_circumference': (40, 200),
+            'waist_circumference': (30, 300),
+            'hip_circumference': (50, 300),
+            'upper_thigh_circumference': (25, 300),
+            'wide_hip_circumference': (40, 200),
+            'calf_circumference': (20, 100)
+        }
+        for field, (min_val, max_val) in circumference_fields.items():
             if field in data:
-                measurement_data[field] = validate_measurement(data[field], field.replace('_', ' ').title(), 20, 200)
+                measurement_data[field] = validate_measurement(data[field], field.replace('_', ' ').title(), min_val, max_val)
         
-        # Length measurements (10-200 cm range)
-        length_fields = [
-            'waist_to_crotch_front_length', 'waist_to_crotch_back_length',
-            'inner_leg_length', 'foot_length', 'foot_width'
-        ]
-        for field in length_fields:
+        # Length measurements with specific ranges
+        length_fields = {
+            'collarbone_to_belly_button_length': (30, 150),
+            'waist_to_crotch_front_length': (15, 100),
+            'waist_to_crotch_back_length': (15, 100),
+            'inner_leg_length': (50, 200),
+            'foot_length': (10, 60),
+            'foot_width': (5, 20)
+        }
+        for field, (min_val, max_val) in length_fields.items():
             if field in data:
-                measurement_data[field] = validate_measurement(data[field], field.replace('_', ' ').title(), 10, 200)
+                measurement_data[field] = validate_measurement(data[field], field.replace('_', ' ').title(), min_val, max_val)
         
         # Legacy fields
         legacy_fields = ['chest', 'waist', 'hips']
@@ -98,11 +112,13 @@ def create_or_update_measurements():
         
         if measurements:
             # Update existing
+            logger.info(f"create_or_update_measurements: Updating existing measurements, measurement_data keys: {measurement_data.keys()}")
             measurements.update_from_dict(measurement_data)
             measurements.save()
             message = 'Body measurements updated successfully'
         else:
             # Create new
+            logger.info(f"create_or_update_measurements: Creating new measurements, measurement_data: {measurement_data}")
             measurements = BodyMeasurements(user_id=user_id, **measurement_data)
             measurements.save()
             message = 'Body measurements created successfully'

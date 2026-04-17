@@ -1,9 +1,46 @@
-"""
-User Profile API endpoints
-CRUD operations for user profile data
-Uses User model for data operations
-JWT authentication via @require_auth decorator extracts user_id from token
-"""
+from flask import Blueprint, request
+from shared.models.user import User
+from shared.response import success_response, error_response_from_string
+from shared.middleware import require_auth
+from shared.logger import logger
+
+users_bp = Blueprint('users', __name__, url_prefix='/api/users')
+
+# ...existing endpoints...
+
+@users_bp.route('/avatar', methods=['GET'])
+@require_auth
+def get_avatar():
+    """
+    Get current user's avatar URL (file path)
+    Returns the URL path to the avatar image that can be served via /images endpoint
+    """
+    user_id = request.user_id
+    logger.info(f"get_avatar: ENTRY - user_id={user_id} (from JWT)")
+    try:
+        user = User.get_by_id(user_id)
+        if not user:
+            logger.warning(f"get_avatar: User not found - user_id={user_id}")
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        if user.avatar_path:
+            # Return the URL path to the avatar image
+            avatar_url = f"/images/{user.avatar_path}"
+            logger.info(f"get_avatar: EXIT - Avatar URL retrieved for user_id={user_id}")
+            return success_response(data={
+                'avatar_url': avatar_url,
+                'avatar_path': user.avatar_path,
+                'message': 'Avatar URL retrieved successfully'
+            })
+        else:
+            logger.info(f"get_avatar: EXIT - No avatar for user_id={user_id}")
+            return success_response(data={
+                'avatar_url': None,
+                'avatar_path': None,
+                'message': 'No avatar found for user'
+            })
+    except Exception as e:
+        logger.exception(f"get_avatar: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
 
 from flask import Blueprint, request
 from shared.models.user import User
@@ -104,10 +141,63 @@ def update_profile():
                 )
         
         # Handle other string fields
-        for field in ['first_name', 'last_name', 'street', 'city']:
+        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
             if field in data:
                 value = str(data[field]).strip() if data[field] else None
                 update_data[field] = value
+        
+        # Validate age if provided
+        if 'age' in data and data['age'] is not None:
+            try:
+                age = int(data['age'])
+                if not (13 <= age <= 120):
+                    return error_response_from_string(
+                        'Age must be between 13 and 120',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['age'] = age
+            except (ValueError, TypeError):
+                return error_response_from_string('Age must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate weight if provided
+        if 'weight' in data and data['weight'] is not None:
+            try:
+                weight = float(data['weight'])
+                if not (30 <= weight <= 300):
+                    return error_response_from_string(
+                        'Weight must be between 30 and 300 kg',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['weight'] = weight
+            except (ValueError, TypeError):
+                return error_response_from_string('Weight must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate height if provided
+        if 'height' in data and data['height'] is not None:
+            try:
+                height = float(data['height'])
+                if not (100 <= height <= 250):
+                    return error_response_from_string(
+                        'Height must be between 100 and 250 cm',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['height'] = height
+            except (ValueError, TypeError):
+                return error_response_from_string('Height must be a valid number', 400, 'VALIDATION_ERROR')
+        
+        # Validate physique if provided
+        if 'physique' in data:
+            valid_physiques = ['slim', 'muscular', 'thick']
+            if data['physique'] not in valid_physiques:
+                return error_response_from_string(
+                    f'Invalid physique. Must be one of: {", ".join(valid_physiques)}',
+                    400,
+                    'VALIDATION_ERROR'
+                )
+            update_data['physique'] = data['physique']
         
         if not update_data:
             return error_response_from_string('No valid fields to update', 400, 'VALIDATION_ERROR')

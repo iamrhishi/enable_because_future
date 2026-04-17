@@ -21,6 +21,7 @@ class BodyMeasurements:
                  biceps_circumference: float = None, upper_hip_circumference: float = None,
                  wide_hip_circumference: float = None, calf_circumference: float = None,
                  # Length measurements (all in cm)
+                 collarbone_to_belly_button_length: float = None,
                  waist_to_crotch_front_length: float = None,
                  waist_to_crotch_back_length: float = None,
                  inner_leg_length: float = None, foot_length: float = None,
@@ -50,6 +51,7 @@ class BodyMeasurements:
         self.wide_hip_circumference = wide_hip_circumference
         self.calf_circumference = calf_circumference
         # Lengths
+        self.collarbone_to_belly_button_length = collarbone_to_belly_button_length
         self.waist_to_crotch_front_length = waist_to_crotch_front_length
         self.waist_to_crotch_back_length = waist_to_crotch_back_length
         self.inner_leg_length = inner_leg_length
@@ -88,6 +90,7 @@ class BodyMeasurements:
     def save(self):
         """Save body measurements to database (creates or updates)"""
         logger.info(f"BodyMeasurements.save: ENTRY - user_id={self.user_id}")
+        logger.info(f"BodyMeasurements.save: Data to save - height={self.height}, weight={self.weight}, shoulder={self.shoulder_circumference}")
         try:
             if not self.user_id:
                 raise ValueError("user_id is required")
@@ -98,17 +101,20 @@ class BodyMeasurements:
                 (self.user_id,),
                 fetch_one=True
             )
+            logger.info(f"BodyMeasurements.save: Existing record: {existing}")
             
             if existing:
                 # Update existing
                 self.id = existing['id']
+                logger.info(f"BodyMeasurements.save: Updating existing record with id={self.id}")
                 db_manager.execute_query(
                     """UPDATE body_measurements 
                        SET height=?, weight=?, shoulder_circumference=?, arm_length=?,
                            breast_circumference=?, under_breast_circumference=?, waist_circumference=?,
                            hip_circumference=?, upper_thigh_circumference=?, neck_circumference=?,
                            biceps_circumference=?, upper_hip_circumference=?, wide_hip_circumference=?,
-                           calf_circumference=?, waist_to_crotch_front_length=?, waist_to_crotch_back_length=?,
+                           calf_circumference=?, collarbone_to_belly_button_length=?,
+                           waist_to_crotch_front_length=?, waist_to_crotch_back_length=?,
                            inner_leg_length=?, foot_length=?, foot_width=?,
                            chest=?, waist=?, hips=?, inseam=?, shoulder_width=?,
                            unit=?, updated_at=CURRENT_TIMESTAMP
@@ -117,7 +123,8 @@ class BodyMeasurements:
                      self.breast_circumference, self.under_breast_circumference, self.waist_circumference,
                      self.hip_circumference, self.upper_thigh_circumference, self.neck_circumference,
                      self.biceps_circumference, self.upper_hip_circumference, self.wide_hip_circumference,
-                     self.calf_circumference, self.waist_to_crotch_front_length, self.waist_to_crotch_back_length,
+                     self.calf_circumference, self.collarbone_to_belly_button_length,
+                     self.waist_to_crotch_front_length, self.waist_to_crotch_back_length,
                      self.inner_leg_length, self.foot_length, self.foot_width,
                      self.chest, self.waist, self.hips, self.inseam, self.shoulder_width,
                      self.unit, self.user_id)
@@ -131,15 +138,17 @@ class BodyMeasurements:
                         breast_circumference, under_breast_circumference, waist_circumference,
                         hip_circumference, upper_thigh_circumference, neck_circumference,
                         biceps_circumference, upper_hip_circumference, wide_hip_circumference,
-                        calf_circumference, waist_to_crotch_front_length, waist_to_crotch_back_length,
+                        calf_circumference, collarbone_to_belly_button_length,
+                        waist_to_crotch_front_length, waist_to_crotch_back_length,
                         inner_leg_length, foot_length, foot_width,
                         chest, waist, hips, inseam, shoulder_width, unit)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.user_id, self.height, self.weight, self.shoulder_circumference, self.arm_length,
                      self.breast_circumference, self.under_breast_circumference, self.waist_circumference,
                      self.hip_circumference, self.upper_thigh_circumference, self.neck_circumference,
                      self.biceps_circumference, self.upper_hip_circumference, self.wide_hip_circumference,
-                     self.calf_circumference, self.waist_to_crotch_front_length, self.waist_to_crotch_back_length,
+                     self.calf_circumference, self.collarbone_to_belly_button_length,
+                     self.waist_to_crotch_front_length, self.waist_to_crotch_back_length,
                      self.inner_leg_length, self.foot_length, self.foot_width,
                      self.chest, self.waist, self.hips, self.inseam, self.shoulder_width, self.unit)
                 )
@@ -159,7 +168,8 @@ class BodyMeasurements:
                 'breast_circumference', 'under_breast_circumference', 'waist_circumference',
                 'hip_circumference', 'upper_thigh_circumference', 'neck_circumference',
                 'biceps_circumference', 'upper_hip_circumference', 'wide_hip_circumference',
-                'calf_circumference', 'waist_to_crotch_front_length', 'waist_to_crotch_back_length',
+                'calf_circumference', 'collarbone_to_belly_button_length',
+                'waist_to_crotch_front_length', 'waist_to_crotch_back_length',
                 'inner_leg_length', 'foot_length', 'foot_width',
                 'chest', 'waist', 'hips', 'inseam', 'shoulder_width', 'unit'
             ]
@@ -214,6 +224,7 @@ class BodyMeasurements:
             'wide_hip_circumference': self.wide_hip_circumference,
             'calf_circumference': self.calf_circumference,
             # Lengths
+            'collarbone_to_belly_button_length': self.collarbone_to_belly_button_length,
             'waist_to_crotch_front_length': self.waist_to_crotch_front_length,
             'waist_to_crotch_back_length': self.waist_to_crotch_back_length,
             'inner_leg_length': self.inner_leg_length,
