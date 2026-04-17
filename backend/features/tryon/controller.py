@@ -27,6 +27,10 @@ tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 @require_auth  # JWT decorator validates token and sets request.user_id from token
 def create_tryon_job():
     try:
+        # user_id is extracted from JWT token by @require_auth decorator
+        user_id = request.user_id
+        logger.info(f"create_tryon_job: ENTRY - user_id={user_id}")
+
         # Get person image (selfie, person_image file, or use current user's saved avatar)
         # Priority: 1) selfie file, 2) person_image file, 3) current user's saved avatar (no need to send from frontend)
         person_image = None
@@ -36,27 +40,6 @@ def create_tryon_job():
         elif 'person_image' in request.files:
             person_image = request.files['person_image'].read()
             logger.info(f"create_tryon_job: Using person_image file for person image")
-        # ...existing code...
-        # Log all critical variables before job creation
-        logger.info(f"create_tryon_job: person_image type={type(person_image)}, length={len(person_image) if isinstance(person_image, bytes) else 'N/A'}")
-        logger.info(f"create_tryon_job: garment_image type={type(garment_image)}, length={len(garment_image) if isinstance(garment_image, bytes) else 'N/A'}")
-        logger.info(f"create_tryon_job: garment_type={garment_type}")
-        logger.info(f"create_tryon_job: options={options}")
-        logger.info(f"create_tryon_job: garment_details={garment_details}")
-        try:
-            job_queue = get_job_queue()
-            job_id = job_queue.create_job(
-                user_id=user_id,
-                person_image=person_image,
-                garment_image=garment_image,
-                garment_type=garment_type,
-                garment_details=garment_details,  # Pass garment details to Gemini
-                options=options
-            )
-            logger.info(f"create_tryon_job: Job created successfully: {job_id}")
-        except Exception as job_error:
-            logger.exception(f"create_tryon_job: Job creation failed: {str(job_error)}")
-            return error_response_from_string(f'Job creation failed: {str(job_error)}', 400, 'JOB_CREATION_ERROR')
         else:
             # Use current user's saved avatar (already stored in backend, no need to send from frontend)
             # Security: Always use the authenticated user's avatar, not arbitrary avatar_id
