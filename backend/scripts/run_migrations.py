@@ -54,6 +54,7 @@ def main():
         (23, 'add_tryon_results', load_migration(23, 'add_tryon_results')),
         (24, 'clean_users_table', load_migration(24, 'clean_users_table')),
         (25, 'update_body_measurements_ranges', load_migration(25, 'update_body_measurements_ranges')),
+        (26, 'add_garment_url_to_tryon_jobs', load_migration(26, 'add_garment_url_to_tryon_jobs')),
     ]
     
     migration_manager.run_migrations(migrations)

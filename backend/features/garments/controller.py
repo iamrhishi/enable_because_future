@@ -15,6 +15,7 @@ from shared.validators import validate_url
 from shared.errors import ValidationError
 from shared.logger import logger
 from shared.garment_utils import categorize_garment
+from shared.default_garments import get_default_garments
 
 garments_bp = Blueprint('garments', __name__, url_prefix='/api/garments')
 
@@ -349,4 +350,29 @@ def extract_images():
                 "3) Invalid URL or page structure changed. " + \
                 "Try using /api/garments/scrape for more comprehensive extraction with brand-specific logic."
         return error_response_from_string(reason, 500, 'EXTRACTION_ERROR')
+
+
+@garments_bp.route('/defaults', methods=['GET'])
+def get_defaults():
+    """
+    Get default garment URLs by gender
+
+    Query Parameters:
+    - gender (optional): 'men', 'women', 'unisex', or omit for all
+
+    Returns:
+    - List of default garment objects with url, name, category
+    """
+    logger.info("get_defaults: ENTRY")
+    try:
+        gender = request.args.get('gender', None)
+
+        garments = get_default_garments(gender)
+
+        logger.info(f"get_defaults: EXIT - Returning {len(garments)} default garments for gender={gender}")
+        return success_response(data={'garments': garments, 'gender': gender or 'all'})
+
+    except Exception as e:
+        logger.exception(f"get_defaults: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Error loading default garments: {str(e)}', 500)
 

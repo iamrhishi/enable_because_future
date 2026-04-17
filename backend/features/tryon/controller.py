@@ -85,6 +85,7 @@ def create_tryon_job():
         garment_image = None
         garment_type = 'upper'  # Default
         garment_details = None  # Will be populated from scraping or request
+        source_garment_url = None  # Track the source URL for saving with try-on result
         
         # Method 1: Wardrobe item ID (most efficient - uses already stored images)
         if 'wardrobe_item_id' in request.form or 'item_id' in request.form:
@@ -182,6 +183,11 @@ def create_tryon_job():
                     elif garment_details['category_section'] == 'lower_body':
                         garment_type = 'lower'
                 
+                # Capture source URL from wardrobe item if available
+                if hasattr(wardrobe_item, 'url') and wardrobe_item.url:
+                    source_garment_url = wardrobe_item.url
+                    logger.info(f"create_tryon_job: Captured garment URL from wardrobe item: {source_garment_url[:100] if source_garment_url else 'None'}")
+
                 logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id}, garment_type={garment_type}")
             except ValueError:
                 return error_response_from_string('wardrobe_item_id must be a valid integer', 400, 'VALIDATION_ERROR')
@@ -220,6 +226,7 @@ def create_tryon_job():
                     garment_index = 0
                 
                 item_url = item_urls[garment_index]
+                source_garment_url = item_url  # Track source URL for saving with try-on
                 logger.info(f"create_tryon_job: Processing item_url[{garment_index}]: {item_url[:100]}")
                 
                 # Try to scrape product page first (if it's a product URL)
@@ -735,6 +742,7 @@ def create_tryon_job():
         # Method 4: Single garment_url (backward compatibility)
         if not garment_image and 'garment_url' in request.form:
             garment_url = request.form.get('garment_url')
+            source_garment_url = garment_url  # Track source URL for saving with try-on
             try:
                 garment_image = fetch_image_from_url(garment_url)
             except Exception as e:
@@ -813,7 +821,8 @@ def create_tryon_job():
             garment_image=garment_image,
             garment_type=garment_type,
             garment_details=garment_details,  # Pass garment details to Gemini
-            options=options
+            options=options,
+            garment_url=source_garment_url  # Save source URL with try-on result
         )
         
         logger.info(f"create_tryon_job: EXIT - Job created: {job_id}")
@@ -930,8 +939,13 @@ def get_job_result(job_id):
         from shared.url_utils import to_absolute_url
         result_url = to_absolute_url(job['result_url'])
         
+        # Include garment_url in response for reference
+        response_data = {'result_url': result_url}
+        if job.get('garment_url'):
+            response_data['garment_url'] = job['garment_url']
+
         logger.info(f"get_job_result: EXIT - Returning result URL for job_id={job_id}: {result_url}")
-        return success_response(data={'result_url': result_url})
+        return success_response(data=response_data)
         
     except Exception as e:
         logger.exception(f"get_job_result: EXIT - Error: {str(e)}")
@@ -1017,6 +1031,192 @@ def create_multi_tryon_job():
         
     except Exception as e:
         logger.exception(f"create_multi_tryon_job: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+@tryon_bp.route('/tryon/layered', methods=['POST'])
+@require_auth
+def create_layered_tryon():
+    """
+    Layered multi-garment try-on (synchronous)
+
+    Applies multiple garments sequentially - result of garment 1 becomes
+    the avatar for garment 2, etc. Useful for layering (e.g., top + jacket).
+
+    Request (multipart/form-data):
+    - garment_images[]: Array of garment image files (in order to apply)
+    - garment_urls[]: Array of garment URLs to scrape (alternative to files)
+    - garment_types[]: Optional array of types ('upper'/'lower') for each garment
+
+    Returns:
+    - results[]: Array of result URLs (one per garment applied)
+    - final_result_url: The final combined result
+
+    Note: This is synchronous and may take 30-60+ seconds for multiple garments.
+    """
+    user_id = request.user_id
+    logger.info(f"create_layered_tryon: ENTRY - user_id={user_id}")
+
+    try:
+        from features.tryon.service import process_tryon, process_tryon_layered
+        from shared.storage import get_storage_service
+        import uuid
+
+        # Get person image (avatar)
+        person_image = None
+        if 'person_image' in request.files:
+            person_image = request.files['person_image'].read()
+            logger.info("create_layered_tryon: Using uploaded person_image")
+        else:
+            current_user = User.get_by_id(user_id)
+            if current_user and current_user.avatar:
+                person_image = current_user.avatar
+                logger.info(f"create_layered_tryon: Using saved avatar for user_id={user_id}")
+            else:
+                return error_response_from_string(
+                    'No person image. Upload person_image or save avatar first via /api/save-avatar',
+                    400, 'VALIDATION_ERROR'
+                )
+
+        # Collect garment images
+        garment_images = []
+        garment_types = []
+
+        # From uploaded files
+        if 'garment_images[]' in request.files:
+            files = request.files.getlist('garment_images[]')
+            for f in files:
+                if f and f.filename:
+                    garment_images.append(f.read())
+            logger.info(f"create_layered_tryon: Got {len(garment_images)} garment files")
+
+        # From URLs
+        if 'garment_urls[]' in request.form:
+            urls = request.form.getlist('garment_urls[]')
+            from features.wardrobe.extractors import BrandExtractorFactory
+
+            for url in urls:
+                if not url:
+                    continue
+                try:
+                    # Check if direct image URL
+                    from features.garments.scraper import is_image_url
+                    if is_image_url(url):
+                        img_bytes = fetch_image_from_url(url)
+                        garment_images.append(img_bytes)
+                    else:
+                        # Scrape product page
+                        extractor = BrandExtractorFactory.get_extractor(url)
+                        product_info = extractor.extract_product_info(url)
+                        if product_info.get('images'):
+                            img_url = product_info['images'][0]
+                            img_bytes = fetch_image_from_url(img_url)
+                            garment_images.append(img_bytes)
+                except Exception as e:
+                    logger.warning(f"create_layered_tryon: Failed to fetch garment from {url}: {str(e)}")
+
+            logger.info(f"create_layered_tryon: Got {len(garment_images)} total garments after URL scraping")
+
+        # Get garment types if provided
+        if 'garment_types[]' in request.form:
+            garment_types = request.form.getlist('garment_types[]')
+
+        # Pad garment_types to match garment_images length
+        while len(garment_types) < len(garment_images):
+            garment_types.append('upper')  # Default to upper
+
+        if len(garment_images) < 1:
+            return error_response_from_string(
+                'At least one garment image required. Use garment_images[] or garment_urls[]',
+                400, 'VALIDATION_ERROR'
+            )
+
+        if len(garment_images) > 5:
+            return error_response_from_string(
+                'Maximum 5 garments allowed per request',
+                400, 'VALIDATION_ERROR'
+            )
+
+        logger.info(f"create_layered_tryon: Processing {len(garment_images)} garments sequentially")
+
+        # Process garments sequentially
+        results = []
+        current_avatar = person_image
+        storage_service = get_storage_service()
+        base_url = request.url_root.rstrip('/')
+
+        for idx, (garment_image, garment_type) in enumerate(zip(garment_images, garment_types)):
+            logger.info(f"create_layered_tryon: Processing garment {idx + 1}/{len(garment_images)}, type={garment_type}")
+
+            try:
+                # First garment: normal try-on on avatar
+                # Subsequent garments: layer over existing outfit
+                if idx == 0:
+                    logger.info("create_layered_tryon: Using process_tryon for first garment")
+                    result_data_url = process_tryon(
+                        person_image=current_avatar,
+                        garment_image=garment_image,
+                        garment_type=garment_type
+                    )
+                else:
+                    logger.info("create_layered_tryon: Using process_tryon_layered for subsequent garment")
+                    result_data_url = process_tryon_layered(
+                        person_image=current_avatar,
+                        garment_image=garment_image,
+                        garment_type=garment_type
+                    )
+
+                # Extract base64 data and convert to bytes
+                if result_data_url.startswith('data:'):
+                    # Remove data URL prefix
+                    base64_data = result_data_url.split(',', 1)[1]
+                else:
+                    base64_data = result_data_url
+
+                result_bytes = base64.b64decode(base64_data)
+
+                # Save result to storage
+                result_filename = f"{user_id}_{uuid.uuid4().hex[:8]}_layer{idx + 1}.png"
+                storage_path = f"tryon-results/{user_id}/{result_filename}"
+                result_url = storage_service.upload_image(
+                    result_bytes,
+                    storage_path,
+                    content_type='image/png'
+                )
+                absolute_url = f"{base_url}{result_url}"
+
+                results.append({
+                    'layer': idx + 1,
+                    'garment_type': garment_type,
+                    'result_url': absolute_url
+                })
+
+                # Use this result as avatar for next garment
+                current_avatar = result_bytes
+
+                logger.info(f"create_layered_tryon: Layer {idx + 1} complete, saved to {absolute_url}")
+
+            except Exception as e:
+                logger.exception(f"create_layered_tryon: Failed at layer {idx + 1}: {str(e)}")
+                return error_response_from_string(
+                    f'Failed at garment {idx + 1}: {str(e)}',
+                    500, 'GENERATION_ERROR'
+                )
+
+        final_result = results[-1] if results else None
+
+        logger.info(f"create_layered_tryon: EXIT - Success, {len(results)} layers processed")
+        return success_response(
+            data={
+                'results': results,
+                'final_result_url': final_result['result_url'] if final_result else None,
+                'layers_processed': len(results)
+            },
+            message=f'Layered try-on complete with {len(results)} garments'
+        )
+
+    except Exception as e:
+        logger.exception(f"create_layered_tryon: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 

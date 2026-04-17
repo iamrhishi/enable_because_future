@@ -41,19 +41,56 @@ class BrandExtractor(ABC):
 
 class DefaultExtractor(BrandExtractor):
     """Default extractor for unknown brands - generic extraction"""
-    
+
     def can_extract(self, url: str) -> bool:
         """Default extractor can handle any URL"""
         return True
-    
-    def extract_product_info(self, url: str, html_content: str = None) -> Dict:
-        """Generic product extraction"""
-        logger.info(f"DefaultExtractor.extract_product_info: ENTRY - url={url[:100]}")
-        
+
+    def _fetch_with_scrape_do(self, url: str) -> Optional[str]:
+        """Fetch HTML using Scrape.do with JavaScript rendering"""
+        from config import Config
+
+        if not Config.SCRAPE_DO_ENABLED or not Config.SCRAPE_DO_API_KEY:
+            logger.warning("DefaultExtractor._fetch_with_scrape_do: Scrape.do not enabled")
+            return None
+
         try:
+            scrape_do_url = (
+                f"http://api.scrape.do/"
+                f"?url={requests.utils.quote(url, safe='')}"
+                f"&token={Config.SCRAPE_DO_API_KEY}"
+                f"&render=true"
+                f"&super=true"
+            )
+
+            response = requests.get(scrape_do_url, timeout=60)
+            response.raise_for_status()
+            html_content = response.text
+
+            logger.info(f"DefaultExtractor._fetch_with_scrape_do: Success, size={len(html_content)} chars")
+            return html_content
+
+        except Exception as e:
+            logger.warning(f"DefaultExtractor._fetch_with_scrape_do: Failed - {str(e)}")
+            return None
+
+    def extract_product_info(self, url: str, html_content: str = None) -> Dict:
+        """Generic product extraction - tries simple fetch first, then scrape.do for JS sites"""
+        logger.info(f"DefaultExtractor.extract_product_info: ENTRY - url={url[:100]}")
+
+        try:
+            use_scrape_do = False
+
             if not html_content:
                 from features.garments.scraper import fetch_html
                 html_content = fetch_html(url, retry_with_different_ua=True)
+
+                # If simple fetch failed or returned minimal content, try scrape.do
+                if not html_content or len(html_content) < 1000:
+                    logger.info("DefaultExtractor: Simple fetch failed or minimal content, trying scrape.do")
+                    html_content = self._fetch_with_scrape_do(url)
+                    use_scrape_do = True
+
                 if not html_content:
                     raise ExternalServiceError("Failed to fetch HTML content. Site may be blocking requests or require JavaScript.", service='default-extractor')
             
@@ -72,7 +109,28 @@ class DefaultExtractor(BrandExtractor):
             # Extract images using centralized utility
             from features.garments.scraper import extract_images_from_html
             images = extract_images_from_html(html_content, url, max_images=20)
-            
+
+            # If no images found and haven't tried scrape.do yet, retry with JS rendering
+            if not images and not use_scrape_do:
+                logger.info("DefaultExtractor: No images found, retrying with scrape.do")
+                scrape_html = self._fetch_with_scrape_do(url)
+                if scrape_html:
+                    html_content = scrape_html
+                    soup = BeautifulSoup(html_content, 'html.parser')
+                    title = extract_title_from_html(html_content) or title
+                    # Limit to 5 images for scrape.do (JS sites often have many non-product images)
+                    images = extract_images_from_html(html_content, url, max_images=5)
+                    use_scrape_do = True
+                    # Re-extract price if not found
+                    if not price:
+                        price_elem = soup.find(class_=re.compile('price', re.I))
+                        if price_elem:
+                            price = price_elem.get_text().strip()
+
+            # Limit images to 5 when scrape.do was used (to avoid collection/promo images)
+            if use_scrape_do and len(images) > 5:
+                images = images[:5]
+
             # Extract sizes
             sizes = []
             size_elements = soup.find_all(text=re.compile(r'\b(XS|S|M|L|XL|XXL|\d+)\b'))

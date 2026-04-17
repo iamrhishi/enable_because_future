@@ -177,34 +177,38 @@ class JobQueue:
             logger.exception(f"JobQueue._update_job_status: EXIT - Error: {str(e)}")
             raise
     
-    def create_job(self, user_id: str, person_image: bytes, garment_image: bytes, 
-                   garment_type: str = 'upper', garment_details: Dict = None, options: Dict = None) -> str:
+    def create_job(self, user_id: str, person_image: bytes, garment_image: bytes,
+                   garment_type: str = 'upper', garment_details: Dict = None, options: Dict = None,
+                   garment_url: str = None) -> str:
         """
         Create a new try-on job
-        
+
         Per context.md: Enforce quality guardrails (max queue size)
-        
+
+        Args:
+            garment_url: Source URL of the garment for reference
+
         Returns:
             job_id: Unique job identifier
-            
+
         Raises:
             ValidationError: If queue is full
         """
-        logger.info(f"JobQueue.create_job: ENTRY - user_id={user_id}, garment_type={garment_type}")
-        
+        logger.info(f"JobQueue.create_job: ENTRY - user_id={user_id}, garment_type={garment_type}, garment_url={garment_url[:50] if garment_url else None}")
+
         try:
             # Check queue size (quality guardrail)
             if self.queue.qsize() >= MAX_QUEUE_SIZE:
                 logger.warning(f"JobQueue.create_job: Queue full ({self.queue.qsize()}/{MAX_QUEUE_SIZE})")
                 raise ValidationError(f"Queue is full. Maximum {MAX_QUEUE_SIZE} jobs allowed. Please try again later.")
-            
+
             job_id = str(uuid.uuid4())
-            
-            # Create job record in database
+
+            # Create job record in database (include garment_url)
             db_manager.get_lastrowid(
-                """INSERT INTO tryon_jobs (job_id, user_id, status, progress)
-                   VALUES (?, ?, 'queued', 0)""",
-                (job_id, user_id)
+                """INSERT INTO tryon_jobs (job_id, user_id, status, progress, garment_url)
+                   VALUES (?, ?, 'queued', 0, ?)""",
+                (job_id, user_id, garment_url)
             )
             
             # Add to queue

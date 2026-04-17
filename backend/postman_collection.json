@@ -1,8 +1,8 @@
 {
 	"info": {
-		"_postman_id": "becausefuture-v1",
-		"name": "Because Future API - V1",
-		"description": "API collection for Because Future backend - Version 1\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections\n\nENVIRONMENT SETUP:\n1. Import postman_environment_local.json for Local Development (http://localhost:8000)\n2. Import postman_environment_remote.json for Remote Production (http://34.32.121.88:5001)\n3. Select environment from dropdown (top-right in Postman)\n4. All requests will use {{base_url}} from the selected environment",
+		"_postman_id": "becausefuture-v2",
+		"name": "Because Future API - V2",
+		"description": "API collection for Because Future backend - Version 2\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections\n\nENVIRONMENT SETUP:\n1. Import postman_environment_local.json for Local Development (http://localhost:8000)\n2. Import postman_environment_remote.json for Remote Production (http://34.32.121.88:5001)\n3. Select environment from dropdown (top-right in Postman)\n4. All requests will use {{base_url}} from the selected environment\n\n=== RECENT CHANGES (V2 - 2026-04-10) ===\n\nTask 1 - Saved Try-ons with Garment URL:\n• UPDATED: POST /api/tryon - Now saves garment_url with try-on result\n• UPDATED: GET /api/job/{job_id} - Returns garment_url when job is done\n• UPDATED: GET /api/job/{job_id}/result - Returns garment_url\n\nTask 2 - Sizing Algorithm (2026-04-13):\n• NEW: POST /api/sizing/recommend - Get size recommendation based on user measurements vs garment\n• NEW: GET /api/sizing/garment - Get garment sizing info from Lovable DB\n• Integrates with Lovable/Supabase API for garment measurements\n• Compares user body measurements with garment measurements\n• Returns fit analysis with confidence score\n\nTask 3 - Default Garment URLs:\n• NEW: GET /api/garments/defaults - Get default garment URLs by gender\n\nTask 4 - Deep Linking/Social Sharing:\n• Backend ready via existing POST /api/garments/scrape\n• Mobile app needs to implement share intent (iOS Universal Links / Android App Links)\n\nTask 5 - Layered Multi-Garment Try-On (2026-04-14):\n• NEW: POST /api/tryon/layered - Apply multiple garments sequentially with layering\n• Use case: top + jacket, shirt + blazer, dress + coat\n• First garment replaces existing clothes, subsequent garments layer on top\n• Synchronous processing, returns all intermediate results\n\nTask 6 - FIT Analysis API (2026-04-17):\n• NEW: POST /api/fit-analysis - Analyze garment fit against user body measurements\n• 4-tier classification: body fit, good fit, loose fit, tight\n• Supports upper garments (chest, sleeve, shirt length) and lower garments (waist, hip, inseam)\n• Returns detailed per-measurement fit status and recommendations",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -1100,6 +1100,382 @@
 							"body": "{\n    \"success\": true,\n    \"message\": \"No images extracted\",\n    \"data\": {\n        \"images\": [],\n        \"reason\": \"No product images found. Possible reasons: 1) Page requires JavaScript to load images (modern e-commerce sites), 2) Images are loaded dynamically via AJAX, 3) Page structure changed, 4) Access blocked or page not accessible. Try using /api/garments/scrape for more comprehensive extraction with brand-specific logic.\",\n        \"url\": \"https://example.com/product\"\n    }\n}"
 						}
 					]
+				},
+				{
+					"name": "Get Default Garments [NEW v2]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"description": "[NEW in V2] Get default garment URLs by gender. Returns pre-configured garments for easy try-on without manual URL entry. No authentication required.",
+						"url": {
+							"raw": "{{base_url}}/api/garments/defaults?gender=women",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garments", "defaults"],
+							"query": [
+								{
+									"key": "gender",
+									"value": "women",
+									"description": "Optional: 'men', 'women', 'unisex', or omit for all"
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Success - All Genders",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/garments/defaults",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "defaults"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"garments\": [\n            {\n                \"url\": \"https://lastdecades.de/collections/vintage-lederjacken-1/products/vintage-segura-lederjacke-m-983293\",\n                \"name\": \"Vintage Segura Leather Jacket\",\n                \"category\": \"outerwear\"\n            },\n            {\n                \"url\": \"https://www.lanius.com/collections/marie-nasemann/products/strickjacke-kurzarm-gots\",\n                \"name\": \"Short Sleeve Cardigan GOTS\",\n                \"category\": \"tops\"\n            },\n            {\n                \"url\": \"https://www.zara.com/de/de/taillierter-blazer-mit-knopfen-zw-collection-p07179047.html?v1=539599470&v2=2420942\",\n                \"name\": \"Tailored Blazer with Buttons ZW Collection\",\n                \"category\": \"outerwear\"\n            }\n        ],\n        \"gender\": \"all\"\n    }\n}"
+						},
+						{
+							"name": "Success - Women",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/garments/defaults?gender=women",
+									"host": ["{{base_url}}"],
+									"path": ["api", "garments", "defaults"],
+									"query": [
+										{
+											"key": "gender",
+											"value": "women"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"garments\": [\n            {\n                \"url\": \"https://lastdecades.de/collections/vintage-lederjacken-1/products/vintage-segura-lederjacke-m-983293\",\n                \"name\": \"Vintage Segura Leather Jacket\",\n                \"category\": \"outerwear\"\n            },\n            {\n                \"url\": \"https://www.lanius.com/collections/marie-nasemann/products/strickjacke-kurzarm-gots\",\n                \"name\": \"Short Sleeve Cardigan GOTS\",\n                \"category\": \"tops\"\n            },\n            {\n                \"url\": \"https://www.zara.com/de/de/taillierter-blazer-mit-knopfen-zw-collection-p07179047.html?v1=539599470&v2=2420942\",\n                \"name\": \"Tailored Blazer with Buttons ZW Collection\",\n                \"category\": \"outerwear\"\n            }\n        ],\n        \"gender\": \"women\"\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Sizing [NEW v2]",
+			"item": [
+				{
+					"name": "Get Size Recommendation [NEW v2]",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://brand.com/product-page\"\n}"
+						},
+						"description": "[NEW in V2] Get size recommendation by comparing user's body measurements with garment measurements from Lovable DB.\n\nProvide exactly one identifier: url, garment_id, or sku.\n\nRequires user to have body measurements saved (breast_circumference, waist_circumference, etc.).\n\nReturns fit analysis with confidence score and per-area breakdown.",
+						"url": {
+							"raw": "{{base_url}}/api/sizing/recommend",
+							"host": ["{{base_url}}"],
+							"path": ["api", "sizing", "recommend"]
+						}
+					},
+					"response": [
+						{
+							"name": "Success - Recommended",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://brand.com/product-page\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/sizing/recommend",
+									"host": ["{{base_url}}"],
+									"path": ["api", "sizing", "recommend"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"recommendation\": \"RECOMMENDED\",\n        \"recommendation_message\": \"This garment should fit you well.\",\n        \"confidence\": 85.0,\n        \"overall_fit\": \"good\",\n        \"fit_type\": \"regular\",\n        \"material_stretch\": \"slight\",\n        \"category\": \"top\",\n        \"garment_name\": \"Cotton T-Shirt\",\n        \"available_sizes\": \"S, M, L, XL\",\n        \"fit_analysis\": [\n            {\n                \"area\": \"chest\",\n                \"status\": \"good\",\n                \"message\": \"Good fit with 4.5cm ease\",\n                \"user_value\": 47.5,\n                \"garment_value\": 55,\n                \"difference\": 7.5\n            },\n            {\n                \"area\": \"sleeve_length\",\n                \"status\": \"good\",\n                \"message\": \"Good sleeve length (diff: +2.0cm)\",\n                \"user_value\": 58,\n                \"garment_value\": 60,\n                \"difference\": 2\n            }\n        ],\n        \"checks_performed\": 3,\n        \"checks_passed\": 2.7\n    }\n}"
+						},
+						{
+							"name": "Garment Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://unknown.com/product\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/sizing/recommend",
+									"host": ["{{base_url}}"],
+									"path": ["api", "sizing", "recommend"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Garment not found in sizing database. This product may not have sizing data available.\",\n    \"error_code\": \"GARMENT_NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Garment Info [NEW v2]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"description": "[NEW in V2] Get garment sizing info from Lovable DB (public endpoint, no auth required).\n\nQuery Parameters (provide exactly one):\n- url: Product page URL\n- id: Garment UUID\n- sku: Garment SKU",
+						"url": {
+							"raw": "{{base_url}}/api/sizing/garment?url=https://brand.com/product-page",
+							"host": ["{{base_url}}"],
+							"path": ["api", "sizing", "garment"],
+							"query": [
+								{
+									"key": "url",
+									"value": "https://brand.com/product-page",
+									"description": "Product page URL"
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/sizing/garment?url=https://brand.com/product-page",
+									"host": ["{{base_url}}"],
+									"path": ["api", "sizing", "garment"],
+									"query": [
+										{
+											"key": "url",
+											"value": "https://brand.com/product-page"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"id\": \"691905ca-e414-4e7c-a321-106b5e118232\",\n        \"brand_id\": \"0369d916-39c4-469c-ac17-0379c12b7d87\",\n        \"name\": \"T-shirt\",\n        \"sku\": \"ASD\",\n        \"category\": \"top\",\n        \"subcategory\": \"T-shirt\",\n        \"fit_type\": \"regular\",\n        \"material_stretch\": \"slight\",\n        \"size_label\": \"L, XL, M, S\",\n        \"garment_measurements\": [\n            {\"measurement_type\": \"breast_width\", \"value_cm\": 55},\n            {\"measurement_type\": \"front_length\", \"value_cm\": 55},\n            {\"measurement_type\": \"arm_length\", \"value_cm\": 55},\n            {\"measurement_type\": \"arm_width\", \"value_cm\": 55}\n        ]\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Fit Analysis [NEW]",
+			"description": "FIT Analysis API - Intelligent garment fit assessment by comparing user body measurements against garment dimensions. Uses 4-tier classification: body fit, good fit, loose fit, tight.",
+			"item": [
+				{
+					"name": "Analyze Garment Fit",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"garment_type\": \"upper\",\n  \"garment_size\": \"M\",\n  \"garment_measurements\": {\n    \"chest_width\": 50,\n    \"sleeve_length\": 65,\n    \"shirt_length\": 70,\n    \"arm_width\": 15\n  }\n}"
+						},
+						"description": "Analyze how well a garment would fit based on user's body measurements.\n\n**garment_type**: 'upper' or 'lower'\n\n**Upper garment measurements** (any of):\n- chest_width, sleeve_length, shirt_length, shoulder_width, waist_width, arm_width\n\n**Lower garment measurements** (any of):\n- waist, hip, inseam, thigh_width, knee_width, calf_width, ankle_width, rise\n\n**4-Tier Fit Classification:**\n- Body Fit (<0.1cm diff): Perfect match\n- Good Fit (0.1-1.9cm): Comfortable\n- Loose Fit (2.0-3.9cm): Slightly oversized\n- Tight (>=4cm body>garment): Too small\n\nRequires user to have body measurements saved.",
+						"url": {
+							"raw": "{{base_url}}/api/fit-analysis",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fit-analysis"]
+						}
+					},
+					"response": [
+						{
+							"name": "Success - Good Fit",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_type\": \"upper\",\n  \"garment_size\": \"M\",\n  \"garment_measurements\": {\n    \"chest_width\": 50,\n    \"sleeve_length\": 65,\n    \"shirt_length\": 70,\n    \"arm_width\": 15\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fit-analysis",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fit-analysis"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"overall_fit\": \"good fit\",\n        \"fit_summary\": {\n            \"body_fit\": 1,\n            \"good_fits\": 3,\n            \"loose_fits\": 0,\n            \"tight\": 0\n        },\n        \"detailed_measurements\": [\n            {\n                \"measurement_name\": \"chest_width\",\n                \"body_value\": 51,\n                \"garment_value\": 50,\n                \"difference\": 1,\n                \"fit_status\": \"good fit\",\n                \"recommendation\": \"Good fit - comfortable wearing\"\n            },\n            {\n                \"measurement_name\": \"sleeve_length\",\n                \"body_value\": 65,\n                \"garment_value\": 65,\n                \"difference\": 0,\n                \"fit_status\": \"body fit\",\n                \"recommendation\": \"Perfect fit - exactly matches your measurements\"\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Success - Lower Garment (Loose Fit)",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_type\": \"lower\",\n  \"garment_size\": \"L\",\n  \"garment_measurements\": {\n    \"waist\": 76,\n    \"hip\": 95,\n    \"inseam\": 75\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fit-analysis",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fit-analysis"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"overall_fit\": \"loose fit\",\n        \"fit_summary\": {\n            \"body_fit\": 0,\n            \"good_fits\": 1,\n            \"loose_fits\": 2,\n            \"tight\": 0\n        },\n        \"detailed_measurements\": [\n            {\n                \"measurement_name\": \"waist\",\n                \"body_value\": 40,\n                \"garment_value\": 38,\n                \"difference\": 2,\n                \"fit_status\": \"loose fit\",\n                \"recommendation\": \"Loose fit - more room for movement\"\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Error - No Body Measurements",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_type\": \"upper\",\n  \"garment_measurements\": {\n    \"chest_width\": 50\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fit-analysis",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fit-analysis"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"User has not entered body measurements\",\n    \"status_code\": 404\n}"
+						},
+						{
+							"name": "Error - Invalid Garment Type",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"garment_type\": \"invalid\",\n  \"garment_measurements\": {\n    \"chest_width\": 50\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/fit-analysis",
+									"host": ["{{base_url}}"],
+									"path": ["api", "fit-analysis"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Invalid garment_type: must be 'upper' or 'lower'\",\n    \"status_code\": 400\n}"
+						}
+					]
 				}
 			]
 		},
@@ -1403,7 +1779,7 @@
 			"name": "Try-On",
 			"item": [
 				{
-					"name": "Create Try-On Job (with item_urls + optional selfie)",
+					"name": "Create Try-On Job (with item_urls + optional selfie) [UPDATED v2]",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1421,13 +1797,20 @@
 									"key": "item_urls",
 									"value": "[\"https://www.zara.com/us/en/product/12345\"]",
 									"type": "text",
-									"description": "JSON array of product URLs. Example: [\"https://www.zara.com/us/en/product/12345\"]"
+									"description": "JSON array of product URLs. Example: [\"https://www.zara.com/us/en/product/12345\"]. [V2] First URL is saved as garment_url for linking try-on results to source."
 								},
 								{
 									"key": "options",
 									"value": "{\"garment_index\": 0}",
 									"type": "text",
 									"description": "Optional: JSON object with garment_index and garment_details, e.g. {\"garment_index\":0,\"garment_details\":{\"brand\":\"Zara\"}}"
+								},
+								{
+									"key": "garment_url",
+									"value": "https://www.zara.com/us/en/product/12345",
+									"type": "text",
+									"disabled": true,
+									"description": "[V2 NEW] Optional: Direct garment URL. If provided, overrides URL extraction from item_urls. Saved with try-on result for reference."
 								}
 							]
 						},
@@ -1436,7 +1819,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
 						},
-						"description": "Create try-on job using product URLs. Backend will scrape product pages (Zara, etc.), extract images and garment details, and call Gemini-1.5-pro. If selfie/person_image is not provided, the user's saved avatar is used."
+						"description": "[UPDATED V2] Create try-on job using product URLs. Backend will scrape product pages (Zara, etc.), extract images and garment details, and call Gemini-1.5-pro. If selfie/person_image is not provided, the user's saved avatar is used.\n\n[V2] Now saves garment_url with the try-on result. The URL is extracted from item_urls (first URL) or can be provided directly via garment_url field. Check job status/result to get the garment_url back."
 					},
 					"response": [
 						{
@@ -1490,7 +1873,7 @@
 					]
 				},
 				{
-					"name": "Create Try-On Job (with wardrobe_item_id + optional selfie)",
+					"name": "Create Try-On Job (with wardrobe_item_id + optional selfie) [UPDATED v2]",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1508,7 +1891,7 @@
 									"key": "wardrobe_item_id",
 									"value": "1",
 									"type": "text",
-									"description": "ID of wardrobe item from /api/wardrobe/items. Backend will load the image and garment details (brand, color, category, etc.) automatically."
+									"description": "ID of wardrobe item from /api/wardrobe/items. Backend will load the image and garment details (brand, color, category, etc.) automatically. [V2] Also extracts garment URL from wardrobe item if available."
 								}
 							]
 						},
@@ -1517,7 +1900,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tryon"]
 						},
-						"description": "Create try-on job using wardrobe item ID. Most efficient method - uses already stored images and metadata. Backend automatically loads the garment image from storage and extracts garment details (brand, color, category, fabric, etc.) from the wardrobe item. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar."
+						"description": "[UPDATED V2] Create try-on job using wardrobe item ID. Most efficient method - uses already stored images and metadata. Backend automatically loads the garment image from storage and extracts garment details (brand, color, category, fabric, etc.) from the wardrobe item. If selfie/person_image is not provided, backend uses the authenticated user's saved avatar.\n\n[V2] Now saves garment_url with the try-on result if the wardrobe item has a URL. Check job status/result to get the garment_url back."
 					},
 					"response": [
 						{
@@ -1604,10 +1987,11 @@
 					]
 				},
 				{
-					"name": "Get Job Status",
+					"name": "Get Job Status [UPDATED v2]",
 					"request": {
 						"method": "GET",
 						"header": [],
+						"description": "[UPDATED in V2] Get try-on job status. When status is 'done', now also returns garment_url field linking to the source garment product page.",
 						"url": {
 							"raw": "{{base_url}}/api/job/{{job_id}}",
 							"host": ["{{base_url}}"],
@@ -1682,7 +2066,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"done\",\n        \"progress\": 100,\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\"\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"c6e2dd9f-34cd-4578-9055-107034e827ce\",\n        \"status\": \"done\",\n        \"progress\": 100,\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\",\n        \"garment_url\": \"https://www.zara.com/de/de/taillierter-blazer-mit-knopfen-zw-collection-p07179047.html\"\n    }\n}"
 						},
 						{
 							"name": "Job Failed",
@@ -1710,10 +2094,11 @@
 					]
 				},
 				{
-					"name": "Get Job Result",
+					"name": "Get Job Result [UPDATED v2]",
 					"request": {
 						"method": "GET",
 						"header": [],
+						"description": "[UPDATED in V2] Get try-on result image URL. Now also returns garment_url field linking to the source garment product page.",
 						"url": {
 							"raw": "{{base_url}}/api/job/{{job_id}}/result",
 							"host": ["{{base_url}}"],
@@ -1742,7 +2127,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\"\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"result_url\": \"http://localhost:8000/images/tryon-results/f3a6ad94/c6e2dd9f-34cd-4578-9055-107034e827ce.png\",\n        \"garment_url\": \"https://www.zara.com/de/de/taillierter-blazer-mit-knopfen-zw-collection-p07179047.html\"\n    }\n}"
 						},
 						{
 							"name": "Not Ready",
@@ -1841,6 +2226,83 @@
 							],
 							"cookie": [],
 							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"job_id\": \"a1b2c3d4-5678-90ef-ghij-klmnopqrstuv\",\n        \"status\": \"queued\",\n        \"estimated_time\": 20\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Layered Multi-Garment Try-On [NEW v2]",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "person_image",
+									"type": "file",
+									"src": [],
+									"disabled": true,
+									"description": "Optional: person image file. If omitted, backend uses the authenticated user's saved avatar."
+								},
+								{
+									"key": "garment_images[]",
+									"type": "file",
+									"src": [],
+									"description": "Array of garment images in order to apply (e.g., top first, then jacket)"
+								},
+								{
+									"key": "garment_types[]",
+									"type": "text",
+									"value": "upper",
+									"description": "Array of garment types: 'upper', 'lower', 'outerwear'. Match order of garment_images[]"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tryon/layered",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tryon", "layered"]
+						},
+						"description": "Layered multi-garment try-on. Applies garments SEQUENTIALLY - result of garment 1 becomes base for garment 2. Use for: top + jacket, shirt + blazer, dress + coat. Max 5 garments. Synchronous - waits for all processing."
+					},
+					"response": [
+						{
+							"name": "Layered Try-On Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "garment_images[]",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "garment_types[]",
+											"type": "text",
+											"value": "upper"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/tryon/layered",
+									"host": ["{{base_url}}"],
+									"path": ["api", "tryon", "layered"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"results\": [\n            {\n                \"layer\": 1,\n                \"garment_type\": \"upper\",\n                \"result_url\": \"https://server.com/images/tryon-results/user123/abc_layer1.png\"\n            },\n            {\n                \"layer\": 2,\n                \"garment_type\": \"outerwear\",\n                \"result_url\": \"https://server.com/images/tryon-results/user123/abc_layer2.png\"\n            }\n        ],\n        \"final_result_url\": \"https://server.com/images/tryon-results/user123/abc_layer2.png\",\n        \"layers_processed\": 2\n    },\n    \"message\": \"Layered try-on complete with 2 garments\"\n}"
 						}
 					]
 				},

@@ -908,6 +908,199 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         raise ExternalServiceError(f"Try-on processing failed: {str(e)}", service='gemini')
 
 
+def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
+                          garment_details: dict = None) -> str:
+    """
+    Process try-on with LAYERING mode - adds garment OVER existing outfit.
+
+    Use this for layering scenarios like: top + jacket, dress + coat, etc.
+    The prompt explicitly tells Gemini to preserve existing clothing.
+
+    Args:
+        person_image: Person image bytes (can be previous try-on result with clothing)
+        garment_image: Garment image bytes to layer on top
+        garment_type: 'upper' or 'lower' or 'outerwear'
+        garment_details: Optional dict with garment info
+
+    Returns:
+        result_url: Base64 data URL of result image
+    """
+    logger.info(f"process_tryon_layered: ENTRY - garment_type={garment_type}")
+
+    try:
+        if not Config.GEMINI_API_KEY:
+            raise ExternalServiceError("Gemini API key not configured", service='gemini')
+
+        # Handle list of images - use only the first one
+        if isinstance(garment_image, list):
+            garment_image = garment_image[0]
+
+        # Log image sizes
+        person_size_mb = len(person_image) / (1024 * 1024)
+        garment_size_mb = len(garment_image) / (1024 * 1024)
+        logger.info(f"process_tryon_layered: Image sizes - person: {person_size_mb:.2f}MB, garment: {garment_size_mb:.2f}MB")
+
+        # Convert images to base64
+        person_base64 = base64.b64encode(person_image).decode('utf-8')
+        garment_base64 = base64.b64encode(garment_image).decode('utf-8')
+
+        # Generate seed for consistency
+        input_hash = hashlib.sha256(person_image + garment_image).digest()
+        seed = int.from_bytes(input_hash[:8], byteorder='big') % (2**31)
+        logger.info(f"process_tryon_layered: Generated seed={seed}")
+
+        # Determine garment type description
+        garment_type_desc = "garment"
+        if garment_type == 'upper' or garment_type == 'outerwear':
+            garment_type_desc = "jacket/outerwear/top layer"
+        elif garment_type == 'lower':
+            garment_type_desc = "bottom layer garment"
+
+        # Build garment details text
+        garment_info_parts = []
+        if garment_details:
+            if garment_details.get('category_name'):
+                garment_info_parts.append(f"Type: {garment_details['category_name']}")
+            if garment_details.get('brand'):
+                garment_info_parts.append(f"Brand: {garment_details['brand']}")
+            if garment_details.get('color'):
+                garment_info_parts.append(f"Color: {garment_details['color']}")
+
+        # Get input dimensions
+        input_width, input_height = None, None
+        try:
+            person_img = Image.open(BytesIO(person_image))
+            input_width, input_height = person_img.size
+            logger.info(f"process_tryon_layered: Input dimensions: {input_width}x{input_height}")
+        except Exception as e:
+            logger.warning(f"process_tryon_layered: Could not get dimensions: {e}")
+
+        # Build LAYERING-specific prompt
+        prompt_parts = [
+            "TASK: Add a new garment LAYER over the person's existing outfit.\n\n",
+            "CRITICAL: The person in image 1 is ALREADY WEARING CLOTHES. ",
+            "You must PRESERVE their existing outfit and ADD the new garment FROM IMAGE 2 on top.\n\n"
+        ]
+
+        if garment_info_parts:
+            prompt_parts.append(f"NEW GARMENT TO ADD: {', '.join(garment_info_parts)}.\n\n")
+
+        prompt_parts.extend([
+            f"Add the {garment_type_desc} from image 2 OVER the person's current clothing.\n\n",
+            "LAYERING REQUIREMENTS (CRITICAL):\n",
+            "- DO NOT remove or replace the person's existing clothes - they stay visible underneath.\n",
+            "- The new garment goes ON TOP of what they're already wearing.\n",
+            "- If adding a jacket over a shirt, the shirt collar/sleeves may peek out - this is correct.\n",
+            "- If adding outerwear, it should look like they put it on over their current outfit.\n\n",
+            "GARMENT MATCHING REQUIREMENTS:\n",
+            "- Reproduce the EXACT garment design from image 2: same style, cut, details.\n",
+            "- Preserve the exact fabric pattern, texture, color, and material appearance.\n",
+            "- The garment must fit naturally over the existing clothes.\n\n",
+            "FRAMING REQUIREMENTS:\n",
+        ])
+
+        if input_width and input_height:
+            prompt_parts.append(f"- Output image MUST be exactly {input_width}x{input_height} pixels.\n")
+
+        prompt_parts.extend([
+            "- Keep the person's HEAD at the EXACT same position (same distance from top).\n",
+            "- Keep the person's FEET at the EXACT same position if visible.\n",
+            "- Do NOT zoom, crop, or change the framing in any way.\n",
+            "- Do NOT cut off any body parts.\n\n",
+            "OUTPUT:\n",
+            "- Single edited image showing the person wearing their original outfit WITH the new garment layered on top.\n",
+            "- Preserve face, hair, pose, and all original details.\n"
+        ])
+
+        prompt = "".join(prompt_parts)
+
+        # Call Gemini API
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": Config.GEMINI_API_KEY
+        }
+
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": person_base64
+                        }
+                    },
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": garment_base64
+                        }
+                    }
+                ]
+            }],
+            "generationConfig": {
+                "responseModalities": ["image", "text"],
+                "temperature": 0.2,
+                "seed": seed
+            }
+        }
+
+        # Make API call with retries
+        max_retries = 2
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"process_tryon_layered: API call attempt {attempt + 1}/{max_retries + 1}")
+                response = requests.post(url, headers=headers, json=payload, timeout=120)
+
+                if response.status_code == 200:
+                    result = response.json()
+
+                    # Extract image from response
+                    if 'candidates' in result and len(result['candidates']) > 0:
+                        candidate = result['candidates'][0]
+                        if 'content' in candidate and 'parts' in candidate['content']:
+                            for part in candidate['content']['parts']:
+                                if 'inlineData' in part:
+                                    image_data = part['inlineData']['data']
+                                    mime_type = part['inlineData'].get('mimeType', 'image/png')
+                                    result_url = f"data:{mime_type};base64,{image_data}"
+                                    logger.info(f"process_tryon_layered: EXIT - Success")
+                                    return result_url
+
+                    raise ExternalServiceError("No image in Gemini response", service='gemini')
+
+                elif response.status_code in [429, 500, 502, 503]:
+                    # Retryable errors
+                    last_error = f"HTTP {response.status_code}"
+                    if attempt < max_retries:
+                        wait_time = (attempt + 1) * 5
+                        logger.warning(f"process_tryon_layered: {last_error}, retrying in {wait_time}s")
+                        time.sleep(wait_time)
+                        continue
+                else:
+                    error_text = response.text[:500]
+                    raise ExternalServiceError(f"Gemini API error {response.status_code}: {error_text}", service='gemini')
+
+            except requests.Timeout:
+                last_error = "Timeout"
+                if attempt < max_retries:
+                    logger.warning(f"process_tryon_layered: Timeout, retrying...")
+                    continue
+                raise ExternalServiceError("Gemini API timeout", service='gemini')
+
+        raise ExternalServiceError(f"Gemini API failed after retries: {last_error}", service='gemini')
+
+    except ExternalServiceError:
+        raise
+    except Exception as e:
+        logger.exception(f"process_tryon_layered: EXIT - Error: {str(e)}")
+        raise ExternalServiceError(f"Layered try-on failed: {str(e)}", service='gemini')
+
+
 def remove_background(image_data: bytes) -> bytes:
     """
     Remove background from image using Gemini API
