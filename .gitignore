@@ -31,7 +31,9 @@ backend/.env.*
 
 # OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
+Desktop.ini
 
 # Logs
 *.log
@@ -64,4 +66,20 @@ backend/images/
 
 # Deprecated files (to be deleted later)
 _deprecated/
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets (extra safety)
+**/secrets/
+**/*.pem
+**/*.key
 
