@@ -43,22 +43,26 @@ class FitAnalysisService:
     }
     
     # Measurement transformations for comparison
-    # Format: (garment_key, body_key, transformation_function)
+    # Format: garment_key -> (body_key, transformation_function)
+    # Garment API field names mapped to body measurement fields
     MEASUREMENT_MAPPINGS = {
-        # Upper garment measurements
-        'breast_width': ('breast_circumference', lambda val: val / 2),  # garment uses half circumference
-        'arm_width': ('biceps_circumference', lambda val: val / 2),
-        'shirt_length': ('collarbone_to_belly_button_length', lambda val: val),
-        'arm_length': ('arm_length', lambda val: val),
-        'shoulder_width': ('shoulder_circumference', lambda val: val / 2),
-        
-        # Lower garment measurements
-        'waist': ('waist_circumference', lambda val: val / 2),  # garment uses half circumference
-        'hip': ('hip_circumference', lambda val: val / 2),
-        'leg_length': ('inner_leg_length', lambda val: val),
-        'front_rise': ('waist_to_crotch_front_length', lambda val: val),
-        'inseam': ('inner_leg_length', lambda val: val),
-        'thigh': ('upper_thigh_circumference', lambda val: val / 2),
+        # Upper garment measurements (from Garment API: breast_width, front_length, arm_length, arm_width)
+        'breast_width': ('breast_circumference', lambda val: val / 2),   # circumference ÷ 2
+        'arm_width': ('biceps_circumference', lambda val: val / 2),      # circumference ÷ 2
+        'front_length': ('collarbone_to_belly_button_length', lambda val: val),  # direct
+        'shirt_length': ('collarbone_to_belly_button_length', lambda val: val),  # alias
+        'arm_length': ('arm_length', lambda val: val),                   # direct
+        'shoulder_width': ('shoulder_circumference', lambda val: val / 2),  # circumference ÷ 2
+
+        # Lower garment measurements (from Garment API: waist, hip, front_crotch, inner_leg_length, thigh)
+        'waist': ('waist_circumference', lambda val: val / 2),           # circumference ÷ 2
+        'hip': ('hip_circumference', lambda val: val / 2),               # circumference ÷ 2
+        'front_crotch': ('waist_to_crotch_front_length', lambda val: val),  # direct
+        'front_rise': ('waist_to_crotch_front_length', lambda val: val),    # alias
+        'inner_leg_length': ('inner_leg_length', lambda val: val),       # direct
+        'leg_length': ('inner_leg_length', lambda val: val),             # alias
+        'inseam': ('inner_leg_length', lambda val: val),                 # alias
+        'thigh': ('upper_thigh_circumference', lambda val: val / 2),     # circumference ÷ 2
     }
     
     @staticmethod
@@ -223,28 +227,36 @@ class FitAnalysisService:
     def _find_body_measurement(garment_key: str) -> str:
         """
         Find the corresponding body measurement key for a garment measurement
-        
+
         Args:
-            garment_key: Garment measurement key
-            
+            garment_key: Garment measurement key (from Garment API)
+
         Returns:
             Body measurement key or None
         """
-        # Direct mappings
+        # Mappings: garment_key → body_measurement_key
+        # Garment API returns: breast_width, front_length, arm_length, arm_width (tops)
+        #                      waist, hip, front_crotch, inner_leg_length, thigh (bottoms)
         mapping = {
-            'breast_width': 'breast_circumference',
-            'arm_width': 'biceps_circumference',
-            'shirt_length': 'collarbone_to_belly_button_length',
-            'arm_length': 'arm_length',
-            'shoulder_width': 'shoulder_circumference',
-            'waist': 'waist_circumference',
-            'hip': 'hip_circumference',
-            'leg_length': 'inner_leg_length',
-            'front_rise': 'waist_to_crotch_front_length',
-            'inseam': 'inner_leg_length',
-            'thigh': 'upper_thigh_circumference',
+            # Upper garment mappings
+            'breast_width': 'breast_circumference',      # ÷2 transform
+            'arm_width': 'biceps_circumference',         # ÷2 transform
+            'front_length': 'collarbone_to_belly_button_length',  # direct
+            'shirt_length': 'collarbone_to_belly_button_length',  # alias
+            'arm_length': 'arm_length',                  # direct
+            'shoulder_width': 'shoulder_circumference',  # ÷2 transform
+
+            # Lower garment mappings
+            'waist': 'waist_circumference',              # ÷2 transform
+            'hip': 'hip_circumference',                  # ÷2 transform
+            'front_crotch': 'waist_to_crotch_front_length',  # direct (from Garment API)
+            'front_rise': 'waist_to_crotch_front_length',    # alias
+            'inner_leg_length': 'inner_leg_length',      # direct (from Garment API)
+            'leg_length': 'inner_leg_length',            # alias
+            'inseam': 'inner_leg_length',                # alias
+            'thigh': 'upper_thigh_circumference',        # ÷2 transform
         }
-        
+
         return mapping.get(garment_key)
     
     @staticmethod
