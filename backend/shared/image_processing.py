@@ -16,7 +16,51 @@ MAX_FILE_SIZE = 6 * 1024 * 1024  # 6 MB (context.md line 124)
 MAX_DIMENSION = 4096  # 4096x4096 (context.md line 124)
 MAX_DIMENSION_RESIZE = 2048  # 2048px max dimension (context.md line 78)
 ALLOWED_FORMATS = ['JPEG', 'PNG', 'WEBP']
-ALLOWED_MIMETYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+CONVERTIBLE_FORMATS = ['AVIF', 'HEIC', 'HEIF', 'BMP', 'TIFF', 'GIF']  # Will be converted to PNG
+ALLOWED_MIMETYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif']
+
+
+def convert_to_supported_format(image_data: bytes) -> bytes:
+    """
+    Convert unsupported image formats (AVIF, HEIC, etc.) to PNG.
+
+    Args:
+        image_data: Image bytes (possibly in unsupported format)
+
+    Returns:
+        Image bytes in supported format (PNG if converted, original if already supported)
+    """
+    try:
+        img = Image.open(BytesIO(image_data))
+        img_format = img.format
+
+        if img_format in ALLOWED_FORMATS:
+            # Already supported, return as-is
+            return image_data
+
+        if img_format in CONVERTIBLE_FORMATS:
+            logger.info(f"convert_to_supported_format: Converting {img_format} to PNG")
+            # Convert to RGB/RGBA and save as PNG
+            if img.mode in ('RGBA', 'LA', 'PA'):
+                img = img.convert('RGBA')
+            elif img.mode == 'P':
+                img = img.convert('RGBA')
+            else:
+                img = img.convert('RGB')
+
+            output = BytesIO()
+            img.save(output, format='PNG', optimize=True)
+            result = output.getvalue()
+            logger.info(f"convert_to_supported_format: Converted {img_format} to PNG ({len(result)} bytes)")
+            return result
+
+        # Unknown format, return original and let validation handle it
+        logger.warning(f"convert_to_supported_format: Unknown format {img_format}, returning original")
+        return image_data
+
+    except Exception as e:
+        logger.warning(f"convert_to_supported_format: Error: {str(e)}, returning original")
+        return image_data
 
 
 def validate_image(image_data: bytes, filename: str = None) -> dict:
@@ -63,7 +107,7 @@ def validate_image(image_data: bytes, filename: str = None) -> dict:
         
         # Check format
         if img_format not in ALLOWED_FORMATS:
-            errors.append(f"Format {img_format} not allowed. Allowed: {', '.join(ALLOWED_FORMATS)}")
+            errors.append(f"Format {img_format} not allowed. Allowed: {', '.join(ALLOWED_FORMATS)}. Tip: Use preprocess_image() to auto-convert AVIF/HEIC.")
         
         # Check dimensions
         max_dim = max(img_size)
@@ -228,6 +272,9 @@ def preprocess_image(image_data: bytes, filename: str = None,
     logger.info("preprocess_image: ENTRY")
     
     try:
+        # Convert unsupported formats (AVIF, HEIC, etc.) to PNG first
+        image_data = convert_to_supported_format(image_data)
+
         # Quick dimension check first - if image exceeds MAX_DIMENSION, resize immediately
         # This prevents validation errors for large images that will be resized anyway
         try:
@@ -239,8 +286,8 @@ def preprocess_image(image_data: bytes, filename: str = None,
         except Exception as e:
             # If we can't open the image, let validation handle it
             logger.debug(f"preprocess_image: Could not check dimensions: {str(e)}, proceeding to validation")
-        
-        # Validate (after potential initial resize)
+
+        # Validate (after potential conversion and initial resize)
         validation = validate_image(image_data, filename)
         logger.info(f"preprocess_image: Image validated - {validation['format']}, {validation['size']}")
         
