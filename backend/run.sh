@@ -1,12 +1,12 @@
 #!/bin/bash
-# run.sh - Start backend server normally
+# run.sh - Start backend server using nohup
 
-PORT=8000
+PORT=5001
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== BecauseFuture Backend ==="
 
-# Kill existing processes on port
+# Kill existing processes on port 5001
 echo "Checking for existing processes on port $PORT..."
 PID=$(lsof -ti :$PORT 2>/dev/null)
 if [ -n "$PID" ]; then
@@ -15,23 +15,22 @@ if [ -n "$PID" ]; then
     sleep 1
 fi
 
-# Activate virtual environment and start server
-echo "Starting Flask server on port $PORT..."
 cd "$SCRIPT_DIR"
 
+# Activate virtual environment
 if [ -d "./venv" ]; then
     source ./venv/bin/activate
 elif [ -d "../venv" ]; then
     source ../venv/bin/activate
 fi
 
-echo ""
-echo "========================================"
-echo "Server starting on http://localhost:$PORT"
-echo "API Base: http://localhost:$PORT/api"
-echo "Press Ctrl+C to stop"
-echo "========================================"
-echo ""
+echo "Starting Flask server on port $PORT..."
+PORT=$PORT nohup python app.py > app.log 2>&1 &
+SERVER_PID=$!
 
-# Run server in foreground
-python app.py
+echo ""
+echo "========================================"
+echo "Server started with PID: $SERVER_PID"
+echo "Port:    $PORT"
+echo "Logs:    tail -f $SCRIPT_DIR/app.log"
+echo "========================================"
