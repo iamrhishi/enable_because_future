@@ -74,11 +74,67 @@ class DefaultExtractor(BrandExtractor):
             logger.warning(f"DefaultExtractor._fetch_with_scrape_do: Failed - {str(e)}")
             return None
 
+    def _try_shopify_json(self, url: str) -> Optional[Dict]:
+        """
+        Try to fetch product data from Shopify's built-in JSON endpoint.
+        Works for any Shopify store: <product-url>.json returns structured data.
+        """
+        try:
+            # Strip query params and append .json
+            clean_url = url.split('?')[0].rstrip('/')
+            json_url = clean_url + '.json'
+            response = requests.get(json_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            product = data.get('product')
+            if not product:
+                return None
+
+            title = product.get('title')
+            vendor = product.get('vendor')
+
+            images = [img['src'] for img in product.get('images', []) if img.get('src')]
+
+            variants = product.get('variants', [])
+            sizes = list({v['title'] for v in variants if v.get('title') and v['title'] != 'Default Title'})
+
+            price = None
+            if variants:
+                price = variants[0].get('price')
+
+            options = product.get('options', [])
+            colors = []
+            for opt in options:
+                if opt.get('name', '').lower() in ('color', 'colour', 'farbe'):
+                    colors = opt.get('values', [])
+
+            logger.info(f"DefaultExtractor._try_shopify_json: Success - {title}")
+            return {
+                'title': title,
+                'price': price,
+                'images': images,
+                'sizes': sizes,
+                'colors': colors,
+                'brand': vendor,
+                'description': product.get('body_html'),
+            }
+        except Exception as e:
+            logger.debug(f"DefaultExtractor._try_shopify_json: Not a Shopify store or failed - {str(e)}")
+            return None
+
     def extract_product_info(self, url: str, html_content: str = None) -> Dict:
-        """Generic product extraction - tries simple fetch first, then scrape.do for JS sites"""
+        """Generic product extraction - tries Shopify JSON first, then simple fetch, then scrape.do for JS sites"""
         logger.info(f"DefaultExtractor.extract_product_info: ENTRY - url={url[:100]}")
 
         try:
+            # Try Shopify JSON endpoint first (fast, no scraping needed)
+            if not html_content:
+                shopify_data = self._try_shopify_json(url)
+                if shopify_data:
+                    logger.info("DefaultExtractor.extract_product_info: EXIT - Used Shopify JSON endpoint")
+                    return shopify_data
+
             use_scrape_do = False
 
             if not html_content:
