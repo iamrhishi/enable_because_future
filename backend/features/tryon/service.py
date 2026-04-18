@@ -865,21 +865,20 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = result_img.resize((original_width, original_height), Image.Resampling.LANCZOS)
                             logger.info(f"process_tryon: Resized output to match input dimensions (same aspect ratio)")
                         else:
-                            # Different aspect ratio - scale to fit within target, center on transparent canvas
+                            # Different aspect ratio - scale to FILL and crop (preserves person size)
                             scale_w = original_width / result_width
                             scale_h = original_height / result_height
-                            scale = min(scale_w, scale_h)
+                            scale = max(scale_w, scale_h)  # Use max to preserve person size
 
                             new_w = int(result_width * scale)
                             new_h = int(result_height * scale)
                             result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                            canvas = Image.new('RGBA', (original_width, original_height), (0, 0, 0, 0))
-                            paste_x = (original_width - new_w) // 2
-                            paste_y = (original_height - new_h) // 2
-                            canvas.paste(result_img, (paste_x, paste_y), result_img)
-                            result_img = canvas
-                            logger.info(f"process_tryon: Scaled and centered output on transparent canvas (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
+                            # Center crop to target dimensions
+                            crop_left = (new_w - original_width) // 2
+                            crop_top = (new_h - original_height) // 2
+                            result_img = result_img.crop((crop_left, crop_top, crop_left + original_width, crop_top + original_height))
+                            logger.info(f"process_tryon: Scaled to fill and cropped (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
                     else:
                         logger.info(f"process_tryon: Output dimensions already match input: {result_width}x{result_height}")
 

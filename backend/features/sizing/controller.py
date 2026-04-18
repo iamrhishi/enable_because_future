@@ -122,14 +122,16 @@ def get_size_recommendation():
 @sizing_bp.route('/garment', methods=['GET'])
 def get_garment_info():
     """
-    Get garment sizing info from Lovable DB (public endpoint)
+    Get garment sizing info from Lovable DB (public endpoint).
+    Falls back to scraping basic product info when garment is not in the sizing DB.
 
     Query Parameters (provide exactly one):
     - url: Product page URL
     - id: Garment UUID
     - sku: Garment SKU
 
-    Returns garment data with measurements
+    Returns garment data with measurements when available.
+    When not in the sizing DB, returns scraped product info with has_measurements=false.
     """
     logger.info("get_garment_info: ENTRY")
 
@@ -146,14 +148,51 @@ def get_garment_info():
 
         garment_data = fetch_garment_from_lovable(url=url, garment_id=garment_id, sku=sku)
 
-        if not garment_data:
+        if garment_data:
+            garment_data['has_measurements'] = bool(garment_data.get('garment_measurements'))
+            logger.info(f"get_garment_info: EXIT - Found garment in sizing DB: {garment_data.get('name')}")
+            return success_response(data=garment_data)
+
+        # Garment not in sizing DB — only possible when a URL was supplied
+        if not url:
             return error_response_from_string(
                 "Garment not found",
                 404, 'NOT_FOUND'
             )
 
-        logger.info(f"get_garment_info: EXIT - Found garment: {garment_data.get('name')}")
-        return success_response(data=garment_data)
+        logger.info(f"get_garment_info: Garment not in sizing DB, falling back to scrape for url={url[:100]}")
+        try:
+            from features.wardrobe.extractors import BrandExtractorFactory
+            from shared.garment_utils import categorize_garment
+
+            extractor = BrandExtractorFactory.get_extractor(url)
+            product_info = extractor.extract_product_info(url)
+            categorization = categorize_garment(title=product_info.get('title'))
+
+            fallback_data = {
+                'url': url,
+                'name': product_info.get('title'),
+                'brand': product_info.get('brand'),
+                'price': product_info.get('price'),
+                'images': product_info.get('images', []),
+                'sizes': product_info.get('sizes', []),
+                'colors': product_info.get('colors', []),
+                'category': categorization.get('category'),
+                'type': categorization.get('type'),
+                'has_measurements': False,
+                'garment_measurements': [],
+                'source': 'scraped',
+            }
+
+            logger.info(f"get_garment_info: EXIT - Returning scraped fallback for: {fallback_data.get('name')}")
+            return success_response(data=fallback_data)
+
+        except Exception as scrape_err:
+            logger.warning(f"get_garment_info: Scrape fallback failed: {str(scrape_err)}")
+            return error_response_from_string(
+                "Garment not found in sizing database and could not be scraped",
+                404, 'NOT_FOUND'
+            )
 
     except Exception as e:
         logger.exception(f"get_garment_info: EXIT - Error: {str(e)}")
