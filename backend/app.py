@@ -2785,6 +2785,74 @@ def generate_fallback_response(message):
     else:
         return "I'd love to help you find the perfect garment! Could you tell me more specifics about what you're looking for? (type, color, brand preferences, occasion, etc.)"
 
+
+# ===== GOOGLE OAUTH CALLBACK =====
+@app.route('/auth/google/callback', methods=['GET'])
+def google_oauth_callback():
+    """
+    Google OAuth callback endpoint
+    Receives authorization code from Google and redirects to frontend with JWT token
+    
+    Query parameters:
+    - code: Authorization code from Google
+    - state: CSRF protection state parameter
+    - error: Error from Google if authentication failed
+    """
+    try:
+        # Check for errors from Google
+        error = request.args.get('error')
+        if error:
+            error_description = request.args.get('error_description', 'Unknown error')
+            print(f"❌ Google OAuth Error: {error} - {error_description}")
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            return f'<script>window.location = "{frontend_url}/auth?error={error}";</script>', 400
+        
+        # Get authorization code
+        code = request.args.get('code')
+        state = request.args.get('state')
+        
+        if not code:
+            print("❌ Missing authorization code from Google")
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+            return f'<script>window.location = "{frontend_url}/auth?error=missing_code";</script>', 400
+        
+        print(f"✅ Received Google OAuth code: {code[:20]}...")
+        print(f"📍 State: {state}")
+        
+        # TODO: Exchange code for Google ID token
+        # This would call Google's token endpoint to get the ID token
+        # Then verify it and extract user info
+        
+        # For now, redirect to frontend with placeholder
+        # In production, include JWT token here
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        redirect_target = f"{frontend_url}/agents"
+        
+        print(f"🔄 Redirecting to: {redirect_target}")
+        
+        # Use HTML/JavaScript redirect to avoid CORS issues
+        return f'''
+        <html>
+            <head>
+                <title>Redirecting...</title>
+            </head>
+            <body>
+                <p>Redirecting to Enable...</p>
+                <script>
+                    window.location = "{redirect_target}";
+                </script>
+            </body>
+        </html>
+        ''', 200
+        
+    except Exception as e:
+        print(f"❌ OAuth Callback Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        return f'<script>window.location = "{frontend_url}/auth?error=server_error";</script>', 500
+
+
 if __name__ == "__main__":
     print("=" * 50)
     print("🚀 Starting Flask Server")

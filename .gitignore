@@ -77,12 +77,24 @@ poetry.lock
 .env.*.local
 .flaskenv
 *.env
+*.env]
+*.env.*
+.envy
+envy
 
 # API Keys and credentials
 *_key.txt
 *_secret.txt
 credentials.json
 service-account.json
+
+# ============================================
+# Application logs and PIDs
+# ============================================
+.logs/
+.pids
+*.log
+logs/
 
 # ============================================
 # Database
