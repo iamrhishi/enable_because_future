@@ -401,6 +401,119 @@ def _detect_person_boundaries(person_image: bytes) -> dict:
         }
 
 
+def _strip_gemini_feedback_markdown(message: str) -> str:
+    """Turn '[text](url)' from API copy into plain 'text' for logs and client errors."""
+    if not message:
+        return message
+    return re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', message)
+
+
+def _raise_gemini_tryon_finish_error(finish_reason: str, finish_message: str) -> None:
+    """Raise ExternalServiceError for a Gemini candidate finishReason (no image returned)."""
+    finish_message = _strip_gemini_feedback_markdown(finish_message or '')
+    if finish_reason == 'IMAGE_OTHER':
+        error_msg = finish_message or 'Gemini could not generate the image based on the prompt provided.'
+        logger.error(f'process_tryon: IMAGE_OTHER - {error_msg}')
+        raise ExternalServiceError(
+            f'Gemini image generation failed: {error_msg}',
+            service='gemini'
+        )
+    if finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
+        error_msg = 'Gemini blocked the request due to safety filters.'
+        if finish_message:
+            error_msg += f' {finish_message}'
+        raise ExternalServiceError(error_msg, service='gemini')
+    if finish_reason == 'MAX_TOKENS':
+        raise ExternalServiceError(
+            'Gemini response was truncated due to token limit. The prompt or images may be too large.',
+            service='gemini'
+        )
+    if finish_reason == 'RECITATION':
+        raise ExternalServiceError(
+            'Gemini detected recitation of copyrighted content.',
+            service='gemini'
+        )
+    error_msg = f'Gemini returned finish reason: {finish_reason}'
+    if finish_message:
+        error_msg += f' - {finish_message}'
+    raise ExternalServiceError(error_msg, service='gemini')
+
+
+def _parse_gemini_tryon_image_response(result: dict):
+    """
+    Parse Gemini generateContent JSON for try-on. Returns:
+      ('ok', image_bytes) — success
+      ('finish', finish_reason, finish_message) — finished without an image
+    """
+    if 'error' in result:
+        error_info = result.get('error', {})
+        error_message = error_info.get('message', 'Unknown error')
+        error_code = error_info.get('code', 'UNKNOWN')
+        logger.error(f'process_tryon: Gemini API returned error: {error_code} - {error_message}')
+        raise ExternalServiceError(
+            f'Gemini API error: {error_code} - {error_message}',
+            service='gemini'
+        )
+
+    result_image_bytes = None
+
+    if 'candidates' in result and len(result['candidates']) > 0:
+        candidate = result['candidates'][0]
+        if 'content' in candidate and 'parts' in candidate['content']:
+            for part in candidate['content']['parts']:
+                if 'inline_data' in part and 'data' in part['inline_data']:
+                    image_data_b64 = part['inline_data']['data']
+                    result_image_bytes = base64.b64decode(image_data_b64)
+                    logger.info(f'process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes')
+                    break
+                if 'inlineData' in part and 'data' in part['inlineData']:
+                    image_data_b64 = part['inlineData']['data']
+                    result_image_bytes = base64.b64decode(image_data_b64)
+                    logger.info(f'process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes')
+                    break
+                if 'text' in part:
+                    text_content = part['text']
+                    base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
+                    if base64_match:
+                        image_data_b64 = base64_match.group(1)
+                        result_image_bytes = base64.b64decode(image_data_b64)
+                        logger.info(f'process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes')
+                        break
+
+    if result_image_bytes is None and 'data' in result:
+        image_data_b64 = result['data']
+        result_image_bytes = base64.b64decode(image_data_b64)
+        logger.info(f'process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes')
+
+    if result_image_bytes is not None:
+        return ('ok', result_image_bytes)
+
+    if 'candidates' not in result:
+        raise ExternalServiceError(
+            'Failed to extract image from Gemini API response. Please check logs for details.',
+            service='gemini'
+        )
+
+    if len(result['candidates']) == 0:
+        logger.error('process_tryon: Gemini returned empty candidates array')
+        raise ExternalServiceError('Gemini returned empty candidates', service='gemini')
+
+    candidate = result['candidates'][0]
+    finish_reason = candidate.get('finishReason', 'UNKNOWN')
+    finish_message = candidate.get('finishMessage', '')
+
+    if finish_reason != 'STOP':
+        logger.error(f'process_tryon: Gemini finishReason: {finish_reason}')
+        if finish_message:
+            logger.error(f'process_tryon: Gemini finishMessage: {finish_message}')
+        return ('finish', finish_reason, finish_message)
+
+    raise ExternalServiceError(
+        'Failed to extract image from Gemini API response. Please check logs for details.',
+        service='gemini'
+    )
+
+
 def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
                   garment_details: dict = None, options: dict = None) -> str:
     """
@@ -493,12 +606,16 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         original_width, original_height = None, None
         padded_person_image = person_image
         pad_left, pad_top = 0, 0
+        # Pixel size of image 1 actually sent to Gemini (after optional horizontal padding)
+        api_canvas_width = None
+        api_canvas_height = None
 
         try:
             person_img = Image.open(BytesIO(person_image))
             original_width, original_height = person_img.size
             input_ratio = original_width / original_height
             logger.info(f"process_tryon: Original person image: {original_width}x{original_height}, ratio={input_ratio:.3f}")
+            api_canvas_width, api_canvas_height = original_width, original_height
 
             # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing
             if input_ratio < 0.6:
@@ -525,13 +642,26 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 # Update base64 for API call
                 person_base64 = base64.b64encode(padded_person_image).decode('utf-8')
 
+                api_canvas_width, api_canvas_height = new_width, original_height
+
                 logger.info(f"process_tryon: Padded person image to {new_width}x{original_height} (ratio={target_ratio:.3f}), pad_left={pad_left}")
 
-            input_width, input_height = original_width, original_height
         except Exception as e:
             logger.warning(f"process_tryon: Could not process input dimensions: {e}")
-            input_width, input_height = None, None
             original_width, original_height = None, None
+            api_canvas_width, api_canvas_height = None, None
+
+        if api_canvas_width and api_canvas_height:
+            logger.info(
+                f"process_tryon: Image 1 (person) canvas for Gemini API: "
+                f"{api_canvas_width}x{api_canvas_height}px"
+                + (
+                    f" (unpadded subject {original_width}x{original_height}, will crop back after generation)"
+                    if (original_width and original_height
+                        and (api_canvas_width != original_width or api_canvas_height != original_height))
+                    else ""
+                )
+            )
 
         # Build comprehensive prompt with all garment details
         prompt_parts = [
@@ -552,9 +682,14 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "FRAMING AND DIMENSION REQUIREMENTS (CRITICAL):\n",
         ])
 
-        # Add explicit dimension constraint if we have it
-        if input_width and input_height:
-            prompt_parts.append(f"- Output image MUST be exactly {input_width}x{input_height} pixels.\n")
+        # Add explicit dimension constraint: must match image 1 (what Gemini actually receives).
+        # Bug fix: padded inputs used to still ask for original_width x original_height, which
+        # contradicts image 1 and often yields finishReason IMAGE_OTHER.
+        if api_canvas_width and api_canvas_height:
+            prompt_parts.append(
+                f"- Output image MUST be exactly {api_canvas_width}x{api_canvas_height} pixels "
+                "(same width and height as image 1).\n"
+            )
 
         prompt_parts.extend([
             "- The person's HEAD must be at the EXACT same vertical position (same distance from top edge).\n",
@@ -571,210 +706,154 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         ])
         
         prompt = "".join(prompt_parts)
-        
-        # Call Gemini API with retry logic for transient errors only
+
+        # Last-resort wording if same-prompt IMAGE_OTHER retries exhaust (fewer contradictory constraints).
+        relaxed_parts = [
+            "TASK: Virtual try-on.\n\n",
+            f"Image 1 shows a person. Image 2 shows a garment.\n"
+            f"Edit image 1 so the person wears the garment from image 2 on their {body_location}. "
+            "Keep the same pose, face, hair, skin tone, proportions, and camera framing as image 1.\n",
+            "If the person's head or feet appear in image 1, keep them visible; do not crop them out.\n\n",
+            "Match the garment's colors, patterns, cut, neckline, sleeves, hem, and silhouette from image 2 as faithfully as reasonable.\n",
+            "Output one photorealistic full image only. No collage, no before/after split, no text, no labels.\n\n",
+        ]
+        if garment_info_parts:
+            relaxed_parts.insert(1, f"Garment context: {', '.join(garment_info_parts)}.\n")
+        prompt_relaxed = "".join(relaxed_parts)
+
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
-        
-        headers = {
-            "Content-Type": "application/json",
-        }
-        
-        params = {
-            "key": Config.GEMINI_API_KEY
-        }
-        
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": person_base64
-                        }
-                    },
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": garment_base64
-                        }
-                    }
-                ]
-            }],
-            # Generation config to optimize for speed and consistency
-            "generationConfig": {
-                "temperature": 0.0,  # Minimum temperature (0.0) for maximum determinism and consistency
-                "seed": seed,  # Deterministic seed computed from input images - ensures same inputs produce same outputs
-                "responseModalities": ["IMAGE"],  # Ensure we get an image response
-            }
-        }
-        
-        # Retry logic for transient errors (500, 503, 429) only
+        headers = {"Content-Type": "application/json"}
+        params = {"key": Config.GEMINI_API_KEY}
+
+        mod = 2 ** 31
+        # True retries use the same prompt; only seed/temperature change (stochastic resample).
+        # The previous behavior jumped straight to different wording ("relaxed"), which is not equivalent to repeating the task.
+        generation_attempts = [
+            ("deterministic", prompt, seed, 0.0),
+            ("same_prompt_resample_a", prompt, (seed + 982_451_653) % mod, 0.28),
+            ("same_prompt_resample_b", prompt, (seed + 1_629_268_779) % mod, 0.42),
+            ("relaxed_prompt_fallback", prompt_relaxed, (seed + 1_000_003) % mod, 0.42),
+        ]
+
         max_retries = 3
-        retry_delay = 2  # seconds
-        response = None
-        
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
-        
-                # Success
-                if response.status_code == 200:
-                    break
-                
-                # Retryable errors
-                if response.status_code in (500, 503, 429) and attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API returned {response.status_code} (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                
-                # Non-retryable errors or final attempt
-                logger.error(
-                    f"process_tryon: Gemini API error - status={response.status_code}, "
-                    f"response={response.text[:500]}, attempt={attempt + 1}/{max_retries}"
-                )
-                if attempt == max_retries - 1:
-                    raise ExternalServiceError(
-                        f"Gemini API error: {response.status_code} - {response.text[:200]}",
-                        service='gemini'
-                    )
-            except requests.Timeout:
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API timeout (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
-            except requests.RequestException as e:
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)
-                    logger.warning(
-                        f"process_tryon: Gemini API request exception: {str(e)} (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    raise
-        
-        if response is None or response.status_code != 200:
-            error_msg = f"Gemini API failed after {max_retries} attempts"
-            if response:
-                error_msg += f" - status={response.status_code}, response={response.text[:200]}"
-            logger.error(f"process_tryon: {error_msg}")
-            raise ExternalServiceError(error_msg, service='gemini')
-        
-        # Parse response
-        result = response.json()
-        
-        # Extract image from response - try multiple response formats
+        retry_delay = 2
         result_image_bytes = None
-        
-        # Format 1: Standard Gemini format with candidates
-        if 'candidates' in result and len(result['candidates']) > 0:
-            candidate = result['candidates'][0]
-            if 'content' in candidate and 'parts' in candidate['content']:
-                for part in candidate['content']['parts']:
-                    # Check for inline_data (snake_case) - standard Gemini format
-                    if 'inline_data' in part and 'data' in part['inline_data']:
-                        image_data_b64 = part['inline_data']['data']
-                        result_image_bytes = base64.b64decode(image_data_b64)
-                        logger.info(f"process_tryon: Found image in inline_data, size={len(result_image_bytes)} bytes")
+
+        for attempt_idx, (attempt_name, use_prompt, use_seed, use_temp) in enumerate(generation_attempts):
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": use_prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": person_base64,
+                            },
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": garment_base64,
+                            },
+                        },
+                    ],
+                }],
+                "generationConfig": {
+                    "temperature": use_temp,
+                    "seed": use_seed,
+                    "responseModalities": ["IMAGE"],
+                },
+            }
+
+            response = None
+            for req_attempt in range(max_retries):
+                try:
+                    response = requests.post(url, json=payload, headers=headers, params=params, timeout=120)
+                    if response.status_code == 200:
                         break
-                    # Check for inlineData (camelCase) - Nano Banana image model format
-                    if 'inlineData' in part and 'data' in part['inlineData']:
-                        image_data_b64 = part['inlineData']['data']
-                        result_image_bytes = base64.b64decode(image_data_b64)
-                        logger.info(f"process_tryon: Found image in inlineData, size={len(result_image_bytes)} bytes")
-                        break
-                    # Also check for text response that might contain base64
-                    if 'text' in part:
-                        text_content = part['text']
-                        # Try to extract base64 from text
-                        base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', text_content)
-                        if base64_match:
-                            image_data_b64 = base64_match.group(1)
-                            result_image_bytes = base64.b64decode(image_data_b64)
-                            logger.info(f"process_tryon: Found image in text (base64), size={len(result_image_bytes)} bytes")
-                            break
-        
-        # Format 2: Direct response with image data
-        if result_image_bytes is None and 'data' in result:
-            image_data_b64 = result['data']
-            result_image_bytes = base64.b64decode(image_data_b64)
-            logger.info(f"process_tryon: Found image in direct data, size={len(result_image_bytes)} bytes")
-        
-        # Format 3: Check for error in response
-        if result_image_bytes is None and 'error' in result:
-            error_info = result.get('error', {})
-            error_message = error_info.get('message', 'Unknown error')
-            error_code = error_info.get('code', 'UNKNOWN')
-            logger.error(f"process_tryon: Gemini API returned error: {error_code} - {error_message}")
-            raise ExternalServiceError(
-                f"Gemini API error: {error_code} - {error_message}",
-                service='gemini'
-            )
-        
-        # Format 4: Check if candidates exist but are empty or have finishReason
-        if result_image_bytes is None and 'candidates' in result:
-            if len(result['candidates']) == 0:
-                logger.error(f"process_tryon: Gemini returned empty candidates array")
-                raise ExternalServiceError("Gemini returned empty candidates", service='gemini')
-            else:
-                candidate = result['candidates'][0]
-                finish_reason = candidate.get('finishReason', 'UNKNOWN')
-                finish_message = candidate.get('finishMessage', '')
-                
-                if finish_reason != 'STOP':
-                    logger.error(f"process_tryon: Gemini finishReason: {finish_reason}")
-                    if finish_message:
-                        logger.error(f"process_tryon: Gemini finishMessage: {finish_message}")
-                    
-                    # Handle specific finish reasons - raise error immediately
-                    if finish_reason == 'IMAGE_OTHER':
-                        error_msg = finish_message if finish_message else "Gemini could not generate the image based on the prompt provided."
-                        logger.error(f"process_tryon: IMAGE_OTHER - {error_msg}")
-                        raise ExternalServiceError(
-                            f"Gemini image generation failed: {error_msg}",
-                            service='gemini'
+                    if response.status_code in (500, 503, 429) and req_attempt < max_retries - 1:
+                        wait_time = retry_delay * (req_attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API returned {response.status_code} "
+                            f"(http_try {req_attempt + 1}/{max_retries}, gen_attempt={attempt_name}). "
+                            f"Retrying in {wait_time} seconds..."
                         )
-                    elif finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
-                        error_msg = "Gemini blocked the request due to safety filters."
-                        if finish_message:
-                            error_msg += f" {finish_message}"
-                        raise ExternalServiceError(error_msg, service='gemini')
-                    elif finish_reason == 'MAX_TOKENS':
+                        time.sleep(wait_time)
+                        continue
+                    logger.error(
+                        f"process_tryon: Gemini API error - status={response.status_code}, "
+                        f"response={response.text[:500]}, http_try={req_attempt + 1}/{max_retries}, gen_attempt={attempt_name}"
+                    )
+                    if req_attempt == max_retries - 1:
                         raise ExternalServiceError(
-                            "Gemini response was truncated due to token limit. The prompt or images may be too large.",
-                            service='gemini'
+                            f"Gemini API error: {response.status_code} - {response.text[:200]}",
+                            service='gemini',
                         )
-                    elif finish_reason == 'RECITATION':
-                        raise ExternalServiceError(
-                            "Gemini detected recitation of copyrighted content.",
-                            service='gemini'
+                except requests.Timeout:
+                    if req_attempt < max_retries - 1:
+                        wait_time = retry_delay * (req_attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API timeout (http_try {req_attempt + 1}/{max_retries}, "
+                            f"gen_attempt={attempt_name}). Retrying in {wait_time} seconds..."
                         )
-                    else:
-                        # Unknown finish reason
-                        error_msg = f"Gemini returned finish reason: {finish_reason}"
-                        if finish_message:
-                            error_msg += f" - {finish_message}"
-                        raise ExternalServiceError(error_msg, service='gemini')
-        
-        # If we still don't have an image
+                        time.sleep(wait_time)
+                        continue
+                    raise ExternalServiceError("Gemini API timeout after multiple retries", service='gemini')
+                except requests.RequestException as e:
+                    if req_attempt < max_retries - 1:
+                        wait_time = retry_delay * (req_attempt + 1)
+                        logger.warning(
+                            f"process_tryon: Gemini API request exception: {str(e)} "
+                            f"(http_try {req_attempt + 1}/{max_retries}, gen_attempt={attempt_name}). "
+                            f"Retrying in {wait_time} seconds..."
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    raise
+
+            if response is None or response.status_code != 200:
+                error_msg = f"Gemini API failed after {max_retries} attempts (gen_attempt={attempt_name})"
+                if response:
+                    error_msg += f" - status={response.status_code}, response={response.text[:200]}"
+                logger.error(f"process_tryon: {error_msg}")
+                raise ExternalServiceError(error_msg, service='gemini')
+
+            result = response.json()
+            parsed = _parse_gemini_tryon_image_response(result)
+            if parsed[0] == "ok":
+                result_image_bytes = parsed[1]
+                if attempt_idx > 0:
+                    logger.info(
+                        "process_tryon: Gemini succeeded on generation attempt %s/%s (%s)",
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                        attempt_name,
+                    )
+                break
+            if parsed[0] == "finish":
+                _, finish_reason, finish_message = parsed
+                if finish_reason == "IMAGE_OTHER" and attempt_idx < len(generation_attempts) - 1:
+                    logger.warning(
+                        "process_tryon: Gemini IMAGE_OTHER on %s (%s/%s); retrying%s (finishMessage=%s)",
+                        attempt_name,
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                        (
+                            " with identical prompt + new seed/temp"
+                            if use_prompt == prompt
+                            else " with relaxed prompt fallback"
+                        ),
+                        (finish_message or "")[:220],
+                    )
+                    continue
+                _raise_gemini_tryon_finish_error(finish_reason, finish_message)
+
         if result_image_bytes is None:
             raise ExternalServiceError(
-                "Failed to extract image from Gemini API response. Please check logs for details.",
-                service='gemini'
+                "Failed to extract image from Gemini API response after all generation attempts.",
+                service="gemini",
             )
-        
+
         # Check if background removal is needed
         try:
             result_img = Image.open(BytesIO(result_image_bytes))
@@ -822,9 +901,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
                 # If we padded the input, we need to extract the center portion
                 if pad_left > 0 or pad_top > 0:
-                    # Calculate the expected padded dimensions (what we sent to Gemini)
-                    padded_width = original_width + (2 * pad_left)
-                    padded_height = original_height + (2 * pad_top)
+                    # Must match dimensions of image 1 sent to the API (not original_width + 2*pad_left; that can be off by one)
+                    padded_width = api_canvas_width if api_canvas_width else original_width + (2 * pad_left)
+                    padded_height = api_canvas_height if api_canvas_height else original_height + (2 * pad_top)
                     logger.info(f"process_tryon: Input was padded to {padded_width}x{padded_height}, need to extract center {original_width}x{original_height}")
 
                     # Scale result to match the padded dimensions first
