@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request, Response, send_from_directory
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, HTTPException
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
 import os
@@ -142,12 +142,42 @@ def handle_bad_request(e):
     logger.error(f"BadRequest: {error_msg}", exc_info=True)
     return error_response_from_string(f'Bad request: {error_msg}', 400, 'VALIDATION_ERROR')
 
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e: HTTPException):
+    """
+    Preserve correct status codes for routing and other Werkzeug HTTP errors.
+
+    A catch-all handler on Exception incorrectly turns 404 into 500 unless
+    HTTPException is handled first (NotFound subclasses HTTPException).
+    """
+    code = e.code or 500
+    message = e.description if e.description else (e.name or "Request error")
+    if code < 500:
+        logger.debug("HTTP %s %s: %s", code, getattr(request, "path", ""), message)
+    else:
+        logger.warning("HTTP %s %s: %s", code, getattr(request, "path", ""), message)
+    err_code = "NOT_FOUND" if code == 404 else "HTTP_ERROR"
+    return error_response_from_string(message, code, err_code)
+
+
 # Global error handler
 @app.errorhandler(Exception)
 def handle_error(e):
     """Global error handler"""
     logger.error(f"Unhandled error: {str(e)}", exc_info=True)
     return error_response_from_string(f'Server error: {str(e)}', 500, 'ERROR')
+
+@app.route("/", methods=["GET"])
+def root():
+    """Bare root URL for scanners and load balancers; API lives under /api and /health."""
+    return jsonify(
+        {
+            "service": "becauseFuture-backend",
+            "health": "/health",
+        }
+    )
+
 
 # Health check endpoint
 @app.route('/health', methods=['GET'])
