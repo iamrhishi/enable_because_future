@@ -7,6 +7,7 @@ google-auth
 google-generativeai
 rembg
 onnxruntime
+opencv-python-headless
 beautifulsoup4
 boto3
 google-cloud-storage

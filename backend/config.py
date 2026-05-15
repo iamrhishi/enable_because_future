@@ -35,6 +35,12 @@ class Config:
     MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE', '6291456'))  # 6MB in bytes
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
     WARDROBE_FOLDER = os.environ.get('WARDROBE_FOLDER', '../frontend/public/images/wardrobe')
+
+    # Reject obvious non-person uploads when saving/updating avatar (requires opencv-python-headless)
+    AVATAR_PERSON_CHECK_ENABLED = os.environ.get(
+        'AVATAR_PERSON_CHECK_ENABLED',
+        'true',
+    ).lower() == 'true'
     
     # CORS Configuration
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')

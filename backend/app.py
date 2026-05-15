@@ -218,6 +218,13 @@ def save_avatar():
         
         user_id = request.user_id
         avatar_data = avatar_file.read()
+
+        from shared.avatar_person_check import reject_message_if_avatar_not_person
+
+        rejection = reject_message_if_avatar_not_person(avatar_data)
+        if rejection:
+            return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
         try:
             from features.tryon.service import _remove_background_local
             from PIL import Image
@@ -328,6 +335,12 @@ def save_avatar_local():
         
         # Remove background using rembg-based local algorithm
         try:
+            from shared.avatar_person_check import reject_message_if_avatar_not_person
+
+            rejection = reject_message_if_avatar_not_person(avatar_data)
+            if rejection:
+                return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
             from features.tryon.service import _remove_background_local
             from PIL import Image
             from io import BytesIO
@@ -520,6 +533,12 @@ def update_avatar():
                 'error': 'Invalid base64 data'
             }), 400
         
+        from shared.avatar_person_check import reject_message_if_avatar_not_person
+
+        rejection = reject_message_if_avatar_not_person(avatar_data)
+        if rejection:
+            return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
         # Validate file size (max 5MB)
         max_size = 5 * 1024 * 1024  # 5MB
         if len(avatar_data) > max_size:
