@@ -23,6 +23,16 @@ from shared.validators import validate_url
 tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 
 
+def _attach_job_poll_hint(job_row) -> dict:
+    """Build job dict for API; add poll_interval_ms when job is still active."""
+    payload = dict(job_row)
+    if payload.get('status') in ('queued', 'processing'):
+        payload['poll_interval_ms'] = Config.JOB_STATUS_POLL_INTERVAL_MS
+    else:
+        payload['poll_interval_ms'] = None
+    return payload
+
+
 @tryon_bp.route('/tryon', methods=['POST'])
 @require_auth  # JWT decorator validates token and sets request.user_id from token
 def create_tryon_job():
@@ -813,7 +823,8 @@ def create_tryon_job():
             data={
                 'job_id': job_id,
                 'status': 'queued',
-                'estimated_time': 15  # seconds
+                'estimated_time': 15,  # seconds
+                'poll_interval_ms': Config.JOB_STATUS_POLL_INTERVAL_MS,
             },
             message='Try-on job created',
             status_code=202
@@ -857,12 +868,13 @@ def get_job_status(job_id):
             )
         
         # Convert result_url to absolute URL if present
-        if job.get('result_url'):
+        job_payload = dict(job)
+        if job_payload.get('result_url'):
             from shared.url_utils import to_absolute_url
-            job['result_url'] = to_absolute_url(job['result_url'])
-        
+            job_payload['result_url'] = to_absolute_url(job_payload['result_url'])
+
         logger.info(f"get_job_status: EXIT - Job status retrieved for job_id={job_id}")
-        return success_response(data=job)
+        return success_response(data=_attach_job_poll_hint(job_payload))
         
     except Exception as e:
         logger.exception(f"get_job_status: EXIT - Error: {str(e)}")
@@ -1006,7 +1018,8 @@ def create_multi_tryon_job():
                 'top_job_id': top_job_id,
                 'bottom_job_id': bottom_job_id,
                 'status': 'queued',
-                'estimated_time': 30
+                'estimated_time': 30,
+                'poll_interval_ms': Config.JOB_STATUS_POLL_INTERVAL_MS,
             },
             message='Multi-garment try-on jobs created',
             status_code=202

@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+try:
+    _job_status_poll_interval_ms_raw = int(os.environ.get('JOB_STATUS_POLL_INTERVAL_MS', '1000'))
+except ValueError:
+    _job_status_poll_interval_ms_raw = 1000
+
 
 class Config:
     """Application configuration loaded from environment variables"""
@@ -25,7 +30,20 @@ class Config:
     # Used for both background removal and try-on processing
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
     GEMINI_MODEL_NAME = os.environ.get('GEMINI_MODEL_NAME', 'gemini-2.5-flash-image')  # Nano Banana image model
-    
+
+    # Try-on latency (optional):
+    # - LITE: on IMAGE_OTHER, only run deterministic + relaxed prompt (2 calls max), not 4.
+    GEMINI_TRYON_LITE_IMAGE_OTHER_RETRIES = os.environ.get(
+        'GEMINI_TRYON_LITE_IMAGE_OTHER_RETRIES',
+        'false',
+    ).lower() == 'true'
+    # - Cap longest side of person + garment before Gemini (0 = off). Smaller = faster API, lower output res.
+    try:
+        _gem_tryon_max_edge = int(os.environ.get('GEMINI_TRYON_INPUT_MAX_EDGE', '0'))
+    except ValueError:
+        _gem_tryon_max_edge = 0
+    GEMINI_TRYON_INPUT_MAX_EDGE = max(0, min(_gem_tryon_max_edge, 4096))
+
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
     JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
@@ -41,7 +59,11 @@ class Config:
         'AVATAR_PERSON_CHECK_ENABLED',
         'true',
     ).lower() == 'true'
-    
+
+    # Async try-on: recommended delay between GET /api/job/{id} polls while status is queued/processing.
+    # Milliseconds (clamped). Clients implement polling; backend only advertises this in JSON responses.
+    JOB_STATUS_POLL_INTERVAL_MS = max(250, min(_job_status_poll_interval_ms_raw, 30000))
+
     # CORS Configuration
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
     

@@ -514,6 +514,39 @@ def _parse_gemini_tryon_image_response(result: dict):
     )
 
 
+def _tryon_resize_max_long_edge(image_bytes: bytes, max_edge: int) -> bytes:
+    """
+    If longest side exceeds max_edge, shrink proportionally (LANCZOS).
+    Writes PNG. Used to shorten Gemini multimodal payloads (latency vs fidelity trade-off).
+    """
+    if max_edge <= 0 or not image_bytes:
+        return image_bytes
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        w, h = img.size
+        long_edge = max(w, h)
+        if long_edge <= max_edge:
+            return image_bytes
+        scale = max_edge / float(long_edge)
+        nw = max(1, int(round(w * scale)))
+        nh = max(1, int(round(h * scale)))
+        if img.mode == 'RGBA':
+            pass
+        elif img.mode == 'RGB':
+            pass
+        elif img.mode == 'P' and 'transparency' in img.info:
+            img = img.convert('RGBA')
+        else:
+            img = img.convert('RGB')
+        img = img.resize((nw, nh), Image.Resampling.LANCZOS)
+        out = BytesIO()
+        img.save(out, format='PNG', optimize=True)
+        return out.getvalue()
+    except Exception as e:
+        logger.warning(f'process_tryon: _tryon_resize_max_long_edge skipped: {e}')
+        return image_bytes
+
+
 def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
                   garment_details: dict = None, options: dict = None) -> str:
     """
@@ -546,7 +579,18 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         if isinstance(garment_image, list):
             garment_image = garment_image[0]
             logger.info(f"process_tryon: Received list of images, using first one only")
-        
+
+        if Config.GEMINI_TRYON_INPUT_MAX_EDGE > 0:
+            me = Config.GEMINI_TRYON_INPUT_MAX_EDGE
+            p0_len, g0_len = len(person_image), len(garment_image)
+            person_image = _tryon_resize_max_long_edge(person_image, me)
+            garment_image = _tryon_resize_max_long_edge(garment_image, me)
+            if len(person_image) != p0_len or len(garment_image) != g0_len:
+                logger.info(
+                    'process_tryon: GEMINI_TRYON_INPUT_MAX_EDGE=%s (person bytes %s→%s, garment %s→%s)',
+                    me, p0_len, len(person_image), g0_len, len(garment_image),
+                )
+
         # Log image sizes for debugging
         person_size_mb = len(person_image) / (1024 * 1024)
         garment_size_mb = len(garment_image) / (1024 * 1024)
@@ -727,13 +771,23 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
         mod = 2 ** 31
         # True retries use the same prompt; only seed/temperature change (stochastic resample).
-        # The previous behavior jumped straight to different wording ("relaxed"), which is not equivalent to repeating the task.
-        generation_attempts = [
-            ("deterministic", prompt, seed, 0.0),
-            ("same_prompt_resample_a", prompt, (seed + 982_451_653) % mod, 0.28),
-            ("same_prompt_resample_b", prompt, (seed + 1_629_268_779) % mod, 0.42),
-            ("relaxed_prompt_fallback", prompt_relaxed, (seed + 1_000_003) % mod, 0.42),
-        ]
+        if Config.GEMINI_TRYON_LITE_IMAGE_OTHER_RETRIES:
+            generation_attempts = [
+                ('deterministic', prompt, seed, 0.0),
+                ('relaxed_prompt_fallback', prompt_relaxed, (seed + 1_000_003) % mod, 0.42),
+            ]
+            logger.info(
+                'process_tryon: GEMINI_TRYON_LITE_IMAGE_OTHER_RETRIES enabled '
+                '(at most %s Gemini calls on IMAGE_OTHER stall)',
+                len(generation_attempts),
+            )
+        else:
+            generation_attempts = [
+                ("deterministic", prompt, seed, 0.0),
+                ("same_prompt_resample_a", prompt, (seed + 982_451_653) % mod, 0.28),
+                ("same_prompt_resample_b", prompt, (seed + 1_629_268_779) % mod, 0.42),
+                ("relaxed_prompt_fallback", prompt_relaxed, (seed + 1_000_003) % mod, 0.42),
+            ]
 
         max_retries = 3
         retry_delay = 2

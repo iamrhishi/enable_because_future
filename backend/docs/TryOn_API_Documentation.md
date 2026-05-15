@@ -51,6 +51,8 @@ Apply a single garment on the user's avatar. Returns a job ID for async processi
 
 **Note:** Provide at least one garment source (wardrobe_item_id, item_urls, garment_image, or garment_url).
 
+Poll `GET /api/job/{job_id}` using `poll_interval_ms` from the creation response until `status` is `done` or `failed`.
+
 ### Response
 
 ```json
@@ -59,10 +61,13 @@ Apply a single garment on the user's avatar. Returns a job ID for async processi
   "data": {
     "job_id": "c6e2dd9f-34cd-4578-9055-107034e827ce",
     "status": "queued",
-    "estimated_time": 15
+    "estimated_time": 15,
+    "poll_interval_ms": 1000
   }
 }
 ```
+
+**Polling:** Clients choose the scheduler; `poll_interval_ms` is the server recommendation (configured with `JOB_STATUS_POLL_INTERVAL_MS` in `.env`, default **1000** ms so you land near **1s** polling; use **1500** there if you prefer 1.5s). Narrower intervals trim perceived wait after inference finishes earlier; inference time itself is unchanged.
 
 ### Example
 
@@ -167,7 +172,8 @@ Creates separate try-on jobs for top and bottom garments. Each processes indepen
     "top_job_id": "abc123",
     "bottom_job_id": "def456",
     "status": "queued",
-    "estimated_time": 30
+    "estimated_time": 30,
+    "poll_interval_ms": 1000
   },
   "message": "Multi-garment try-on jobs created"
 }
@@ -181,6 +187,8 @@ Creates separate try-on jobs for top and bottom garments. Each processes indepen
 
 Check the status of an async try-on job.
 
+While the job is in progress (`queued` or `processing`), each response includes `poll_interval_ms` (same meaning as `POST /api/tryon`; `null` when `done` or `failed`).
+
 ### Response - Queued
 
 ```json
@@ -189,7 +197,8 @@ Check the status of an async try-on job.
   "data": {
     "job_id": "c6e2dd9f-34cd-4578-9055-107034e827ce",
     "status": "queued",
-    "progress": 0
+    "progress": 0,
+    "poll_interval_ms": 1000
   }
 }
 ```
@@ -202,7 +211,8 @@ Check the status of an async try-on job.
   "data": {
     "job_id": "c6e2dd9f-34cd-4578-9055-107034e827ce",
     "status": "processing",
-    "progress": 50
+    "progress": 50,
+    "poll_interval_ms": 1000
   }
 }
 ```
@@ -216,6 +226,7 @@ Check the status of an async try-on job.
     "job_id": "c6e2dd9f-34cd-4578-9055-107034e827ce",
     "status": "done",
     "progress": 100,
+    "poll_interval_ms": null,
     "result_url": "https://server.com/images/tryon-results/user123/result.png",
     "garment_url": "https://www.zara.com/product/12345"
   }
@@ -230,6 +241,7 @@ Check the status of an async try-on job.
   "data": {
     "job_id": "c6e2dd9f-34cd-4578-9055-107034e827ce",
     "status": "failed",
+    "poll_interval_ms": null,
     "error": "Error message here"
   }
 }
