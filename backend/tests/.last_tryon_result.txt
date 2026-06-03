@@ -1,0 +1,27 @@
+
+=== try-on integration ===
+generated_at: 2026-05-14T09:18:15Z
+base_url:     http://127.0.0.1:8088
+job_id:       814fd095-a73e-41e5-8555-1151d0249494
+result_url:   http://127.0.0.1:8088/images/tryon-results/f3a6ad94/814fd095-a73e-41e5-8555-1151d0249494.png
+garment_url:  https://www.zara.com/in/en/wool-blend-blazer-zw-collection-p07522056.html?v1=495680474
+result GET:   http://127.0.0.1:8088/api/job/814fd095-a73e-41e5-8555-1151d0249494/result
+
+--- step timings (seconds) ---
+  health_check: 0.006
+  login: 0.892
+  post_tryon_until_202: 12.829
+  poll_until_done: 13.964
+  poll_http_requests: 7
+  total_wall: 27.692
+
+--- what these timings mean ---
+  post_tryon_until_202: server work before 202 — JWT, person image preprocess,
+    garment URL path (DB cache / scrape / download 1–2 product images), create job.
+  poll_until_done:      mostly TRYON_BACKEND inference + saving result PNG.
+    (poll interval 1.5s — set TRYON_POLL_INTERVAL; only trims wait after completion, not model time)
+  URL/scrape breakdown: on the server see logs for lines containing
+    'Scraping completed', 'Total image fetching', 'STEP 3', 'CACHE HIT'.
+
+wrote: /Users/enableengineering/Projects/becauseFuture/backend/tests/.last_tryon_result.txt
+shell (cwd=backend): cat tests/.last_tryon_result.txt

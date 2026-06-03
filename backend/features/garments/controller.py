@@ -361,13 +361,17 @@ def get_defaults():
     - gender (optional): 'men', 'women', 'unisex', or omit for all
 
     Returns:
-    - List of default garment objects with url, name, category
+    - List of default garment objects with url, name, category, isRecent
     """
     logger.info("get_defaults: ENTRY")
     try:
         gender = request.args.get('gender', None)
 
         garments = get_default_garments(gender)
+
+        # Add isRecent field (always False for default garments)
+        for g in garments:
+            g['isRecent'] = False
 
         logger.info(f"get_defaults: EXIT - Returning {len(garments)} default garments for gender={gender}")
         return success_response(data={'garments': garments, 'gender': gender or 'all'})

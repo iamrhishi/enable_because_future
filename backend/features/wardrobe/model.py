@@ -173,6 +173,33 @@ class WardrobeItem:
             logger.exception(f"WardrobeItem.save: EXIT - Error: {str(e)}")
             raise
     
+    @classmethod
+    def get_by_url(cls, user_id: str, url: str, category_section: str = None) -> Optional['WardrobeItem']:
+        """Check if item with same URL already exists for user"""
+        logger.info(f"WardrobeItem.get_by_url: ENTRY - user_id={user_id}, url={url}, category_section={category_section}")
+        try:
+            if category_section:
+                result = db_manager.execute_query(
+                    "SELECT * FROM wardrobe WHERE user_id = ? AND url = ? AND category_section = ?",
+                    (user_id, url, category_section),
+                    fetch_one=True
+                )
+            else:
+                result = db_manager.execute_query(
+                    "SELECT * FROM wardrobe WHERE user_id = ? AND url = ?",
+                    (user_id, url),
+                    fetch_one=True
+                )
+            if result:
+                item = cls(**dict(result))
+                logger.info(f"WardrobeItem.get_by_url: EXIT - Found existing item id={item.id}")
+                return item
+            logger.info(f"WardrobeItem.get_by_url: EXIT - No existing item found")
+            return None
+        except Exception as e:
+            logger.exception(f"WardrobeItem.get_by_url: EXIT - Error: {str(e)}")
+            raise
+
     def delete(self):
         """Delete wardrobe item"""
         logger.info(f"WardrobeItem.delete: ENTRY - id={self.id}, user_id={self.user_id}")

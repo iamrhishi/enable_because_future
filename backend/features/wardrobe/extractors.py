@@ -199,14 +199,41 @@ class DefaultExtractor(BrandExtractor):
                 color_text = elem.get_text().strip()
                 if color_text and len(color_text) < 50:
                     colors.append(color_text)
-            
+
+            # Extract brand from meta tags, JSON-LD, or URL
+            brand = None
+            # Try og:site_name
+            og_site = soup.find('meta', property='og:site_name')
+            if og_site and og_site.get('content'):
+                brand = og_site['content'].strip()
+            # Try JSON-LD brand
+            if not brand:
+                for script in soup.find_all('script', type='application/ld+json'):
+                    try:
+                        import json
+                        ld_data = json.loads(script.string)
+                        if isinstance(ld_data, dict):
+                            if ld_data.get('brand'):
+                                b = ld_data['brand']
+                                brand = b.get('name') if isinstance(b, dict) else str(b)
+                                break
+                    except:
+                        pass
+            # Fallback: extract from domain
+            if not brand:
+                from urllib.parse import urlparse
+                domain = urlparse(url).netloc.lower()
+                # Remove www. and .com/.de/etc
+                domain = domain.replace('www.', '').split('.')[0]
+                brand = domain.title()
+
             result = {
                 'title': title,
                 'price': price,
                 'images': images,
                 'sizes': sizes,
                 'colors': colors,
-                'brand': None,  # Will be detected from URL or title
+                'brand': brand,
                 'description': None
             }
             
