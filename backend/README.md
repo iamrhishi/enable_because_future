@@ -71,6 +71,8 @@ Logs are in JSON format for easy parsing and debugging. Configure log level via 
 ### User Management
 - `GET /api/users/profile` - Get authenticated user's profile (requires auth)
 - `PUT /api/users/profile` - Update authenticated user's profile (requires auth)
+- `DELETE /api/users/profile` - Delete authenticated user's account (requires auth; optional JSON: `{"password": "..."}` or `{"current_password": "..."}`)
+- `DELETE /api/users/account` - Same as above (alias)
 
 ### Body Measurements
 - `POST /api/body-measurements` - Create/update measurements for authenticated user (requires auth)

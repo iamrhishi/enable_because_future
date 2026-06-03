@@ -2,6 +2,8 @@
 User model
 """
 
+import secrets
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from shared.database import db_manager
 from shared.logger import logger
@@ -159,6 +161,48 @@ class User:
         if not self.password:
             return False
         return check_password_hash(self.password, password)
+
+    def deactivate_account(self) -> None:
+        """
+        Soft-delete account: disable login and scrub personal data.
+        Keeps the user row for referential integrity with related records.
+        """
+        logger.info(f"User.deactivate_account: ENTRY - userid={self.userid}")
+        if not self.is_active:
+            raise ValueError("Account is already deactivated")
+
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+        deleted_email = f"deleted_{self.userid}_{timestamp}@account-deleted.invalid"
+
+        if self.avatar_path:
+            try:
+                from shared.storage import get_storage_service
+                get_storage_service().delete_image(self.avatar_path)
+            except Exception as e:
+                logger.warning(f"User.deactivate_account: Failed to delete avatar file: {e}")
+
+        try:
+            db_manager.execute_query(
+                "DELETE FROM body_measurements WHERE user_id = ?",
+                (self.userid,)
+            )
+        except Exception as e:
+            logger.warning(f"User.deactivate_account: Failed to delete body measurements: {e}")
+
+        self.email = deleted_email
+        self.first_name = None
+        self.last_name = None
+        self.gender = None
+        self.birthday = None
+        self.street = None
+        self.city = None
+        self.postal_code = None
+        self.avatar = None
+        self.avatar_path = None
+        self.is_active = False
+        self.password = secrets.token_urlsafe(32)
+        self.save()
+        logger.info(f"User.deactivate_account: EXIT - Account deactivated for userid={self.userid}")
     
     def to_dict(self, include_avatar: bool = False, include_password: bool = False) -> dict:
         """Convert user to dictionary"""

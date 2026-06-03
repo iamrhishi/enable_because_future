@@ -69,7 +69,7 @@ def get_profile():
     try:
         user = User.get_by_id(user_id)
         
-        if not user:
+        if not user or not user.is_active:
             logger.warning(f"get_profile: User not found - user_id={user_id}")
             return error_response_from_string('User not found', 404, 'NOT_FOUND')
         
@@ -296,5 +296,71 @@ def change_password():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"change_password: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+def _parse_delete_account_body():
+    """Read optional JSON body for account deletion (password confirmation)."""
+    content_type = request.content_type or ''
+    if 'application/json' in content_type:
+        return request.get_json(silent=True, force=False) or {}
+    return {}
+
+
+def _delete_user_account(user_id: str):
+    """
+    Soft-delete the authenticated user's account.
+    Accepts password or current_password in the JSON body when provided.
+    """
+    data = _parse_delete_account_body()
+    password = (
+        (data.get('password') or data.get('current_password') or '')
+        .strip()
+    )
+
+    if password:
+        user = User.get_by_id(user_id)
+        if not user:
+            logger.warning(f"delete_account: User not found - user_id={user_id}")
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+
+        if not user.is_active:
+            return error_response_from_string('Account not found', 404, 'NOT_FOUND')
+
+        if not user.check_password(password):
+            logger.warning(f"delete_account: Invalid password for user_id={user_id}")
+            return error_response_from_string('Password is incorrect', 401, 'AUTHENTICATION_ERROR')
+    else:
+        user = User.get_by_id(user_id)
+        if not user:
+            logger.warning(f"delete_account: User not found - user_id={user_id}")
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+
+        if not user.is_active:
+            return error_response_from_string('Account not found', 404, 'NOT_FOUND')
+
+    user.deactivate_account()
+    logger.info(f"delete_account: EXIT - Account deleted for user_id={user_id}")
+    return success_response(message='Your account has been deleted successfully')
+
+
+@users_bp.route('/profile', methods=['DELETE'])
+@users_bp.route('/account', methods=['DELETE'])
+@require_auth
+def delete_account():
+    """
+    Permanently close the authenticated user's account (soft delete).
+    Flutter clients call DELETE /api/users/profile; /api/users/account is also supported.
+    """
+    user_id = request.user_id
+    logger.info(f"delete_account: ENTRY - user_id={user_id} (from JWT)")
+
+    try:
+        return _delete_user_account(user_id)
+    except ValueError as e:
+        logger.warning(f"delete_account: EXIT - {str(e)}")
+        return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
+    except Exception as e:
+        logger.exception(f"delete_account: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
