@@ -47,12 +47,10 @@ def create_account():
             return error_response_from_string('First name is required', 400, 'VALIDATION_ERROR')
         if not last_name:
             return error_response_from_string('Last name is required', 400, 'VALIDATION_ERROR')
-        if not gender:
-            return error_response_from_string('Gender is required', 400, 'VALIDATION_ERROR')
         
-        # Validate enum values
+        # Gender is optional; validate only when provided
         valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
-        if gender not in valid_genders:
+        if gender and gender not in valid_genders:
             return error_response_from_string('Invalid gender selection', 400, 'VALIDATION_ERROR')
         
         # Validate birthday format if provided
@@ -165,7 +163,7 @@ def create_account():
             first_name=first_name,
             last_name=last_name,
             password=password,  # Will be hashed in save()
-            gender=gender,
+            gender=gender if gender else None,
             birthday=birthday if birthday else None,
             street=street if street else None,
             city=city if city else None,
