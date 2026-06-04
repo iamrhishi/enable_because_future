@@ -81,54 +81,49 @@ def get_profile():
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 
-@users_bp.route('/profile', methods=['PUT'])
-@require_auth  # JWT decorator validates token and sets request.user_id from token
+@users_bp.route('/profile', methods=['PUT', 'PATCH'])
+@require_auth
 def update_profile():
     """
     Update current user's profile
     Uses User model
     user_id is extracted from JWT token by @require_auth decorator
     """
-    # user_id comes from JWT token via @require_auth decorator
     user_id = request.user_id
     logger.info(f"update_profile: ENTRY - user_id={user_id} (from JWT)")
-    
+
     try:
-        # Handle JSON requests safely
         content_type = request.content_type or ''
         if 'application/json' in content_type:
             data = request.get_json(silent=True, force=False) or {}
         else:
             data = {}
-        
+
         if not data:
             return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
-        
-        # Get existing user
+
         user = User.get_by_id(user_id)
         if not user:
             logger.warning(f"update_profile: User not found - user_id={user_id}")
             return error_response_from_string('User not found', 404, 'NOT_FOUND')
-        
-        # Validate and prepare update data
+
         update_data = {}
-        
-        # Validate email if provided
+
         if 'email' in data:
             update_data['email'] = validate_email(str(data['email']).strip())
-        
-        # Validate gender if provided
+
+        # Gender is optional; validate only when a non-empty value is provided
         if 'gender' in data:
             valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
-            if data['gender'] not in valid_genders:
+            gender_value = (str(data['gender']).strip() if data['gender'] else None) or None
+            if gender_value and gender_value not in valid_genders:
                 return error_response_from_string(
                     f'Invalid gender. Must be one of: {", ".join(valid_genders)}',
                     400,
                     'VALIDATION_ERROR'
                 )
-            update_data['gender'] = data['gender']
-        
-        # Validate birthday format if provided
+            update_data['gender'] = gender_value
+
         if 'birthday' in data and data['birthday']:
             try:
                 datetime.strptime(str(data['birthday']), '%Y-%m-%d')
@@ -139,79 +134,24 @@ def update_profile():
                     400,
                     'VALIDATION_ERROR'
                 )
-        
-        # Handle other string fields
+
         for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
             if field in data:
                 value = str(data[field]).strip() if data[field] else None
                 update_data[field] = value
-        
-        # Validate age if provided
-        if 'age' in data and data['age'] is not None:
-            try:
-                age = int(data['age'])
-                if not (13 <= age <= 120):
-                    return error_response_from_string(
-                        'Age must be between 13 and 120',
-                        400,
-                        'VALIDATION_ERROR'
-                    )
-                update_data['age'] = age
-            except (ValueError, TypeError):
-                return error_response_from_string('Age must be a valid number', 400, 'VALIDATION_ERROR')
-        
-        # Validate weight if provided
-        if 'weight' in data and data['weight'] is not None:
-            try:
-                weight = float(data['weight'])
-                if not (30 <= weight <= 300):
-                    return error_response_from_string(
-                        'Weight must be between 30 and 300 kg',
-                        400,
-                        'VALIDATION_ERROR'
-                    )
-                update_data['weight'] = weight
-            except (ValueError, TypeError):
-                return error_response_from_string('Weight must be a valid number', 400, 'VALIDATION_ERROR')
-        
-        # Validate height if provided
-        if 'height' in data and data['height'] is not None:
-            try:
-                height = float(data['height'])
-                if not (100 <= height <= 250):
-                    return error_response_from_string(
-                        'Height must be between 100 and 250 cm',
-                        400,
-                        'VALIDATION_ERROR'
-                    )
-                update_data['height'] = height
-            except (ValueError, TypeError):
-                return error_response_from_string('Height must be a valid number', 400, 'VALIDATION_ERROR')
-        
-        # Validate physique if provided
-        if 'physique' in data:
-            valid_physiques = ['slim', 'muscular', 'thick']
-            if data['physique'] not in valid_physiques:
-                return error_response_from_string(
-                    f'Invalid physique. Must be one of: {", ".join(valid_physiques)}',
-                    400,
-                    'VALIDATION_ERROR'
-                )
-            update_data['physique'] = data['physique']
-        
+
         if not update_data:
             return error_response_from_string('No valid fields to update', 400, 'VALIDATION_ERROR')
-        
-        # Update user model
+
         user.update_from_dict(update_data)
         user.save()
-        
+
         logger.info(f"update_profile: EXIT - Profile updated for user_id={user_id}")
         return success_response(
             data=user.to_dict(),
             message='Profile updated successfully'
         )
-        
+
     except ValidationError as e:
         logger.exception(f"update_profile: EXIT - ValidationError: {str(e)}")
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
