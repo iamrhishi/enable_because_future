@@ -124,16 +124,21 @@ def update_profile():
                 )
             update_data['gender'] = gender_value
 
-        if 'birthday' in data and data['birthday']:
-            try:
-                datetime.strptime(str(data['birthday']), '%Y-%m-%d')
-                update_data['birthday'] = str(data['birthday']).strip()
-            except ValueError:
-                return error_response_from_string(
-                    'Birthday must be in YYYY-MM-DD format',
-                    400,
-                    'VALIDATION_ERROR'
-                )
+        birthday_key = 'birthday' if 'birthday' in data else ('birthdate' if 'birthdate' in data else None)
+        if birthday_key:
+            birthday_value = data.get(birthday_key)
+            if birthday_value:
+                try:
+                    datetime.strptime(str(birthday_value), '%Y-%m-%d')
+                except ValueError:
+                    return error_response_from_string(
+                        'Birthday must be in YYYY-MM-DD format',
+                        400,
+                        'VALIDATION_ERROR'
+                    )
+                update_data['birthday'] = str(birthday_value).strip()
+            else:
+                update_data['birthday'] = None
 
         for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
             if field in data:

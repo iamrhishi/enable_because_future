@@ -32,7 +32,7 @@ def create_account():
         first_name = (data.get('first_name') or '').strip()
         last_name = (data.get('last_name') or '').strip()
         gender = (data.get('gender') or '').strip()
-        birthday = (data.get('birthday') or '').strip()  # Format: YYYY-MM-DD
+        birthday = (data.get('birthday') or data.get('birthdate') or '').strip()  # Format: YYYY-MM-DD
         street = (data.get('street') or '').strip()
         city = (data.get('city') or '').strip()
         postal_code = (data.get('postal_code') or data.get('postal-code') or '').strip()  # Support both formats
