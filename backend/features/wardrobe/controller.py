@@ -545,8 +545,23 @@ def add_garment():
         care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
         size = form_data.get('size') or data.get('size')
         description = form_data.get('description') or data.get('description')
-        url = form_data.get('url') or data.get('url')
-        
+        url = form_data.get('url') or data.get('url') or garment_url
+
+        # Check for duplicate URL in same category_section
+        if url:
+            existing_item = WardrobeItem.get_by_url(user_id, url, category_section)
+            if existing_item:
+                logger.info(f"add_garment: EXIT - Duplicate item found, id={existing_item.id}")
+                result = existing_item.to_dict()
+                if result.get('image_path'):
+                    from shared.url_utils import to_absolute_url
+                    result['image_url'] = to_absolute_url(result['image_path'])
+                return success_response(
+                    data=result,
+                    status_code=200,
+                    message='Item already exists in your wardrobe'
+                )
+
         # Create wardrobe item
         wardrobe_item = WardrobeItem(
             user_id=user_id,
@@ -1077,3 +1092,97 @@ def save_extracted_garment():
     except Exception as e:
         logger.exception(f"save_extracted_garment: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Failed to save garment: {str(e)}', 500)
+
+
+# ===== SEARCH =====
+
+@wardrobe_bp.route('/search', methods=['GET'])
+@require_auth
+def search_garments():
+    """
+    Search/extract garment info for try-on.
+
+    Query params:
+        url: Product URL to extract info from (optional)
+        gender: Filter default garments by gender (optional)
+        category: Filter by 'top' or 'bottom' (optional)
+
+    Behavior:
+        - If URL provided: Extract product info from URL
+        - If no URL: Return default garments catalog
+
+    Returns items with:
+        garmentURL, name, brand, imageURL, category, isRecent
+    """
+    url = request.args.get('url', '').strip()
+    gender = request.args.get('gender', '').strip()
+    category_filter = request.args.get('category', '').strip().lower()
+
+    logger.info(f"search_garments: ENTRY - url={url[:50] if url else 'none'}, gender={gender}")
+
+    try:
+        results = []
+
+        if url:
+            # Extract product info from URL
+            from shared.validators import validate_url
+            validated_url = validate_url(url)
+
+            extractor = BrandExtractorFactory.get_extractor(validated_url)
+            product_info = extractor.extract_product_info(validated_url)
+
+            # Get first image URL
+            image_url = product_info.get('images', [None])[0] if product_info.get('images') else None
+
+            # Determine category from title
+            title = product_info.get('title', '')
+            categorization = categorize_garment(title=title)
+            cat = categorization.get('category', 'upper')
+            category = 'top' if cat == 'upper' else 'bottom'
+
+            results.append({
+                'garmentURL': validated_url,
+                'name': product_info.get('title'),
+                'brand': product_info.get('brand'),
+                'imageURL': image_url,
+                'category': category,
+                'isRecent': False
+            })
+
+            logger.info(f"search_garments: EXIT - Extracted product from URL")
+        else:
+            # Return default garments
+            from shared.default_garments import get_default_garments
+
+            default_garments = get_default_garments(gender if gender else None)
+
+            for g in default_garments:
+                # Normalize category
+                cat = g.get('category', '').lower()
+                if cat in ['upper', 'top', 'shirt', 'jacket', 'sweater', 'blouse', 'coat', 'outerwear']:
+                    category = 'top'
+                elif cat in ['lower', 'bottom', 'pants', 'skirt', 'shorts', 'jeans']:
+                    category = 'bottom'
+                else:
+                    category = cat or 'top'
+
+                # Apply category filter if provided
+                if category_filter and category != category_filter:
+                    continue
+
+                results.append({
+                    'garmentURL': g.get('url'),
+                    'name': g.get('name'),
+                    'brand': g.get('brand'),
+                    'imageURL': g.get('imageURL') or g.get('image_url'),
+                    'category': category,
+                    'isRecent': False
+                })
+
+            logger.info(f"search_garments: EXIT - Returned {len(results)} default garments")
+
+        return success_response(data=results)
+
+    except Exception as e:
+        logger.exception(f"search_garments: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Search failed: {str(e)}', 500)

@@ -96,44 +96,60 @@ def reject_message_if_avatar_not_person(image_bytes: bytes, enabled: Optional[bo
         max(_ABS_MIN_FACE_PX, min(w, h) // 55),
     )
 
-    def _meaningful_faces(faces) -> bool:
+    def _count_meaningful_faces(faces) -> int:
         if faces is None or len(faces) == 0:
-            return False
+            return 0
         img_area = float(w * h)
+        count = 0
         for (_, _, fw, fh) in faces:
             if fw * fh / img_area >= _FACE_MIN_AREA_RATIO:
-                return True
-        return False
+                count += 1
+        return count
 
+    # Detect faces
     faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
-    if _meaningful_faces(faces_f):
-        return None
-
     faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
-    if _meaningful_faces(faces_p):
-        return None
+    total_faces = _count_meaningful_faces(faces_f) + _count_meaningful_faces(faces_p)
 
-    # Full-body fallback (narrow mirror selfies, wide shots with small faces)
+    # Detect full bodies via HOG
     hog = cv2.HOGDescriptor()
     hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
     rects, weights = hog.detectMultiScale(img, winStride=(8, 8), padding=(24, 24), scale=1.035)
-    if weights is None or len(rects) == 0:
+
+    valid_bodies = 0
+    if weights is not None and len(rects) > 0:
+        flat = weights.flatten().tolist()
+        img_area_f = float(w * h)
+        for rect, wt in zip(rects, flat):
+            if wt < _HOG_WEIGHT_MIN:
+                continue
+            rx, ry, rw, rh = rect
+            if rw * rh / img_area_f < _HOG_MIN_AREA_RATIO:
+                continue
+            valid_bodies += 1
+
+    logger.info(f'avatar_person_check: faces={total_faces}, bodies={valid_bodies}')
+
+    # Reject multiple people (collage/group photo)
+    if total_faces > 1 or valid_bodies > 1:
         return (
-            'Please upload a clear photo showing you (your face visible or your full figure). '
-            'Images of objects, pets, screenshots, or text cannot be saved as avatars.'
+            'Please upload a photo with only one person. '
+            'Collages, group photos, or composite images cannot be used as avatars.'
         )
 
-    flat = weights.flatten().tolist()
-    img_area_f = float(w * h)
-    for rect, wt in zip(rects, flat):
-        if wt < _HOG_WEIGHT_MIN:
-            continue
-        rx, ry, rw, rh = rect
-        if rw * rh / img_area_f < _HOG_MIN_AREA_RATIO:
-            continue
+    # Reject head-only (face detected but no body)
+    if total_faces >= 1 and valid_bodies == 0:
+        return (
+            'Please upload a full-body photo, not just your face. '
+            'Try-on requires seeing your full figure to dress you virtually.'
+        )
+
+    # Accept: has body (with or without visible face)
+    if valid_bodies == 1:
         return None
 
+    # No face and no body detected
     return (
-        'Please upload a clear photo showing you (your face visible or your full figure). '
+        'Please upload a clear photo showing your full figure. '
         'Images of objects, pets, screenshots, or text cannot be saved as avatars.'
     )

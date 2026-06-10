@@ -2,8 +2,24 @@
   "default": [
     {
       "url": "https://www.zara.com/de/de/taillierter-blazer-mit-knopfen-zw-collection-p07179047.html?v1=539599470&v2=2420942",
-      "name": "Tailored Blazer with Buttons ZW Collection",
-      "category": "outerwear"
+      "name": "Tailored Blazer with Buttons",
+      "brand": "Zara",
+      "category": "top",
+      "imageURL": "https://static.zara.net/assets/public/d57e/cf25/25944ce28915/0dad6dea1902/07179047422-000-p/07179047422-000-p.jpg"
+    },
+    {
+      "url": "https://www2.hm.com/en_us/productpage.1347112002.html",
+      "name": "Draped Jersey Top",
+      "brand": "H&M",
+      "category": "top",
+      "imageURL": "https://image.hm.com/assets/hm/e4/5b/e45b3194c27dbf1cb66fcde02e0f5daf324f605b.jpg"
+    },
+    {
+      "url": "https://www.uniqlo.com/us/en/products/E482839-000/00?colorDisplayCode=02&sizeDisplayCode=004",
+      "name": "Racer Back Bra Top",
+      "brand": "Uniqlo",
+      "category": "top",
+      "imageURL": "https://image.uniqlo.com/UQ/ST3/us/imagesgoods/482839/item/usgoods_02_482839_3x4.jpg"
     }
   ],
   "men": [],
