@@ -24,6 +24,14 @@ elif [ -d "../venv" ]; then
     source ../venv/bin/activate
 fi
 
+# Install/update dependencies
+echo "Updating dependencies..."
+pip install -q -r requirements.txt 2>/dev/null || pip3 install -q -r requirements.txt
+
+# Run pending migrations
+echo "Running migrations..."
+python scripts/run_migrations.py 2>/dev/null || python3 scripts/run_migrations.py 2>/dev/null
+
 echo "Starting Flask server on port $PORT..."
 PORT=$PORT nohup python app.py > app.log 2>&1 &
 SERVER_PID=$!

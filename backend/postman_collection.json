@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "becausefuture-v2",
 		"name": "Because Future API - V2",
-		"description": "API collection for Because Future backend - Version 2\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections\n\nENVIRONMENT SETUP:\n1. Import postman_environment_local.json for Local Development (http://localhost:8000)\n2. Import postman_environment_remote.json for Remote Production (http://34.32.121.88:5001)\n3. Select environment from dropdown (top-right in Postman)\n4. All requests will use {{base_url}} from the selected environment\n\n=== RECENT CHANGES (V2 - 2026-06-01) ===\n\nSearch Screen API (#40):\n• NEW: GET /api/wardrobe/search - Extract product from URL or get default garments\n• With ?url= param: Scrapes product info from URL\n• Without URL: Returns default garments catalog\n• Returns: garmentURL, name, brand, imageURL, category, isRecent\n• Requires authentication\n\nWishlist Duplicate Prevention:\n• UPDATED: POST /api/wardrobe/items - Now prevents duplicate items by URL\n• Returns existing item if URL already exists in same category_section\n\nAvatar Validation Enhancement:\n• UPDATED: POST /api/save-avatar - Now requires full-body photos\n• Rejects head-only images (need full figure for try-on)\n• Rejects collages/group photos (multiple people)\n\n=== PREVIOUS CHANGES (V2 - 2026-04-10) ===\n\nTask 1 - Saved Try-ons with Garment URL:\n• UPDATED: POST /api/tryon - Now saves garment_url with try-on result\n• UPDATED: GET /api/job/{job_id} - Returns garment_url when job is done\n• UPDATED: GET /api/job/{job_id}/result - Returns garment_url\n\nTask 2 - Sizing Algorithm (2026-04-13):\n• NEW: POST /api/sizing/recommend - Get size recommendation based on user measurements vs garment\n• NEW: GET /api/sizing/garment - Get garment sizing info from Lovable DB\n• Integrates with Lovable/Supabase API for garment measurements\n• Compares user body measurements with garment measurements\n• Returns fit analysis with confidence score\n\nTask 3 - Default Garment URLs:\n• NEW: GET /api/garments/defaults - Get default garment URLs by gender\n\nTask 4 - Deep Linking/Social Sharing:\n• Backend ready via existing POST /api/garments/scrape\n• Mobile app needs to implement share intent (iOS Universal Links / Android App Links)\n\nTask 5 - Layered Multi-Garment Try-On (2026-04-14):\n• NEW: POST /api/tryon/layered - Apply multiple garments sequentially with layering\n• Use case: top + jacket, shirt + blazer, dress + coat\n• First garment replaces existing clothes, subsequent garments layer on top\n• Synchronous processing, returns all intermediate results\n\nTask 6 - FIT Analysis API (2026-04-17):\n• NEW: POST /api/fit-analysis - Analyze garment fit against user body measurements\n• 4-tier classification: body fit, good fit, loose fit, tight\n• Supports upper garments (chest, sleeve, shirt length) and lower garments (waist, hip, inseam)\n• Returns detailed per-measurement fit status and recommendations",
+		"description": "API collection for Because Future backend - Version 2\n\nUses Gemini (Nano Banana) API for background removal and try-on processing\nLocal file storage in /images directory\nCustom form-based authentication with JWT\nWardrobe management with platform and user-created category sections\n\nENVIRONMENT SETUP:\n1. Import postman_environment_local.json for Local Development (http://localhost:8000)\n2. Import postman_environment_remote.json for Remote Production (http://34.32.121.88:5001)\n3. Select environment from dropdown (top-right in Postman)\n4. All requests will use {{base_url}} from the selected environment\n\n=== RECENT CHANGES (V2 - 2026-06-11) ===\n\nWishlist Management:\n• NEW: DELETE /api/wardrobe/wishlist/{id} - Remove item from wishlist\n• NEW: POST /api/wardrobe/wishlist/{id}/move-to-wardrobe - Move to wardrobe\n\nAnalytics & Daily Reports:\n• Event tracking for login, signup, delete_account, try-on\n• Daily XLSX reports emailed, then data wiped\n\nAvatar Validation Improvements:\n• Smarter full-body detection with face size heuristic\n• Better error messages with rejection codes\n\n=== CHANGES (V2 - 2026-06-01) ===\n\nSearch Screen API (#40):\n• NEW: GET /api/wardrobe/search - Extract product from URL or get default garments\n• With ?url= param: Scrapes product info from URL\n• Without URL: Returns default garments catalog\n• Returns: garmentURL, name, brand, imageURL, category, isRecent\n• Requires authentication\n\nWishlist Duplicate Prevention:\n• UPDATED: POST /api/wardrobe/items - Now prevents duplicate items by URL\n• Returns existing item if URL already exists in same category_section\n\nAvatar Validation Enhancement:\n• UPDATED: POST /api/save-avatar - Now requires full-body photos\n• Rejects head-only images (need full figure for try-on)\n• Rejects collages/group photos (multiple people)\n\n=== PREVIOUS CHANGES (V2 - 2026-04-10) ===\n\nTask 1 - Saved Try-ons with Garment URL:\n• UPDATED: POST /api/tryon - Now saves garment_url with try-on result\n• UPDATED: GET /api/job/{job_id} - Returns garment_url when job is done\n• UPDATED: GET /api/job/{job_id}/result - Returns garment_url\n\nTask 2 - Sizing Algorithm (2026-04-13):\n• NEW: POST /api/sizing/recommend - Get size recommendation based on user measurements vs garment\n• NEW: GET /api/sizing/garment - Get garment sizing info from Lovable DB\n• Integrates with Lovable/Supabase API for garment measurements\n• Compares user body measurements with garment measurements\n• Returns fit analysis with confidence score\n\nTask 3 - Default Garment URLs:\n• NEW: GET /api/garments/defaults - Get default garment URLs by gender\n\nTask 4 - Deep Linking/Social Sharing:\n• Backend ready via existing POST /api/garments/scrape\n• Mobile app needs to implement share intent (iOS Universal Links / Android App Links)\n\nTask 5 - Layered Multi-Garment Try-On (2026-04-14):\n• NEW: POST /api/tryon/layered - Apply multiple garments sequentially with layering\n• Use case: top + jacket, shirt + blazer, dress + coat\n• First garment replaces existing clothes, subsequent garments layer on top\n• Synchronous processing, returns all intermediate results\n\nTask 6 - FIT Analysis API (2026-04-17):\n• NEW: POST /api/fit-analysis - Analyze garment fit against user body measurements\n• 4-tier classification: body fit, good fit, loose fit, tight\n• Supports upper garments (chest, sleeve, shirt length) and lower garments (waist, hip, inseam)\n• Returns detailed per-measurement fit status and recommendations",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -3601,6 +3601,128 @@
 									],
 									"cookie": [],
 									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/us/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9,\n        \"colors\": [\"White\", \"Black\"],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"]\n    }\n}"
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "Wishlist",
+					"item": [
+						{
+							"name": "Remove from Wishlist",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"description": "Remove an item from wishlist (deletes the item completely). For moving to wardrobe instead, use 'Move from Wishlist to Wardrobe'.",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/wishlist/1",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "wishlist", "1"]
+								}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/wishlist/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "wishlist", "1"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"message\": \"Item removed from wishlist\"\n    }\n}"
+								},
+								{
+									"name": "Not in Wishlist",
+									"originalRequest": {
+										"method": "DELETE",
+										"header": [],
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/wishlist/1",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "wishlist", "1"]
+										}
+									},
+									"status": "Bad Request",
+									"code": 400,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": false,\n    \"error\": \"Item is not in wishlist\",\n    \"error_code\": \"INVALID_OPERATION\"\n}"
+								}
+							]
+						},
+						{
+							"name": "Move from Wishlist to Wardrobe",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"category_section\": \"upper_body\"\n}"
+								},
+								"description": "Move an item from wishlist to wardrobe. Changes category_section from 'wishlist' to specified section (upper_body, lower_body, or accessoires). If category_section not provided, auto-detects from garment type.",
+								"url": {
+									"raw": "{{base_url}}/api/wardrobe/wishlist/1/move-to-wardrobe",
+									"host": ["{{base_url}}"],
+									"path": ["api", "wardrobe", "wishlist", "1", "move-to-wardrobe"]
+								}
+							},
+							"response": [
+								{
+									"name": "Success",
+									"originalRequest": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"category_section\": \"upper_body\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/api/wardrobe/wishlist/1/move-to-wardrobe",
+											"host": ["{{base_url}}"],
+											"path": ["api", "wardrobe", "wishlist", "1", "move-to-wardrobe"]
+										}
+									},
+									"status": "OK",
+									"code": 200,
+									"_postman_previewlanguage": "json",
+									"header": [
+										{
+											"key": "Content-Type",
+											"value": "application/json"
+										}
+									],
+									"cookie": [],
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"message\": \"Item moved to upper_body\",\n        \"item\": {\n            \"id\": 1,\n            \"user_id\": \"f3a6ad94\",\n            \"title\": \"Classic Blue Blazer\",\n            \"category\": \"upper\",\n            \"category_section\": \"upper_body\",\n            \"image_url\": \"http://localhost:8000/images/wardrobe/f3a6ad94/1.png\"\n        }\n    }\n}"
 								}
 							]
 						}

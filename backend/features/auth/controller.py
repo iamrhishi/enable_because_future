@@ -10,6 +10,7 @@ from features.body_measurements.model import BodyMeasurements
 from shared.response import success_response, error_response_from_string
 from shared.validators import validate_email, validate_password, validate_numeric
 from shared.errors import ValidationError, AuthenticationError
+from shared.analytics import track_event, EventType
 from config import Config
 from shared.logger import logger
 import uuid
@@ -216,9 +217,12 @@ def create_account():
         
         # Generate JWT token
         token = generate_token(userid, email)
-        
+
+        # Track signup event
+        track_event(EventType.SIGNUP, user_id=userid, user_email=email)
+
         logger.info(f"create_account: EXIT - Account created successfully for userid={userid}")
-        
+
         return success_response(
             data={
                 'token': token,
@@ -258,16 +262,21 @@ def login():
         
         if not user or not user.is_active:
             logger.warning(f"login: User not found or inactive - email={email}")
+            track_event(EventType.LOGIN_FAILED, user_email=email, metadata={'reason': 'user_not_found'})
             return error_response_from_string('Invalid email or password', 401, 'AUTHENTICATION_ERROR')
-        
+
         # Check password using User model method
         if not user.check_password(password):
             logger.warning(f"login: Invalid password for email={email}")
+            track_event(EventType.LOGIN_FAILED, user_id=user.userid, user_email=email, metadata={'reason': 'invalid_password'})
             return error_response_from_string('Invalid email or password', 401, 'AUTHENTICATION_ERROR')
-        
+
         # Generate JWT token
         token = generate_token(user.userid, user.email)
-        
+
+        # Track successful login
+        track_event(EventType.LOGIN, user_id=user.userid, user_email=user.email)
+
         logger.info(f"login: EXIT - Login successful for userid={user.userid}")
         
         return success_response(

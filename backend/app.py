@@ -198,9 +198,13 @@ def allowed_file(filename):
 @app.route('/api/save-avatar', methods=['POST'])
 @require_auth
 def save_avatar():
+    user_id = getattr(request, 'user_id', 'unknown')
+    logger.info(f"save_avatar: ENTRY - user_id={user_id}")
     try:
         # Check if file and user_id are provided
         if 'avatar' not in request.files:
+            logger.warning(f"save_avatar: No avatar file in request for user_id={user_id}")
+            logger.info(f"save_avatar: Request files keys: {list(request.files.keys())}")
             return error_response_from_string('No avatar file provided', 400, 'VALIDATION_ERROR')
         
         # user_id is already set from JWT token via @require_auth decorator
@@ -218,11 +222,22 @@ def save_avatar():
         
         user_id = request.user_id
         avatar_data = avatar_file.read()
+        logger.info(f"save_avatar: Got avatar file, size={len(avatar_data)} bytes, user_id={user_id}")
 
         from shared.avatar_person_check import reject_message_if_avatar_not_person
 
         rejection = reject_message_if_avatar_not_person(avatar_data)
         if rejection:
+            logger.warning(f"save_avatar: Avatar rejected for user_id={user_id}: {rejection}")
+            from shared.analytics import track_event, EventType
+            from shared.models.user import User
+            user_for_email = User.get_by_id(user_id)
+            track_event(
+                EventType.AVATAR_FAILED,
+                user_id=user_id,
+                user_email=user_for_email.email if user_for_email else None,
+                metadata={'reason': rejection[:100]}
+            )
             return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
 
         try:
@@ -283,6 +298,13 @@ def save_avatar():
         user.avatar_path = storage_path  # Store the file path reference
         user.save()
         logger.info(f"Avatar saved successfully for user: {user_id}, URL: {absolute_avatar_url}")
+        from shared.analytics import track_event, EventType
+        track_event(
+            EventType.AVATAR_SAVED,
+            user_id=user_id,
+            user_email=user.email,
+            metadata={'method': 'rembg', 'size_bytes': len(avatar_data)}
+        )
         return success_response(
             data={
                 'message': 'Avatar saved successfully (rembg-based background removal)',
@@ -304,9 +326,12 @@ def save_avatar_local():
     """
     Save avatar with rembg-based local background removal (no Gemini API)
     """
+    user_id = getattr(request, 'user_id', 'unknown')
+    logger.info(f"save_avatar_local: ENTRY - user_id={user_id}")
     try:
         # Check if file is provided
         if 'avatar' not in request.files:
+            logger.warning(f"save_avatar_local: No avatar file in request for user_id={user_id}")
             return error_response_from_string('No avatar file provided', 400, 'VALIDATION_ERROR')
         
         avatar_file = request.files['avatar']
@@ -332,13 +357,24 @@ def save_avatar_local():
             )
         
         user_id = request.user_id
-        
+        logger.info(f"save_avatar_local: Got avatar file, size={len(avatar_data)} bytes, user_id={user_id}")
+
         # Remove background using rembg-based local algorithm
         try:
             from shared.avatar_person_check import reject_message_if_avatar_not_person
 
             rejection = reject_message_if_avatar_not_person(avatar_data)
             if rejection:
+                logger.warning(f"save_avatar_local: Avatar rejected for user_id={user_id}: {rejection}")
+                from shared.analytics import track_event, EventType
+                from shared.models.user import User
+                user_for_email = User.get_by_id(user_id)
+                track_event(
+                    EventType.AVATAR_FAILED,
+                    user_id=user_id,
+                    user_email=user_for_email.email if user_for_email else None,
+                    metadata={'reason': rejection[:100], 'method': 'local'}
+                )
                 return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
 
             from features.tryon.service import _remove_background_local
@@ -427,9 +463,16 @@ def save_avatar_local():
         user.avatar = avatar_data
         user.avatar_path = storage_path  # Store the file path reference
         user.save()
-        
+
         logger.info(f"Avatar saved successfully (local) for user: {user_id}, URL: {absolute_avatar_url}")
-        
+        from shared.analytics import track_event, EventType
+        track_event(
+            EventType.AVATAR_SAVED,
+            user_id=user_id,
+            user_email=user.email,
+            metadata={'method': 'rembg_local', 'size_bytes': len(avatar_data)}
+        )
+
         return success_response(
             data={
                 'message': 'Avatar saved successfully (rembg-based background removal)',

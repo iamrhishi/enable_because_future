@@ -97,7 +97,18 @@ class Config:
     # Lovable/Supabase API Configuration (for sizing/garment data)
     LOVABLE_API_BASE = os.environ.get('LOVABLE_API_BASE', 'https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1')
     LOVABLE_API_KEY = os.environ.get('LOVABLE_API_KEY', '')
-    
+
+    # Analytics & Daily Report Configuration
+    # SMTP for sending daily analytics reports (XLSX)
+    # Supports both SMTP_* and EMAIL_* naming (EMAIL_* is Django convention)
+    SMTP_HOST = os.environ.get('SMTP_HOST') or os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+    SMTP_PORT = int(os.environ.get('SMTP_PORT') or os.environ.get('EMAIL_PORT', '587'))
+    SMTP_USER = os.environ.get('SMTP_USER') or os.environ.get('EMAIL_HOST_USER', '')
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD') or os.environ.get('EMAIL_HOST_PASSWORD', '')
+    SMTP_FROM = os.environ.get('SMTP_FROM') or os.environ.get('DEFAULT_FROM_EMAIL', '')
+    # Comma-separated list of emails to receive daily analytics reports
+    ANALYTICS_REPORT_EMAILS = os.environ.get('ANALYTICS_REPORT_EMAILS', '')
+
     @staticmethod
     def validate():
         """Validate that all required configuration is present"""

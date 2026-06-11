@@ -13,6 +13,7 @@ from typing import Dict, Optional
 from shared.database import db_manager
 from shared.logger import logger
 from shared.errors import ValidationError
+from shared.analytics import track_event, EventType
 
 # Queue limits per context.md line 89
 MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '50'))  # Max jobs in queue
@@ -29,8 +30,32 @@ class JobQueue:
         self.worker_thread = None
         self.running = False
         self.job_start_times: Dict[str, float] = {}  # Track job start times for timeout
+        self._cleanup_stuck_jobs()  # Mark any stuck jobs from previous crash as failed
         self._start_worker()
         logger.info(f"JobQueue.__init__: EXIT - Initialized (max_queue_size={MAX_QUEUE_SIZE}, timeout={JOB_TIMEOUT_SECONDS}s)")
+
+    def _cleanup_stuck_jobs(self):
+        """Mark any jobs stuck in 'processing' status as failed (from previous crash)"""
+        try:
+            stuck_jobs = db_manager.execute_query(
+                "SELECT job_id FROM tryon_jobs WHERE status = 'processing'",
+                fetch_all=True
+            )
+            if stuck_jobs:
+                for job in stuck_jobs:
+                    job_id = job['job_id']
+                    db_manager.execute_query(
+                        """UPDATE tryon_jobs
+                           SET status = 'failed',
+                               error_message = 'Server restarted while job was processing',
+                               updated_at = CURRENT_TIMESTAMP
+                           WHERE job_id = ?""",
+                        (job_id,)
+                    )
+                    logger.warning(f"JobQueue._cleanup_stuck_jobs: Marked stuck job {job_id} as failed")
+                logger.info(f"JobQueue._cleanup_stuck_jobs: Cleaned up {len(stuck_jobs)} stuck job(s)")
+        except Exception as e:
+            logger.warning(f"JobQueue._cleanup_stuck_jobs: Error: {e}")
     
     def _start_worker(self):
         """Start background worker thread"""
@@ -53,8 +78,31 @@ class JobQueue:
         while self.running:
             try:
                 job_data = self.queue.get(timeout=1)
-                logger.info(f"JobQueue._worker_loop: Processing job {job_data.get('job_id')}")
-                self._process_job(job_data)
+                job_id = job_data.get('job_id', 'unknown')
+                logger.info(f"JobQueue._worker_loop: Processing job {job_id}")
+                try:
+                    self._process_job(job_data)
+                except Exception as process_error:
+                    # Catch-all: ensure job is marked failed even if _process_job crashes
+                    logger.exception(f"JobQueue._worker_loop: CRITICAL - Job {job_id} crashed: {process_error}")
+                    try:
+                        self._update_job_status(job_id, 'failed', error_message=f"Internal error: {str(process_error)[:200]}")
+                        # Get user email for analytics
+                        user_email_crash = None
+                        try:
+                            from shared.models.user import User
+                            user_crash = User.get_by_id(job_data.get('user_id')) if job_data.get('user_id') else None
+                            user_email_crash = user_crash.email if user_crash else None
+                        except Exception:
+                            pass
+                        track_event(
+                            EventType.TRYON_FAILED,
+                            user_id=job_data.get('user_id'),
+                            user_email=user_email_crash,
+                            metadata={'job_id': job_id, 'error': str(process_error)[:500], 'reason': 'worker_crash'}
+                        )
+                    except Exception as update_error:
+                        logger.error(f"JobQueue._worker_loop: Failed to update crashed job status: {update_error}")
                 self.queue.task_done()
             except queue.Empty:
                 continue
@@ -65,16 +113,26 @@ class JobQueue:
     def _process_job(self, job_data: Dict):
         """Process a single job with timeout handling"""
         job_id = job_data['job_id']
+        user_id = job_data.get('user_id')
         logger.info(f"JobQueue._process_job: ENTRY - job_id={job_id}")
-        
+
+        # Get user email for analytics
+        user_email = None
+        try:
+            from shared.models.user import User
+            user = User.get_by_id(user_id) if user_id else None
+            user_email = user.email if user else None
+        except Exception:
+            pass
+
         # Track start time for timeout
         start_time = time.time()
         self.job_start_times[job_id] = start_time
-        
+
         try:
             # Update job status to processing
             self._update_job_status(job_id, 'processing', progress=10)
-            
+
             # Import here to avoid circular imports
             from features.tryon.service import process_tryon
             
@@ -132,15 +190,36 @@ class JobQueue:
             # Update job status to done
             elapsed = time.time() - start_time
             self._update_job_status(job_id, 'done', progress=100, result_url=result_url)
+
+            # Track try-on completion
+            track_event(
+                EventType.TRYON_COMPLETE,
+                user_id=user_id,
+                user_email=user_email,
+                metadata={'job_id': job_id, 'elapsed_seconds': round(elapsed, 1)}
+            )
+
             logger.info(f"JobQueue._process_job: EXIT - Job {job_id} completed successfully in {elapsed:.1f}s")
-            
+
         except ValidationError as e:
             logger.exception(f"JobQueue._process_job: EXIT - Job {job_id} validation failed: {str(e)}")
             self._update_job_status(job_id, 'failed', error_message=f"Validation error: {str(e)}")
+            track_event(
+                EventType.TRYON_FAILED,
+                user_id=user_id,
+                user_email=user_email,
+                metadata={'job_id': job_id, 'error': str(e), 'reason': 'validation'}
+            )
         except Exception as e:
             elapsed = time.time() - start_time
             logger.exception(f"JobQueue._process_job: EXIT - Job {job_id} failed after {elapsed:.1f}s: {str(e)}")
             self._update_job_status(job_id, 'failed', error_message=str(e))
+            track_event(
+                EventType.TRYON_FAILED,
+                user_id=user_id,
+                user_email=user_email,
+                metadata={'job_id': job_id, 'error': str(e), 'elapsed_seconds': round(elapsed, 1)}
+            )
         finally:
             # Clean up start time tracking
             if job_id in self.job_start_times:

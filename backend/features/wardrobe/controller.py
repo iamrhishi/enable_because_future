@@ -901,9 +901,118 @@ def delete_wardrobe_item(item_id: int):
         
         logger.info(f"delete_wardrobe_item: EXIT - Item deleted")
         return success_response(data={'message': 'Wardrobe item deleted successfully'})
-        
+
     except Exception as e:
         logger.exception(f"delete_wardrobe_item: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+@wardrobe_bp.route('/wishlist/<int:item_id>', methods=['DELETE'])
+@require_auth
+def remove_from_wishlist(item_id: int):
+    """
+    Remove an item from wishlist (deletes the item completely).
+
+    For moving item to wardrobe instead of deleting, use PUT /items/<id>
+    with category_section='upper_body' or 'lower_body'.
+    """
+    user_id = request.user_id
+    logger.info(f"remove_from_wishlist: ENTRY - item_id={item_id}, user_id={user_id}")
+
+    try:
+        item = WardrobeItem.get_by_id(item_id, user_id)
+        if not item:
+            return error_response_from_string('Wishlist item not found', 404, 'NOT_FOUND')
+
+        # Verify it's actually in wishlist
+        if item.category_section != 'wishlist':
+            return error_response_from_string(
+                'Item is not in wishlist',
+                400,
+                'INVALID_OPERATION'
+            )
+
+        # Delete image from storage if needed
+        if item.image_path:
+            try:
+                storage_service = get_storage_service()
+                if item.image_path.startswith('/images/'):
+                    path = item.image_path.replace('/images/', '')
+                    storage_service.delete_image(path)
+            except Exception as e:
+                logger.warning(f"remove_from_wishlist: Failed to delete image: {str(e)}")
+
+        item.delete()
+
+        logger.info(f"remove_from_wishlist: EXIT - Item removed from wishlist")
+        return success_response(data={'message': 'Item removed from wishlist'})
+
+    except Exception as e:
+        logger.exception(f"remove_from_wishlist: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+@wardrobe_bp.route('/wishlist/<int:item_id>/move-to-wardrobe', methods=['POST'])
+@require_auth
+def move_from_wishlist_to_wardrobe(item_id: int):
+    """
+    Move an item from wishlist to wardrobe (changes category_section).
+
+    Optional body params:
+    - category_section: 'upper_body' or 'lower_body' (default: auto-detect from garment type)
+    """
+    user_id = request.user_id
+    logger.info(f"move_from_wishlist_to_wardrobe: ENTRY - item_id={item_id}, user_id={user_id}")
+
+    try:
+        item = WardrobeItem.get_by_id(item_id, user_id)
+        if not item:
+            return error_response_from_string('Wishlist item not found', 404, 'NOT_FOUND')
+
+        # Verify it's actually in wishlist
+        if item.category_section != 'wishlist':
+            return error_response_from_string(
+                'Item is not in wishlist',
+                400,
+                'INVALID_OPERATION'
+            )
+
+        # Get target section from request or auto-detect
+        data = request.get_json(silent=True) or {}
+        target_section = data.get('category_section')
+
+        if not target_section:
+            # Auto-detect from garment type or category
+            if item.category == 'lower' or item.garment_category_type in ['pants', 'jeans', 'shorts', 'skirt', 'trousers']:
+                target_section = 'lower_body'
+            else:
+                target_section = 'upper_body'
+
+        # Validate target section
+        if target_section not in ['upper_body', 'lower_body', 'accessoires']:
+            return error_response_from_string(
+                'Invalid category_section. Use upper_body, lower_body, or accessoires',
+                400,
+                'VALIDATION_ERROR'
+            )
+
+        # Update item
+        item.category_section = target_section
+        if target_section == 'upper_body':
+            item.category = 'upper'
+        elif target_section == 'lower_body':
+            item.category = 'lower'
+
+        item.save()
+
+        logger.info(f"move_from_wishlist_to_wardrobe: EXIT - Moved to {target_section}")
+        return success_response(data={
+            'message': f'Item moved to {target_section}',
+            'item': item.to_dict()
+        })
+
+    except Exception as e:
+        logger.exception(f"move_from_wishlist_to_wardrobe: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 

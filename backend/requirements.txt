@@ -12,3 +12,4 @@ beautifulsoup4
 boto3
 google-cloud-storage
 scrapy
+openpyxl

@@ -17,6 +17,7 @@ from shared.garment_utils import categorize_garment
 from shared.models.user import User
 from shared.response import success_response, error_response_from_string
 from shared.middleware import require_auth
+from shared.analytics import track_event, EventType
 from shared.logger import logger
 from shared.validators import validate_url
 
@@ -817,7 +818,16 @@ def create_tryon_job():
             options=options,
             garment_url=source_garment_url  # Save source URL with try-on result
         )
-        
+
+        # Track try-on start (get user email for reporting)
+        user_for_analytics = User.get_by_id(user_id)
+        track_event(
+            EventType.TRYON_START,
+            user_id=user_id,
+            user_email=user_for_analytics.email if user_for_analytics else None,
+            metadata={'job_id': job_id, 'garment_type': garment_type, 'garment_url': source_garment_url}
+        )
+
         logger.info(f"create_tryon_job: EXIT - Job created: {job_id}")
         return success_response(
             data={

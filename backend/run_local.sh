@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_local.sh - Start backend with ngrok tunnel for local development
 
-PORT=8000
+PORT=5001
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== BecauseFuture Backend - Local Development ==="
@@ -20,18 +20,26 @@ echo "Stopping existing ngrok tunnels..."
 pkill -f ngrok 2>/dev/null
 sleep 1
 
-# Activate virtual environment and start server
-echo "Starting Flask server on port $PORT..."
 cd "$SCRIPT_DIR"
 
+# Activate virtual environment
 if [ -d "./venv" ]; then
     source ./venv/bin/activate
 elif [ -d "../venv" ]; then
     source ../venv/bin/activate
 fi
 
+# Install/update dependencies
+echo "Updating dependencies..."
+pip install -q -r requirements.txt 2>/dev/null || pip3 install -q -r requirements.txt
+
+# Run pending migrations
+echo "Running migrations..."
+python scripts/run_migrations.py 2>/dev/null || python3 scripts/run_migrations.py 2>/dev/null
+
 # Start server in background
-python app.py > /tmp/backend.log 2>&1 &
+echo "Starting Flask server on port $PORT..."
+PORT=$PORT python app.py > /tmp/backend.log 2>&1 &
 SERVER_PID=$!
 echo "Server started with PID: $SERVER_PID"
 

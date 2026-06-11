@@ -43,14 +43,14 @@ class DailyRotatingFileHandler(logging.Handler):
     Custom file handler that creates a new log file each day
     Files are named: app.YYYY-MM-DD.log (e.g., app.2025-11-27.log)
     """
-    
+
     def __init__(self, log_dir: Path, base_name: str = 'app', level: int = logging.INFO):
         super().__init__(level)
         self.log_dir = log_dir
         self.base_name = base_name
         self.current_date = None
         self.current_file = None
-        self.lock = threading.Lock()
+        self._lock = threading.RLock()  # Reentrant lock to prevent deadlock
         self._open_file()
     
     def _get_log_filename(self, date: datetime = None) -> Path:
@@ -88,26 +88,19 @@ class DailyRotatingFileHandler(logging.Handler):
     def emit(self, record):
         """Emit a log record"""
         try:
-            # Use timeout to prevent deadlock
-            if self.lock.acquire(timeout=0.1):
-                try:
-                    # Check if date changed (new day)
-                    today = datetime.now()
-                    today_str = today.strftime('%Y-%m-%d')
-                    
-                    if self.current_date != today_str or not self.current_file:
-                        self._open_file()
-                    
-                    # Format and write log
-                    if self.current_file:
-                        msg = self.format(record)
-                        self.current_file.write(msg + '\n')
-                        self.current_file.flush()
-                finally:
-                    self.lock.release()
-            else:
-                # If lock acquisition fails, skip this log (prevent deadlock)
-                pass
+            with self._lock:
+                # Check if date changed (new day)
+                today = datetime.now()
+                today_str = today.strftime('%Y-%m-%d')
+
+                if self.current_date != today_str or not self.current_file:
+                    self._open_file()
+
+                # Format and write log
+                if self.current_file:
+                    msg = self.format(record)
+                    self.current_file.write(msg + '\n')
+                    self.current_file.flush()
         except Exception:
             self.handleError(record)
     
@@ -124,18 +117,24 @@ class DailyRotatingLogger:
     Creates log files organized by date: logs/app.YYYY-MM-DD.log
     Each day gets its own log file (e.g., app.2025-11-27.log)
     """
-    
-    def __init__(self, name: str = 'becauseFuture', log_dir: str = 'logs', level: str = None):
+
+    def __init__(self, name: str = 'becauseFuture', log_dir: str = None, level: str = None):
         """
         Initialize logger with daily rotation
-        
+
         Args:
             name: Logger name
-            log_dir: Directory to store log files
+            log_dir: Directory to store log files (defaults to backend/logs)
             level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
         self.name = name
-        self.log_dir = Path(log_dir)
+        # Use absolute path to ensure logs always go to backend/logs
+        if log_dir is None:
+            # Get the backend directory (parent of shared/)
+            backend_dir = Path(__file__).parent.parent
+            self.log_dir = backend_dir / 'logs'
+        else:
+            self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
         
         # Get log level from environment or default to INFO

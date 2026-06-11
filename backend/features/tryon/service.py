@@ -410,33 +410,41 @@ def _strip_gemini_feedback_markdown(message: str) -> str:
 
 def _raise_gemini_tryon_finish_error(finish_reason: str, finish_message: str) -> None:
     """Raise ExternalServiceError for a Gemini candidate finishReason (no image returned)."""
-    finish_message = _strip_gemini_feedback_markdown(finish_message or '')
+    raw_message = _strip_gemini_feedback_markdown(finish_message or '')
+    logger.error(f'process_tryon: finish_reason={finish_reason}, raw_message={raw_message}')
+
     if finish_reason == 'IMAGE_OTHER':
-        error_msg = finish_message or 'Gemini could not generate the image based on the prompt provided.'
-        logger.error(f'process_tryon: IMAGE_OTHER - {error_msg}')
-        raise ExternalServiceError(
-            f'Gemini image generation failed: {error_msg}',
-            service='gemini'
+        # Clean up verbose Gemini messages for user display
+        user_msg = (
+            'Try-on could not be completed for this combination. '
+            'Try a different pose or garment.'
         )
+        raise ExternalServiceError(user_msg, service='gemini')
+
     if finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
-        error_msg = 'Gemini blocked the request due to safety filters.'
-        if finish_message:
-            error_msg += f' {finish_message}'
-        raise ExternalServiceError(error_msg, service='gemini')
+        user_msg = (
+            'This image combination was blocked by safety filters. '
+            'Please try a different photo or garment.'
+        )
+        raise ExternalServiceError(user_msg, service='gemini')
+
     if finish_reason == 'MAX_TOKENS':
         raise ExternalServiceError(
-            'Gemini response was truncated due to token limit. The prompt or images may be too large.',
+            'Image processing limit reached. Try with a smaller image.',
             service='gemini'
         )
+
     if finish_reason == 'RECITATION':
         raise ExternalServiceError(
-            'Gemini detected recitation of copyrighted content.',
+            'Could not process this garment image. Please try another.',
             service='gemini'
         )
-    error_msg = f'Gemini returned finish reason: {finish_reason}'
-    if finish_message:
-        error_msg += f' - {finish_message}'
-    raise ExternalServiceError(error_msg, service='gemini')
+
+    # Generic fallback
+    raise ExternalServiceError(
+        'Try-on failed unexpectedly. Please try again.',
+        service='gemini'
+    )
 
 
 def _parse_gemini_tryon_image_response(result: dict):

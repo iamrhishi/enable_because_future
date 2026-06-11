@@ -2,6 +2,7 @@ from flask import Blueprint, request
 from shared.models.user import User
 from shared.response import success_response, error_response_from_string
 from shared.middleware import require_auth
+from shared.analytics import track_event, EventType
 from shared.logger import logger
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
@@ -285,6 +286,10 @@ def _delete_user_account(user_id: str):
             return error_response_from_string('Account not found', 404, 'NOT_FOUND')
 
     user.deactivate_account()
+
+    # Track account deletion
+    track_event(EventType.DELETE_ACCOUNT, user_id=user_id, user_email=user.email)
+
     logger.info(f"delete_account: EXIT - Account deleted for user_id={user_id}")
     return success_response(message='Your account has been deleted successfully')
 
