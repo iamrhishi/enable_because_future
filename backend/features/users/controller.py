@@ -43,6 +43,36 @@ def get_avatar():
         logger.exception(f"get_avatar: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
+
+@users_bp.route('/tryon-status', methods=['GET'])
+@require_auth
+def get_tryon_status():
+    """
+    Get current user's try-on limits and count
+    Returns only tryon_count, tryon_limit, and remaining_tryons
+    """
+    user_id = request.user_id
+    logger.info(f"get_tryon_status: ENTRY - user_id={user_id}")
+    try:
+        from config import Config
+        user = User.get_by_id(user_id)
+        if not user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        
+        limit = Config.MAX_TRYON_LIMIT
+        count = user.tryon_count
+        remaining = max(0, limit - count)
+        
+        return success_response(data={
+            'tryon_count': count,
+            'tryon_limit': limit,
+            'remaining_tryons': remaining
+        })
+    except Exception as e:
+        logger.exception(f"get_tryon_status: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
 from flask import Blueprint, request
 from shared.models.user import User
 from shared.response import success_response, error_response_from_string
