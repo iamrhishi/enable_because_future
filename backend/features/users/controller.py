@@ -73,16 +73,9 @@ def get_tryon_status():
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 
-from flask import Blueprint, request
-from shared.models.user import User
-from shared.response import success_response, error_response_from_string
-from shared.middleware import require_auth
 from shared.validators import validate_email, validate_password
 from shared.errors import ValidationError
-from shared.logger import logger
 from datetime import datetime
-
-users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
 
 @users_bp.route('/profile', methods=['GET'])
