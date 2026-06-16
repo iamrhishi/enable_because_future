@@ -25,6 +25,19 @@ from io import BytesIO
 wardrobe_bp = Blueprint('wardrobe', __name__, url_prefix='/api/wardrobe')
 
 
+def parse_int_safe(val):
+    if val is None:
+        return None
+    if isinstance(val, str):
+        val_lower = val.strip().lower()
+        if val_lower in ('null', 'none', ''):
+            return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 # ===== METADATA & OPTIONS =====
 
 @wardrobe_bp.route('/options', methods=['GET'])
@@ -459,7 +472,7 @@ def add_garment():
         category_section = form_data.get('category_section') or data.get('category_section')
         category = form_data.get('category') or data.get('category')
         custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
-        category_id = form_data.get('category_id') or data.get('category_id')
+        category_id = parse_int_safe(form_data.get('category_id') or data.get('category_id'))
         
         # Validate category_section if provided
         if category_section:
@@ -496,7 +509,7 @@ def add_garment():
         if custom_category_name:
             # Verify custom category exists
             if category_id:
-                cat = WardrobeCategory.get_by_id(int(category_id), user_id)
+                cat = WardrobeCategory.get_by_id(category_id, user_id)
                 if not cat:
                     return error_response_from_string('Category not found', 404, 'NOT_FOUND')
         elif category is not None and category not in ['upper', 'lower']:
@@ -568,7 +581,7 @@ def add_garment():
             image_path=image_url,
             category=category if not custom_category_name else None,
             custom_category_name=custom_category_name,
-            category_id=int(category_id) if category_id else None,
+            category_id=category_id,
             category_section=category_section,
             garment_category_type=garment_type,
             brand=product_info.get('brand') if product_info else form_data.get('brand') or data.get('brand'),
@@ -626,30 +639,26 @@ def get_wardrobe_items():
         
         # Get items
         # Parse category_id if provided
-        category_id_int = None
+        category_id_int = parse_int_safe(category_id)
         platform_category_name = None
-        if category_id:
-            try:
-                category_id_int = int(category_id)
-                # Check if it's a user-created category
-                custom_cat = WardrobeCategory.get_by_id(category_id_int, user_id)
-                if custom_cat:
-                    logger.info(f"get_wardrobe_items: Filtering by user category ID {category_id_int}: {custom_cat.name}")
+        if category_id_int is not None:
+            # Check if it's a user-created category
+            custom_cat = WardrobeCategory.get_by_id(category_id_int, user_id)
+            if custom_cat:
+                logger.info(f"get_wardrobe_items: Filtering by user category ID {category_id_int}: {custom_cat.name}")
+            else:
+                # Check if it's a platform category
+                from shared.database import db_manager
+                platform_cat = db_manager.execute_query(
+                    "SELECT name FROM platform_categories WHERE id = ?",
+                    (category_id_int,),
+                    fetch_one=True
+                )
+                if platform_cat:
+                    platform_category_name = platform_cat['name']
+                    logger.info(f"get_wardrobe_items: Filtering by platform category ID {category_id_int}: {platform_category_name}")
                 else:
-                    # Check if it's a platform category
-                    from shared.database import db_manager
-                    platform_cat = db_manager.execute_query(
-                        "SELECT name FROM platform_categories WHERE id = ?",
-                        (category_id_int,),
-                        fetch_one=True
-                    )
-                    if platform_cat:
-                        platform_category_name = platform_cat['name']
-                        logger.info(f"get_wardrobe_items: Filtering by platform category ID {category_id_int}: {platform_category_name}")
-                    else:
-                        logger.warning(f"get_wardrobe_items: Category ID {category_id_int} not found in platform or user categories - will still filter by category_id")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"get_wardrobe_items: Invalid category_id: {category_id}, error: {str(e)}")
+                    logger.warning(f"get_wardrobe_items: Category ID {category_id_int} not found in platform or user categories - will still filter by category_id")
         
         # Parse item_id if provided
         item_id_int = None
@@ -795,11 +804,13 @@ def update_wardrobe_item(item_id: int):
             item.custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
         if 'category_id' in form_data or 'category_id' in data:
             category_id_val = form_data.get('category_id') or data.get('category_id')
-            if category_id_val:
-                try:
-                    item.category_id = int(category_id_val)
-                except (ValueError, TypeError):
-                    return error_response_from_string('Invalid category_id', 400, 'VALIDATION_ERROR')
+            parsed_id = parse_int_safe(category_id_val)
+            if parsed_id is not None:
+                item.category_id = parsed_id
+            elif category_id_val in (None, 'null', 'None', ''):
+                item.category_id = None
+            else:
+                return error_response_from_string('Invalid category_id', 400, 'VALIDATION_ERROR')
         if 'category_section' in form_data or 'category_section' in data:
             new_section = form_data.get('category_section') or data.get('category_section')
             # Validate category_section
