@@ -49,6 +49,12 @@ class Config:
     JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
     JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
     
+    # Try-on Limit Configuration
+    try:
+        MAX_TRYON_LIMIT = int(os.environ.get('MAX_TRYON_LIMIT', '30'))
+    except ValueError:
+        MAX_TRYON_LIMIT = 30
+    
     # File Upload Configuration
     MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE', '6291456'))  # 6MB in bytes
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}

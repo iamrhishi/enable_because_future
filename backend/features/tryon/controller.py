@@ -42,6 +42,19 @@ def create_tryon_job():
         user_id = request.user_id
         logger.info(f"create_tryon_job: ENTRY - user_id={user_id}")
 
+        # Check try-on limit
+        current_user = User.get_by_id(user_id)
+        if not current_user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        
+        if current_user.tryon_count >= Config.MAX_TRYON_LIMIT:
+            logger.warning(f"create_tryon_job: Try-on limit exceeded for user_id={user_id}")
+            return error_response_from_string(
+                f'You have reached the limit of {Config.MAX_TRYON_LIMIT} tryons. Please contact support or upgrade your plan to continue.',
+                403,
+                'TRYON_LIMIT_EXCEEDED'
+            )
+
         # Get person image (selfie, person_image file, or use current user's saved avatar)
         # Priority: 1) selfie file, 2) person_image file, 3) current user's saved avatar (no need to send from frontend)
         person_image = None
@@ -819,12 +832,15 @@ def create_tryon_job():
             garment_url=source_garment_url  # Save source URL with try-on result
         )
 
+        # Increment and save try-on count
+        current_user.tryon_count += 1
+        current_user.save()
+
         # Track try-on start (get user email for reporting)
-        user_for_analytics = User.get_by_id(user_id)
         track_event(
             EventType.TRYON_START,
             user_id=user_id,
-            user_email=user_for_analytics.email if user_for_analytics else None,
+            user_email=current_user.email,
             metadata={'job_id': job_id, 'garment_type': garment_type, 'garment_url': source_garment_url}
         )
 
@@ -970,6 +986,19 @@ def create_multi_tryon_job():
     logger.info(f"create_multi_tryon_job: ENTRY - user_id={user_id} (from JWT)")
     
     try:
+        # Check try-on limit
+        current_user = User.get_by_id(user_id)
+        if not current_user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        
+        if current_user.tryon_count + 2 > Config.MAX_TRYON_LIMIT:
+            logger.warning(f"create_multi_tryon_job: Try-on limit exceeded for user_id={user_id}")
+            return error_response_from_string(
+                f'You have reached the limit of {Config.MAX_TRYON_LIMIT} tryons. Please contact support or upgrade your plan to continue.',
+                403,
+                'TRYON_LIMIT_EXCEEDED'
+            )
+
         # Get person image - use current user's saved avatar if no file provided
         person_image = None
         if 'person_image' in request.files:
@@ -977,7 +1006,6 @@ def create_multi_tryon_job():
             logger.info(f"create_multi_tryon_job: Using person_image file")
         else:
             # Use current user's saved avatar (already stored in backend)
-            current_user = User.get_by_id(user_id)
             if current_user and current_user.avatar:
                 person_image = current_user.avatar
                 logger.info(f"create_multi_tryon_job: Using current user's saved avatar (user_id={user_id})")
@@ -1021,6 +1049,10 @@ def create_multi_tryon_job():
         
         # Then process bottom (in real implementation, would composite both)
         bottom_job_id = job_queue.create_job(user_id, person_image, bottom_image, 'lower')
+
+        # Increment and save try-on count
+        current_user.tryon_count += 2
+        current_user.save()
         
         logger.info(f"create_multi_tryon_job: EXIT - Multi-garment jobs created for user_id={user_id}")
         return success_response(
@@ -1069,13 +1101,16 @@ def create_layered_tryon():
         import uuid
 
         # Get person image (avatar)
+        current_user = User.get_by_id(user_id)
+        if not current_user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+
         person_image = None
         if 'person_image' in request.files:
             person_image = request.files['person_image'].read()
             logger.info("create_layered_tryon: Using uploaded person_image")
         else:
-            current_user = User.get_by_id(user_id)
-            if current_user and current_user.avatar:
+            if current_user.avatar:
                 person_image = current_user.avatar
                 logger.info(f"create_layered_tryon: Using saved avatar for user_id={user_id}")
             else:
@@ -1142,6 +1177,19 @@ def create_layered_tryon():
                 'Maximum 5 garments allowed per request',
                 400, 'VALIDATION_ERROR'
             )
+
+        # Check and increment try-on limit
+        num_garments = len(garment_images)
+        if current_user.tryon_count + num_garments > Config.MAX_TRYON_LIMIT:
+            logger.warning(f"create_layered_tryon: Try-on limit exceeded for user_id={user_id}. Attempted {num_garments} tryons, current count: {current_user.tryon_count}")
+            return error_response_from_string(
+                f'You have reached the limit of {Config.MAX_TRYON_LIMIT} tryons. Please contact support or upgrade your plan to continue.',
+                403,
+                'TRYON_LIMIT_EXCEEDED'
+            )
+        
+        current_user.tryon_count += num_garments
+        current_user.save()
 
         logger.info(f"create_layered_tryon: Processing {len(garment_images)} garments sequentially")
 
@@ -1251,6 +1299,19 @@ def tryon_gemini_remote():
     try:
         user_id = request.user_id
         logger.info(f"👤 tryon_gemini_remote: User ID: {user_id}")
+
+        # Check try-on limit
+        current_user = User.get_by_id(user_id)
+        if not current_user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+        
+        if current_user.tryon_count >= Config.MAX_TRYON_LIMIT:
+            logger.warning(f"tryon_gemini_remote: Try-on limit exceeded for user_id={user_id}")
+            return error_response_from_string(
+                f'You have reached the limit of {Config.MAX_TRYON_LIMIT} tryons. Please contact support or upgrade your plan to continue.',
+                403,
+                'TRYON_LIMIT_EXCEEDED'
+            )
         
         # Get avatar image - use provided file or user's saved avatar
         avatar_bytes = None
@@ -1265,8 +1326,7 @@ def tryon_gemini_remote():
         
         # If no avatar file provided, use user's saved avatar
         if not avatar_bytes:
-            current_user = User.get_by_id(user_id)
-            if current_user and current_user.avatar:
+            if current_user.avatar:
                 avatar_bytes = current_user.avatar
                 logger.info(f"✅ tryon_gemini_remote: Using user's saved avatar")
             else:
@@ -1345,6 +1405,10 @@ def tryon_gemini_remote():
                 options={'num_inference_steps': num_inference_steps}
             )
             logger.info(f"✅ tryon_gemini_remote: Gemini try-on completed")
+            
+            # Increment and save try-on count
+            current_user.tryon_count += 1
+            current_user.save()
             
             # Convert data URL to bytes
             if result_data_url.startswith('data:image/png;base64,'):
