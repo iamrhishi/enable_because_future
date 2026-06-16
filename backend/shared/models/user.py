@@ -229,6 +229,7 @@ class User:
                     else:
                         continue
         
+        from config import Config
         data = {
             'id': self.id,
             'userid': self.userid,
@@ -242,6 +243,7 @@ class User:
             'postal_code': self.postal_code,
             'is_active': self.is_active,
             'tryon_count': self.tryon_count,
+            'tryon_limit': Config.MAX_TRYON_LIMIT,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             **filtered_data
