@@ -12,6 +12,7 @@ Examples:
 
 import sys
 import os
+from typing import Optional
 
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.database import db_manager
 
 
-def check_user_status(identifier: str) -> dict | None:
+def check_user_status(identifier: str) -> Optional[dict]:
     """
     Check if user exists and their status.
 

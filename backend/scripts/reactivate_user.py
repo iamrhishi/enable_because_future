@@ -15,6 +15,7 @@ Examples:
 
 import sys
 import os
+from typing import Optional
 
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.database import db_manager
 
 
-def get_user(identifier: str) -> dict | None:
+def get_user(identifier: str) -> Optional[dict]:
     """Get user by email or userid."""
     query = """
         SELECT id, userid, email, first_name, last_name, is_active
