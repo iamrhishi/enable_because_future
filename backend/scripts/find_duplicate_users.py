@@ -35,20 +35,15 @@ def get_user_data_summary(userid: str):
     """Get summary of data associated with a user."""
     data = {}
 
-    # Check body measurements
-    query = "SELECT COUNT(*) as count FROM body_measurements WHERE userid = ?"
+    # Check body measurements (uses user_id column)
+    query = "SELECT COUNT(*) as count FROM body_measurements WHERE user_id = ?"
     result = db_manager.execute_query(query, (userid,), fetch_one=True)
     data['body_measurements'] = result['count'] if result else 0
 
-    # Check wardrobe items
-    query = "SELECT COUNT(*) as count FROM wardrobe WHERE userid = ?"
+    # Check wardrobe items (uses user_id column)
+    query = "SELECT COUNT(*) as count FROM wardrobe WHERE user_id = ?"
     result = db_manager.execute_query(query, (userid,), fetch_one=True)
     data['wardrobe_items'] = result['count'] if result else 0
-
-    # Check outfits
-    query = "SELECT COUNT(*) as count FROM outfits WHERE userid = ?"
-    result = db_manager.execute_query(query, (userid,), fetch_one=True)
-    data['outfits'] = result['count'] if result else 0
 
     # Check analytics events
     query = "SELECT COUNT(*) as count FROM analytics_events WHERE user_id = ?"
@@ -91,7 +86,6 @@ def main():
         data = get_user_data_summary(user['userid'])
         print(f"  - Body measurements: {data['body_measurements']}")
         print(f"  - Wardrobe items:    {data['wardrobe_items']}")
-        print(f"  - Outfits:           {data['outfits']}")
         print(f"  - Analytics events:  {data['analytics_events']}")
         print()
 
