@@ -620,6 +620,35 @@
 							"body": "{\n    \"success\": true,\n    \"message\": \"Body measurements updated successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"user_id\": \"f3a6ad94\",\n        \"height\": 175.0,\n        \"weight\": 72.0,\n        \"waist_circumference\": 82.0,\n        \"unit\": \"metric\",\n        \"updated_at\": \"2025-12-03T12:00:00\"\n    }\n}"
 						}
 					]
+				},
+				{
+					"name": "Estimate Measurements",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"height\": 175.0,\n  \"weight\": 70.0,\n  \"frontImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"sideImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/body-measurements/estimate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"body-measurements",
+								"estimate"
+							]
+						},
+						"description": "Estimate body measurements from front and optional side base64 images and height/weight. Updates/saves user's body measurements in the database and returns them."
+					},
+					"response": []
 				}
 			]
 		},
