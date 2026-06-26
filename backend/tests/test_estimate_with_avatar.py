@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import app
 from features.auth.service import generate_token
 from shared.database import db_manager
+from features.body_measurements.model import BodyMeasurements
 
 class TestEstimateWithAvatar(unittest.TestCase):
     def setUp(self):
@@ -80,6 +81,53 @@ class TestEstimateWithAvatar(unittest.TestCase):
         data = response.get_json()
         self.assertFalse(data['success'])
         self.assertIn('Height must be between 50 and 250 cm', data['error'])
+
+    def test_estimate_with_avatar_explicit_save(self):
+        # 1. Fetch current measurements from database to compare
+        old_measurements = BodyMeasurements.get_by_user(self.user_id)
+        old_height = old_measurements.height if old_measurements else None
+        
+        # We will use a unique height so we can verify if it gets saved or not
+        test_height = 181.0 if old_height != 181.0 else 182.0
+        
+        # 2. Call estimate with save=False (or omitted), check it does not save to DB
+        payload = {
+            'height': test_height,
+            'weight': 75.0,
+            'save': False
+        }
+        
+        response = self.app.post(
+            '/api/body-measurements/estimate-with-avatar',
+            json=payload,
+            headers=self.headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['message'], 'Body measurements estimated successfully using avatar')
+        
+        # Verify db was NOT updated
+        db_measurements = BodyMeasurements.get_by_user(self.user_id)
+        if db_measurements:
+            self.assertNotEqual(db_measurements.height, test_height)
+            
+        # 3. Call estimate with save=True, check it DOES save to DB
+        payload['save'] = True
+        response = self.app.post(
+            '/api/body-measurements/estimate-with-avatar',
+            json=payload,
+            headers=self.headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertTrue('saved' in data['message'] or 'updated' in data['message'] or 'created' in data['message'])
+        
+        # Verify db WAS updated
+        db_measurements_after = BodyMeasurements.get_by_user(self.user_id)
+        self.assertIsNotNone(db_measurements_after)
+        self.assertEqual(db_measurements_after.height, test_height)
 
 if __name__ == '__main__':
     unittest.main()

@@ -416,16 +416,28 @@ def estimate_measurements():
             'unit': 'metric'
         }
         
-        # 5. Persist to database
+        # 5. Persist to database if save is requested
+        save_changes = False
+        if request.args.get('save') == 'true' or request.args.get('save_changes') == 'true':
+            save_changes = True
+        elif data.get('save') is True or data.get('save_changes') is True or data.get('saveChanges') is True:
+            save_changes = True
+
         db_model = BodyMeasurements.get_by_user(user_id)
         if db_model:
             db_model.update_from_dict(mapped_data)
-            db_model.save()
-            msg = 'Body measurements estimated and updated successfully'
+            if save_changes:
+                db_model.save()
+                msg = 'Body measurements estimated and updated successfully'
+            else:
+                msg = 'Body measurements estimated successfully'
         else:
             db_model = BodyMeasurements(user_id=user_id, **mapped_data)
-            db_model.save()
-            msg = 'Body measurements estimated and created successfully'
+            if save_changes:
+                db_model.save()
+                msg = 'Body measurements estimated and created successfully'
+            else:
+                msg = 'Body measurements estimated successfully'
             
         # 6. Construct response using database model schema (snake_case)
         response_data = {
@@ -624,16 +636,28 @@ def estimate_measurements_with_avatar():
             'unit': 'metric'
         }
         
-        # 5. Persist to database
+        # 5. Persist to database if save is requested
+        save_changes = False
+        if request.args.get('save') == 'true' or request.args.get('save_changes') == 'true':
+            save_changes = True
+        elif data.get('save') is True or data.get('save_changes') is True or data.get('saveChanges') is True:
+            save_changes = True
+
         db_model = BodyMeasurements.get_by_user(user_id)
         if db_model:
             db_model.update_from_dict(mapped_data)
-            db_model.save()
-            msg = 'Body measurements estimated and updated successfully using avatar'
+            if save_changes:
+                db_model.save()
+                msg = 'Body measurements estimated and updated successfully using avatar'
+            else:
+                msg = 'Body measurements estimated successfully using avatar'
         else:
             db_model = BodyMeasurements(user_id=user_id, **mapped_data)
-            db_model.save()
-            msg = 'Body measurements estimated and created successfully using avatar'
+            if save_changes:
+                db_model.save()
+                msg = 'Body measurements estimated and created successfully using avatar'
+            else:
+                msg = 'Body measurements estimated successfully using avatar'
             
         # 6. Construct response using database model schema (snake_case)
         response_data = {
