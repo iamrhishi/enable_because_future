@@ -443,3 +443,212 @@ def estimate_measurements():
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 
+@body_measurements_bp.route('/estimate-with-avatar', methods=['POST'])
+@require_auth
+def estimate_measurements_with_avatar():
+    """
+    Estimate body measurements using the user's saved avatar image as the front image,
+    and an optional side image.
+    Saves/updates the estimated measurements to the database.
+    """
+    user_id = request.user_id
+    logger.info(f"estimate_measurements_with_avatar: ENTRY - user_id={user_id}")
+    
+    try:
+        import cv2
+        import numpy as np
+        import base64
+        
+        # Handle JSON requests safely
+        content_type = request.content_type or ''
+        if 'application/json' not in content_type:
+            return error_response_from_string('Content-Type must be application/json', 415, 'VALIDATION_ERROR')
+            
+        data = request.get_json(silent=True, force=False) or {}
+        if not data:
+            return error_response_from_string('No data provided', 400, 'VALIDATION_ERROR')
+            
+        height = data.get('height')
+        weight = data.get('weight')
+        side_image_b64 = data.get('sideImage')
+        
+        if height is None or weight is None:
+            return error_response_from_string('height and weight are required', 400, 'VALIDATION_ERROR')
+            
+        # Validate numeric inputs
+        try:
+            height = float(height)
+            weight = float(weight)
+        except (ValueError, TypeError):
+            return error_response_from_string('height and weight must be numeric', 400, 'VALIDATION_ERROR')
+            
+        if not (50 <= height <= 250):
+            return error_response_from_string('Height must be between 50 and 250 cm', 400, 'VALIDATION_ERROR')
+        if not (20 <= weight <= 250):
+            return error_response_from_string('Weight must be between 20 and 250 kg', 400, 'VALIDATION_ERROR')
+            
+        # 1. Fetch user avatar
+        from shared.models.user import User
+        user = User.get_by_id(user_id)
+        if not user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+            
+        avatar_data = None
+        if user.avatar_path:
+            try:
+                from shared.storage import get_storage_service
+                storage_service = get_storage_service()
+                avatar_data = storage_service.get_image(user.avatar_path)
+            except Exception as e:
+                logger.warning(f"Failed to read avatar from path {user.avatar_path} for user_id={user_id}: {str(e)}")
+        
+        # Fallback to blob
+        if not avatar_data and user.avatar:
+            avatar_data = user.avatar
+            
+        if not avatar_data:
+            return error_response_from_string(
+                'No avatar image found. Please upload/save an avatar first.',
+                400,
+                'VALIDATION_ERROR'
+            )
+            
+        # Base64 Image Decoding Helper
+        def decode_base64_image(base64_str: str) -> np.ndarray:
+            if "," in base64_str:
+                base64_str = base64_str.split(",")[1]
+            img_data = base64.b64decode(base64_str)
+            nparr = np.frombuffer(img_data, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is None:
+                raise ValueError("Failed to decode image. Format may be corrupt.")
+            return img
+
+        # Downscale image to optimize performance & limit resource usage
+        def preprocess_and_resize(img: np.ndarray, target_height: int = 1280) -> np.ndarray:
+            h, w = img.shape[:2]
+            if h > target_height:
+                scale = target_height / h
+                target_width = int(w * scale)
+                return cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_AREA)
+            return img
+
+        # Decode front image (from avatar)
+        try:
+            nparr = np.frombuffer(avatar_data, np.uint8)
+            front_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if front_img is None:
+                raise ValueError("Failed to decode avatar image.")
+            front_img = preprocess_and_resize(front_img)
+        except Exception as e:
+            logger.warning(f"Failed to decode avatar image for user_id={user_id}: {str(e)}")
+            return error_response_from_string(f"Invalid avatar image: {str(e)}", 400, 'VALIDATION_ERROR')
+            
+        # Decode side image (optional)
+        side_img = None
+        if side_image_b64:
+            try:
+                side_img = decode_base64_image(side_image_b64)
+                side_img = preprocess_and_resize(side_img)
+            except Exception as e:
+                logger.warning(f"Failed to decode side image for user_id={user_id}: {str(e)}")
+                return error_response_from_string(f"Invalid sideImage: {str(e)}", 400, 'VALIDATION_ERROR')
+
+        # Run detection and estimation
+        # MediaPipe isn't thread-safe, so we must instantiate and close within context block
+        from body_estimator.detector import MediaPipeDetector
+        from body_estimator.estimator import estimate_body_measurements
+        from body_estimator.visualizer import draw_visual_debug
+        from body_estimator.utils import get_largest_connected_component
+        
+        try:
+            with MediaPipeDetector() as detector:
+                # 1. Run detection for overlays
+                landmarks_front, mask_front, _ = detector.detect(front_img)
+                if landmarks_front is None:
+                    return error_response_from_string(
+                        "No pose landmarks detected in the avatar image. Please ensure the avatar has the entire body visible.",
+                        400, 'VALIDATION_ERROR'
+                    )
+                
+                landmarks_side = None
+                mask_side = None
+                if side_img is not None:
+                    landmarks_side, mask_side, _ = detector.detect(side_img)
+                
+                # 2. Run estimation pipeline
+                result = estimate_body_measurements(
+                    front_img_np=front_img,
+                    height_cm=height,
+                    weight_kg=weight,
+                    side_img_np=side_img,
+                    detector=detector
+                )
+                
+                # 3. Create cleaned masks & generate scanner overlays
+                cleaned_mask_front = get_largest_connected_component(mask_front)
+                front_overlay = draw_visual_debug(
+                    front_img, landmarks_front, cleaned_mask_front, side_view=False
+                )
+                
+                side_overlay = None
+                if side_img is not None and landmarks_side is not None and mask_side is not None:
+                    cleaned_mask_side = get_largest_connected_component(mask_side)
+                    side_overlay = draw_visual_debug(
+                        side_img, landmarks_side, cleaned_mask_side, side_view=True
+                    )
+        except Exception as e:
+            logger.exception(f"Estimation pipeline failed for user_id={user_id}: {str(e)}")
+            return error_response_from_string(f"Estimation pipeline failed: {str(e)}", 500)
+            
+        # 4. Map camelCase estimation results to database snake_case fields
+        est_measurements = result["measurements"]
+        
+        mapped_data = {
+            'height': height,
+            'weight': weight,
+            'shoulder_circumference': est_measurements.get('shoulderCircumference'),
+            'arm_length': est_measurements.get('armLength'),
+            'breast_circumference': est_measurements.get('breastCircumference'),
+            'under_breast_circumference': est_measurements.get('underBreastCircumference'),
+            'waist_circumference': est_measurements.get('waistCircumference'),
+            'hip_circumference': est_measurements.get('hipCircumference'),
+            'upper_thigh_circumference': est_measurements.get('upperThighCircumference'),
+            'biceps_circumference': est_measurements.get('bicepsCircumference'),
+            'collarbone_to_belly_button_length': est_measurements.get('collarboneToBellyButtonLength'),
+            'foot_length': est_measurements.get('footLength'),
+            'foot_width': est_measurements.get('footWidth'),
+            'waist_to_crotch_front_length': est_measurements.get('waistToCrotchFrontLength'),
+            'waist_to_crotch_back_length': est_measurements.get('waistToCrotchBackLength'),
+            'inner_leg_length': est_measurements.get('innerLegLength'),
+            'unit': 'metric'
+        }
+        
+        # 5. Persist to database
+        db_model = BodyMeasurements.get_by_user(user_id)
+        if db_model:
+            db_model.update_from_dict(mapped_data)
+            db_model.save()
+            msg = 'Body measurements estimated and updated successfully using avatar'
+        else:
+            db_model = BodyMeasurements(user_id=user_id, **mapped_data)
+            db_model.save()
+            msg = 'Body measurements estimated and created successfully using avatar'
+            
+        # 6. Construct response using database model schema (snake_case)
+        response_data = {
+            'measurements': db_model.to_dict(),
+            'confidence': result['confidence'],
+            'frontOverlay': front_overlay,
+            'sideOverlay': side_overlay
+        }
+        
+        logger.info(f"estimate_measurements_with_avatar: EXIT - {msg} for user_id={user_id}")
+        return success_response(data=response_data, message=msg)
+        
+    except Exception as e:
+        logger.exception(f"estimate_measurements_with_avatar: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
+
+
+

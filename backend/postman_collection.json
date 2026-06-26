@@ -649,6 +649,35 @@
 						"description": "Estimate body measurements from front and optional side base64 images and height/weight. Updates/saves user's body measurements in the database and returns them."
 					},
 					"response": []
+				},
+				{
+					"name": "Estimate Measurements with Avatar",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"height\": 175.0,\n  \"weight\": 70.0,\n  \"sideImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/body-measurements/estimate-with-avatar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"body-measurements",
+								"estimate-with-avatar"
+							]
+						},
+						"description": "Estimate body measurements using the user's saved avatar image as the front image, along with an optional side image and height/weight. Updates/saves user's body measurements in the database and returns them."
+					},
+					"response": []
 				}
 			]
 		},
