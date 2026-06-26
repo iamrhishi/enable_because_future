@@ -350,25 +350,9 @@ def estimate_measurements():
         # MediaPipe isn't thread-safe, so we must instantiate and close within context block
         from body_estimator.detector import MediaPipeDetector
         from body_estimator.estimator import estimate_body_measurements
-        from body_estimator.visualizer import draw_visual_debug
-        from body_estimator.utils import get_largest_connected_component
         
         try:
             with MediaPipeDetector() as detector:
-                # 1. Run detection for overlays
-                landmarks_front, mask_front, _ = detector.detect(front_img)
-                if landmarks_front is None:
-                    return error_response_from_string(
-                        "No pose landmarks detected in the front-facing image. Please ensure the entire body is visible.",
-                        400, 'VALIDATION_ERROR'
-                    )
-                
-                landmarks_side = None
-                mask_side = None
-                if side_img is not None:
-                    landmarks_side, mask_side, _ = detector.detect(side_img)
-                
-                # 2. Run estimation pipeline
                 result = estimate_body_measurements(
                     front_img_np=front_img,
                     height_cm=height,
@@ -376,19 +360,12 @@ def estimate_measurements():
                     side_img_np=side_img,
                     detector=detector
                 )
-                
-                # 3. Create cleaned masks & generate scanner overlays
-                cleaned_mask_front = get_largest_connected_component(mask_front)
-                front_overlay = draw_visual_debug(
-                    front_img, landmarks_front, cleaned_mask_front, side_view=False
-                )
-                
-                side_overlay = None
-                if side_img is not None and landmarks_side is not None and mask_side is not None:
-                    cleaned_mask_side = get_largest_connected_component(mask_side)
-                    side_overlay = draw_visual_debug(
-                        side_img, landmarks_side, cleaned_mask_side, side_view=True
-                    )
+        except ValueError as e:
+            logger.warning(f"Estimation validation failed for user_id={user_id}: {str(e)}")
+            msg = str(e)
+            if "front-facing image" in msg:
+                msg = "No pose landmarks detected in the front-facing image. Please ensure the entire body is visible."
+            return error_response_from_string(msg, 400, 'VALIDATION_ERROR')
         except Exception as e:
             logger.exception(f"Estimation pipeline failed for user_id={user_id}: {str(e)}")
             return error_response_from_string(f"Estimation pipeline failed: {str(e)}", 500)
@@ -442,9 +419,7 @@ def estimate_measurements():
         # 6. Construct response using database model schema (snake_case)
         response_data = {
             'measurements': db_model.to_dict(),
-            'confidence': result['confidence'],
-            'frontOverlay': front_overlay,
-            'sideOverlay': side_overlay
+            'confidence': result['confidence']
         }
         
         logger.info(f"estimate_measurements: EXIT - {msg} for user_id={user_id}")
@@ -570,25 +545,9 @@ def estimate_measurements_with_avatar():
         # MediaPipe isn't thread-safe, so we must instantiate and close within context block
         from body_estimator.detector import MediaPipeDetector
         from body_estimator.estimator import estimate_body_measurements
-        from body_estimator.visualizer import draw_visual_debug
-        from body_estimator.utils import get_largest_connected_component
         
         try:
             with MediaPipeDetector() as detector:
-                # 1. Run detection for overlays
-                landmarks_front, mask_front, _ = detector.detect(front_img)
-                if landmarks_front is None:
-                    return error_response_from_string(
-                        "No pose landmarks detected in the avatar image. Please ensure the avatar has the entire body visible.",
-                        400, 'VALIDATION_ERROR'
-                    )
-                
-                landmarks_side = None
-                mask_side = None
-                if side_img is not None:
-                    landmarks_side, mask_side, _ = detector.detect(side_img)
-                
-                # 2. Run estimation pipeline
                 result = estimate_body_measurements(
                     front_img_np=front_img,
                     height_cm=height,
@@ -596,19 +555,12 @@ def estimate_measurements_with_avatar():
                     side_img_np=side_img,
                     detector=detector
                 )
-                
-                # 3. Create cleaned masks & generate scanner overlays
-                cleaned_mask_front = get_largest_connected_component(mask_front)
-                front_overlay = draw_visual_debug(
-                    front_img, landmarks_front, cleaned_mask_front, side_view=False
-                )
-                
-                side_overlay = None
-                if side_img is not None and landmarks_side is not None and mask_side is not None:
-                    cleaned_mask_side = get_largest_connected_component(mask_side)
-                    side_overlay = draw_visual_debug(
-                        side_img, landmarks_side, cleaned_mask_side, side_view=True
-                    )
+        except ValueError as e:
+            logger.warning(f"Estimation validation failed for user_id={user_id}: {str(e)}")
+            msg = str(e)
+            if "front-facing image" in msg:
+                msg = "No pose landmarks detected in the avatar image. Please ensure the avatar has the entire body visible."
+            return error_response_from_string(msg, 400, 'VALIDATION_ERROR')
         except Exception as e:
             logger.exception(f"Estimation pipeline failed for user_id={user_id}: {str(e)}")
             return error_response_from_string(f"Estimation pipeline failed: {str(e)}", 500)
@@ -662,9 +614,7 @@ def estimate_measurements_with_avatar():
         # 6. Construct response using database model schema (snake_case)
         response_data = {
             'measurements': db_model.to_dict(),
-            'confidence': result['confidence'],
-            'frontOverlay': front_overlay,
-            'sideOverlay': side_overlay
+            'confidence': result['confidence']
         }
         
         logger.info(f"estimate_measurements_with_avatar: EXIT - {msg} for user_id={user_id}")

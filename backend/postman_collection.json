@@ -648,7 +648,46 @@
 						},
 						"description": "Estimate body measurements from front and optional side base64 images and height/weight. Updates/saves user's body measurements in the database and returns them."
 					},
-					"response": []
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"height\": 175.0,\n  \"weight\": 70.0,\n  \"frontImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"sideImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements/estimate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"body-measurements",
+										"estimate"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Body measurements estimated successfully\",\n    \"data\": {\n        \"measurements\": {\n            \"id\": 1,\n            \"user_id\": \"f3a6ad94\",\n            \"height\": 175.0,\n            \"weight\": 70.0,\n            \"shoulder_circumference\": 101.0,\n            \"arm_length\": 51.0,\n            \"breast_circumference\": 95.3,\n            \"under_breast_circumference\": 74.8,\n            \"waist_circumference\": 68.9,\n            \"hip_circumference\": 87.2,\n            \"upper_thigh_circumference\": 55.9,\n            \"biceps_circumference\": 27.4,\n            \"collarbone_to_belly_button_length\": 29.6,\n            \"waist_to_crotch_front_length\": 22.5,\n            \"waist_to_crotch_back_length\": 27.9,\n            \"inner_leg_length\": 65.8,\n            \"foot_length\": 25.7,\n            \"foot_width\": 9.8,\n            \"unit\": \"metric\",\n            \"created_at\": \"2026-06-26T12:00:00\",\n            \"updated_at\": \"2026-06-26T12:00:00\"\n        },\n        \"confidence\": 0.94\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Estimate Measurements with Avatar",
@@ -677,7 +716,46 @@
 						},
 						"description": "Estimate body measurements using the user's saved avatar image as the front image, along with an optional side image and height/weight. Updates/saves user's body measurements in the database and returns them."
 					},
-					"response": []
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"height\": 175.0,\n  \"weight\": 70.0,\n  \"sideImage\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/body-measurements/estimate-with-avatar",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"body-measurements",
+										"estimate-with-avatar"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Body measurements estimated successfully using avatar\",\n    \"data\": {\n        \"measurements\": {\n            \"id\": 1,\n            \"user_id\": \"f3a6ad94\",\n            \"height\": 175.0,\n            \"weight\": 70.0,\n            \"shoulder_circumference\": 101.0,\n            \"arm_length\": 51.0,\n            \"breast_circumference\": 95.3,\n            \"under_breast_circumference\": 74.8,\n            \"waist_circumference\": 68.9,\n            \"hip_circumference\": 87.2,\n            \"upper_thigh_circumference\": 55.9,\n            \"biceps_circumference\": 27.4,\n            \"collarbone_to_belly_button_length\": 29.6,\n            \"waist_to_crotch_front_length\": 22.5,\n            \"waist_to_crotch_back_length\": 27.9,\n            \"inner_leg_length\": 65.8,\n            \"foot_length\": 25.7,\n            \"foot_width\": 9.8,\n            \"unit\": \"metric\",\n            \"created_at\": \"2026-06-26T12:00:00\",\n            \"updated_at\": \"2026-06-26T12:00:00\"\n        },\n        \"confidence\": 0.94\n    }\n}"
+						}
+					]
 				}
 			]
 		},
