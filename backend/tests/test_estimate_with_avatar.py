@@ -44,8 +44,7 @@ class TestEstimateWithAvatar(unittest.TestCase):
         self.assertTrue(data['success'])
         self.assertIn('measurements', data['data'])
         self.assertIn('confidence', data['data'])
-        self.assertNotIn('frontOverlay', data['data'])
-        self.assertNotIn('sideOverlay', data['data'])
+        self.assertIn('frontOverlay', data['data'])
         
         measurements = data['data']['measurements']
         self.assertEqual(measurements['height'], 180.0)

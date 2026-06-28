@@ -69,7 +69,9 @@ On success, the estimated measurements are returned to the user. By default, the
       "created_at": "2026-06-24T12:24:00",
       "updated_at": "2026-06-24T12:24:00"
     },
-    "confidence": 0.94
+    "confidence": 0.94,
+    "frontOverlay": "data:image/png;base64,iVBORw0KG...",
+    "sideOverlay": "data:image/png;base64,iVBORw0KG..."
   }
 }
 ```
@@ -77,6 +79,8 @@ On success, the estimated measurements are returned to the user. By default, the
 #### Fields returned in `data`:
 * `measurements`: The updated database record representing all physical dimensions.
 * `confidence`: A float representing the estimation's confidence metric.
+* `frontOverlay`: Base64 PNG data URI containing the neon pose overlay/calipers drawn on top of the front photo.
+* `sideOverlay`: Base64 PNG data URI overlay drawn on the side photo (or `null` if no side image was uploaded).
 
 ---
 
@@ -104,6 +108,8 @@ On success, the estimated measurements are returned to the user. By default, the
    - Instruct the user to stand with the **entire body visible** (from head to toe).
    - Hold arms slightly away from the torso (A-pose) for front-facing photos.
    - Use form-fitting clothing to ensure accurate silhouette segmentation.
+3. **Displaying Debug Overlays**:
+   - Display `frontOverlay` and `sideOverlay` in the UI to give users a scanner-like experience. They can review where the joints and calipers were detected.
 
 ---
 
@@ -130,7 +136,7 @@ If a user has already saved their avatar image in the system (via the `/api/save
 ```
 
 ### Response:
-Matches the structure of the standard `POST /api/body-measurements/estimate` response, including the `measurements` dictionary and the `confidence` score.
+Matches the structure of the standard `POST /api/body-measurements/estimate` response, including the `measurements` dictionary, the `confidence` score, and the generated pose and silhouette overlays (`frontOverlay` and `sideOverlay`).
 
 ### Avatar Specific Error Handling:
 If the user does not have an avatar uploaded yet, the endpoint returns a `400 Bad Request`:
