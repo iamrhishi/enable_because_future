@@ -23,6 +23,7 @@ from features.users.controller import users_bp
 from features.wardrobe.controller import wardrobe_bp
 from features.fit_analysis.controller import fit_analysis_bp
 from features.sizing.controller import sizing_bp
+from features.garment_discovery.controller import garment_discovery_bp
 
 app = Flask(__name__)
 CORS(app, origins=Config.CORS_ORIGINS)
@@ -130,6 +131,7 @@ app.register_blueprint(users_bp)
 app.register_blueprint(wardrobe_bp)
 app.register_blueprint(fit_analysis_bp)
 app.register_blueprint(sizing_bp)
+app.register_blueprint(garment_discovery_bp)
 
 # Handle BadRequest (415 Unsupported Media Type) specifically
 @app.errorhandler(BadRequest)

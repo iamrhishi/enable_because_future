@@ -4,7 +4,7 @@ requests
 python-dotenv
 PyJWT
 google-auth
-google-generativeai
+google-genai
 rembg
 onnxruntime
 opencv-python-headless
