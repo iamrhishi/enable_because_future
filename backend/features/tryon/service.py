@@ -1023,6 +1023,17 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                     else:
                         logger.info(f"process_tryon: Output dimensions already match input: {result_width}x{result_height}")
 
+                # Ensure minimum output resolution (768px minimum dimension)
+                MIN_OUTPUT_DIMENSION = 768
+                final_width, final_height = result_img.size
+                min_dim = min(final_width, final_height)
+                if min_dim < MIN_OUTPUT_DIMENSION:
+                    scale = MIN_OUTPUT_DIMENSION / min_dim
+                    new_width = int(final_width * scale)
+                    new_height = int(final_height * scale)
+                    result_img = result_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    logger.info(f"process_tryon: Upscaled from {final_width}x{final_height} to {new_width}x{new_height} (min dimension {MIN_OUTPUT_DIMENSION}px)")
+
                 # Save final image
                 output = BytesIO()
                 result_img.save(output, format='PNG')
