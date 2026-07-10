@@ -13,6 +13,7 @@ from urllib.parse import quote_plus, urlparse, parse_qs
 from typing import List, Dict, Any, Optional
 from shared.database import db_manager
 from shared.garment_utils import categorize_garment
+from features.garments.scraper import fetch_html
 
 # Color-and-category aware photo map for open web & fallback items
 COLOR_CATEGORY_PHOTO_MAP = {
@@ -448,14 +449,9 @@ class GarmentSearchService:
         if not product_url or not isinstance(product_url, str) or not product_url.startswith('http'):
             return None
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5'
-            }
-            resp = requests.get(product_url, headers=headers, timeout=2.0)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
+            html = fetch_html(product_url, timeout=3)
+            if html:
+                soup = BeautifulSoup(html, 'html.parser')
                 
                 # 1. Look for Open Graph image metadata
                 og_image = soup.find('meta', property='og:image') or soup.find('meta', attrs={"name": "og:image"})
@@ -506,21 +502,6 @@ class GarmentSearchService:
                     img_url = fg.get('image_url')
                     if not img_url or not isinstance(img_url, str) or not img_url.startswith('http'):
                         img_url = GarmentSearchService._resolve_product_image_from_url(url)
-                        if not img_url:
-                            try:
-                                bing_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                                b_query = f"{brand} {title} {fg.get('color') or req_color} product fashion photo"
-                                b_url = f"https://www.bing.com/images/search?q={quote_plus(b_query)}"
-                                b_resp = requests.get(b_url, headers=bing_headers, timeout=2)
-                                if b_resp.status_code == 200:
-                                    b_soup = BeautifulSoup(b_resp.text, 'html.parser')
-                                    mimg = b_soup.find('img', class_='mimg')
-                                    if mimg:
-                                        src = mimg.get('src') or mimg.get('data-src')
-                                        if src and src.startswith('http'):
-                                            img_url = src
-                            except Exception:
-                                pass
 
                     if not img_url:
                         img_url = get_color_aware_photo(req_subcat, fg.get('color') or req_color)
@@ -669,21 +650,6 @@ class GarmentSearchService:
                         if not image_url and link:
                             image_url = GarmentSearchService._resolve_product_image_from_url(link)
 
-                        # Try to fetch actual image from Bing Image Search first if direct scraping failed
-                        if not image_url:
-                            try:
-                                bing_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                                bing_url = f"https://www.bing.com/images/search?q={quote_plus(title)}"
-                                bing_resp = requests.get(bing_url, headers=bing_headers, timeout=2)
-                                if bing_resp.status_code == 200:
-                                    bing_soup = BeautifulSoup(bing_resp.text, 'html.parser')
-                                    mimg_elem = bing_soup.find('img', class_='mimg')
-                                    if mimg_elem:
-                                        src = mimg_elem.get('src') or mimg_elem.get('data-src')
-                                        if src and src.startswith('http'):
-                                            image_url = src
-                            except Exception:
-                                pass
                         if not image_url:
                             image_url = get_color_aware_photo(subcat, color)
 
@@ -777,22 +743,6 @@ class GarmentSearchService:
                         cat_res = categorize_garment(title=clean_title)
                         
                         img_url = GarmentSearchService._resolve_product_image_from_url(actual_url)
-                        if not img_url:
-                            try:
-                                bing_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                                bing_query = f"{clean_title} {color} {subcat} fashion clothing wear"
-                                bing_url = f"https://www.bing.com/images/search?q={quote_plus(bing_query)}"
-                                bing_resp = requests.get(bing_url, headers=bing_headers, timeout=2)
-                                if bing_resp.status_code == 200:
-                                    bing_soup = BeautifulSoup(bing_resp.text, 'html.parser')
-                                    mimg_elem = bing_soup.find('img', class_='mimg')
-                                    if mimg_elem:
-                                        src = mimg_elem.get('src') or mimg_elem.get('data-src')
-                                        if src and src.startswith('http'):
-                                            img_url = src
-                            except Exception:
-                                pass
-                            
                         if not img_url:
                             img_url = get_color_aware_photo(subcat, color)
 
