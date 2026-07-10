@@ -123,7 +123,6 @@ Respond in STRICT JSON format with the following keys:
       "brand": "Brand name e.g. Zara, H&M, ASOS, Mango",
       "price": 49.90,
       "url": "Direct e-commerce product page URL e.g. https://www.zara.com/us/en/100--linen-regular-fit-shirt-p05204021500.html",
-      "image_url": "Direct product image URL (.jpg/.png/cdn URL) or null",
       "color": "Color of garment"
     }}
   ],
