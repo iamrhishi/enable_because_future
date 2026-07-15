@@ -294,3 +294,40 @@ def refine():
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@garment_discovery_bp.route('/resolve-image', methods=['POST'])
+def resolve_image():
+    """
+    Lazy-load image resolution endpoint.
+    Allows frontend to resolve images asynchronously for each card.
+    Body:
+    {
+       "url": "https://www.zara.com/...",
+       "category": "Shirts",
+       "color": "pink"
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        url = data.get('url')
+        category = data.get('category', 'Shirts')
+        color = data.get('color', '')
+
+        if not url or url == '#':
+            return jsonify({"success": False, "error": "Valid URL is required"}), 400
+
+        img_url = GarmentSearchService._resolve_product_image_from_url(url)
+        
+        # If scraping failed, use the color-aware placeholder
+        from features.garment_discovery.search_service import get_color_aware_photo
+        if not img_url:
+            img_url = get_color_aware_photo(category, color)
+
+        return jsonify({
+            "success": True,
+            "url": url,
+            "image_url": img_url
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

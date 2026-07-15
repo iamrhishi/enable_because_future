@@ -493,6 +493,30 @@ class GarmentSearchService:
         if flash_garments and isinstance(flash_garments, list):
             req_subcat = preferences.get('subcategory') or preferences.get('category') or 'Shirts'
             req_color = preferences.get('color') or ''
+            
+            # Find all URLs that require image scraping
+            urls_to_resolve = []
+            for fg in flash_garments:
+                if isinstance(fg, dict) and fg.get('title'):
+                    img_url = fg.get('image_url')
+                    url = fg.get('url')
+                    if (not img_url or not isinstance(img_url, str) or not img_url.startswith('http')) and url and url.startswith('http'):
+                        urls_to_resolve.append(url)
+            
+            # Concurrently scrape the page images in parallel threads
+            resolved_images = {}
+            if urls_to_resolve:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                # Limit workers to avoid overloading or get rate-limited
+                with ThreadPoolExecutor(max_workers=min(len(urls_to_resolve), 6)) as executor:
+                    futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, url): url for url in urls_to_resolve}
+                    for future in as_completed(futures):
+                        url = futures[future]
+                        try:
+                            resolved_images[url] = future.result()
+                        except Exception:
+                            resolved_images[url] = None
+
             for idx, fg in enumerate(flash_garments):
                 if isinstance(fg, dict) and fg.get('title'):
                     title = fg.get('title', 'Online Garment')
@@ -501,7 +525,7 @@ class GarmentSearchService:
                     price = float(fg.get('price') or 39.99)
                     img_url = fg.get('image_url')
                     if not img_url or not isinstance(img_url, str) or not img_url.startswith('http'):
-                        img_url = GarmentSearchService._resolve_product_image_from_url(url)
+                        img_url = resolved_images.get(url)
 
                     if not img_url:
                         img_url = get_color_aware_photo(req_subcat, fg.get('color') or req_color)
@@ -634,6 +658,33 @@ class GarmentSearchService:
                 if resp.status_code == 200:
                     data = resp.json()
                     items = data.get('items', [])
+                    # Find URLs that require image scraping
+                    links_to_resolve = []
+                    for item in items:
+                        pagemap = item.get('pagemap', {})
+                        img_url = None
+                        if pagemap.get('cse_image'):
+                            img_url = pagemap['cse_image'][0].get('src')
+                        elif pagemap.get('metatags'):
+                            img_url = pagemap['metatags'][0].get('og:image')
+                        
+                        link = item.get('link', '')
+                        if not img_url and link:
+                            links_to_resolve.append(link)
+
+                    # Scrape concurrently in parallel threads
+                    resolved_images = {}
+                    if links_to_resolve:
+                        from concurrent.futures import ThreadPoolExecutor, as_completed
+                        with ThreadPoolExecutor(max_workers=min(len(links_to_resolve), 6)) as executor:
+                            futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, l): l for l in links_to_resolve}
+                            for future in as_completed(futures):
+                                l = futures[future]
+                                try:
+                                    resolved_images[l] = future.result()
+                                except Exception:
+                                    resolved_images[l] = None
+
                     for i, item in enumerate(items):
                         pagemap = item.get('pagemap', {})
                         image_url = None
@@ -641,15 +692,15 @@ class GarmentSearchService:
                             image_url = pagemap['cse_image'][0].get('src')
                         elif pagemap.get('metatags'):
                             image_url = pagemap['metatags'][0].get('og:image')
-
+ 
                         title = item.get('title', 'Online Garment')
                         link = item.get('link', '')
                         snippet = item.get('snippet', '')
-
-                        # Try to scrape the direct product page for og:image first if Google didn't return one
+ 
+                        # Use concurrently scraped image first if Google didn't return one
                         if not image_url and link:
-                            image_url = GarmentSearchService._resolve_product_image_from_url(link)
-
+                            image_url = resolved_images.get(link)
+ 
                         if not image_url:
                             image_url = get_color_aware_photo(subcat, color)
 
@@ -699,13 +750,14 @@ class GarmentSearchService:
                     title_links = soup.find_all('a', class_='result__a', limit=10)
                     snippet_elems = soup.find_all('td', class_='result__snippet', limit=10)
 
+                    # First pass: clean up redirects and filter items
+                    candidate_items = []
                     for idx in range(min(len(title_links), 10)):
                         t_elem = title_links[idx]
                         raw_title = t_elem.get_text().strip()
                         clean_title = re.sub(r'\s*[\|-].*$', '', raw_title)
                         raw_href = t_elem.get('href', '')
                         
-                        # Clean duckduckgo redirect link to store URL
                         actual_url = raw_href
                         if 'duckduckgo.com' in raw_href or 'uddg=' in raw_href or 'u3=' in raw_href:
                             parsed = parse_qs(urlparse(raw_href).query)
@@ -721,11 +773,9 @@ class GarmentSearchService:
                                             actual_url = sub_p['url'][0]
                                             break
 
-                        # Exclude Amazon links and marketplace non-clothing results
                         if 'amazon.com' in actual_url.lower() or 'amazon' in raw_title.lower() or 'amazon' in clean_title.lower():
                             continue
 
-                        # Exclude non-apparel terms (refrigerators, pencil cases, toys, etc.)
                         non_fashion_kw = ['fridge', 'refrigerator', 'case', 'pencil', 'toy', 'electronics', 'phone', 'building', 'fortress', 'castle', 'decor', 'gowns', 'mortarboard', 'hat', 'beach', 'sunset', 'ideas', 'shop all', 'target', 'brandy melville']
                         if any(kw in clean_title.lower() for kw in non_fashion_kw):
                             continue
@@ -741,27 +791,50 @@ class GarmentSearchService:
                                 pass
 
                         cat_res = categorize_garment(title=clean_title)
-                        
-                        img_url = GarmentSearchService._resolve_product_image_from_url(actual_url)
+                        candidate_items.append({
+                            "idx": idx,
+                            "clean_title": clean_title,
+                            "actual_url": actual_url,
+                            "price": price,
+                            "cat_res": cat_res
+                        })
+
+                    # Concurrently resolve the URLs
+                    resolved_images = {}
+                    urls_to_resolve = [c["actual_url"] for c in candidate_items if c["actual_url"].startswith('http')]
+                    if urls_to_resolve:
+                        from concurrent.futures import ThreadPoolExecutor, as_completed
+                        with ThreadPoolExecutor(max_workers=min(len(urls_to_resolve), 6)) as executor:
+                            futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, l): l for l in urls_to_resolve}
+                            for future in as_completed(futures):
+                                l = futures[future]
+                                try:
+                                    resolved_images[l] = future.result()
+                                except Exception:
+                                    resolved_images[l] = None
+
+                    # Second pass: populate results
+                    for c in candidate_items:
+                        img_url = resolved_images.get(c["actual_url"])
                         if not img_url:
                             img_url = get_color_aware_photo(subcat, color)
 
                         results.append({
-                            "id": f"live_web_{idx}",
-                            "title": clean_title or "E-Commerce Garment",
+                            "id": f"live_web_{c['idx']}",
+                            "title": c["clean_title"] or "E-Commerce Garment",
                             "brand": brand or "Online Store",
-                            "category": cat_res.get('category') or "Upper body",
-                            "subcategory": cat_res.get('type') or subcat or "Shirts",
+                            "category": c["cat_res"].get('category') or "Upper body",
+                            "subcategory": c["cat_res"].get('type') or subcat or "Shirts",
                             "gender": gender or "unisex",
-                            "price": price,
+                            "price": c["price"],
                             "currency": "$",
                             "color": color or "Various",
                             "colors_available": [color] if color else [],
                             "sizes_available": ["S", "M", "L"],
                             "style": "Modern",
-                            "url": actual_url,
+                            "url": c["actual_url"],
                             "image_url": img_url,
-                            "description": snip_text[:150],
+                            "description": snippet_elems[c["idx"]].get_text().strip()[:150] if c["idx"] < len(snippet_elems) else f"{c['clean_title']} from {brand}",
                             "tryon_ready": True
                         })
             except Exception as e:
