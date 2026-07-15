@@ -141,7 +141,7 @@ def update_profile():
             else:
                 update_data['birthday'] = None
 
-        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
+        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code', 'country']:
             if field in data:
                 value = str(data[field]).strip() if data[field] else None
                 update_data[field] = value

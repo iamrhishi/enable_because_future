@@ -37,6 +37,7 @@ def create_account():
         street = (data.get('street') or '').strip()
         city = (data.get('city') or '').strip()
         postal_code = (data.get('postal_code') or data.get('postal-code') or '').strip()  # Support both formats
+        country = (data.get('country') or '').strip()
         
         # Validate password confirmation
         if password != confirm_password:
@@ -169,6 +170,7 @@ def create_account():
             street=street if street else None,
             city=city if city else None,
             postal_code=postal_code if postal_code else None,
+            country=country if country else None,
             is_active=True
         )
         user.save()  # This will hash the password

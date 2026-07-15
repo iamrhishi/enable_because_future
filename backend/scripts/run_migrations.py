@@ -57,6 +57,7 @@ def main():
         (26, 'add_garment_url_to_tryon_jobs', load_migration(26, 'add_garment_url_to_tryon_jobs')),
         (27, 'body_measurements_complete_schema', load_migration(27, 'body_measurements_complete_schema')),
         (28, 'create_analytics_events', load_migration(28, 'create_analytics_events')),
+        (30, 'add_country_to_users', load_migration(30, 'add_country_to_users')),
     ]
     
     migration_manager.run_migrations(migrations)
