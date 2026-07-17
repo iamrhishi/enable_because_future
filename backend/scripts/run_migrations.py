@@ -58,6 +58,7 @@ def main():
         (27, 'body_measurements_complete_schema', load_migration(27, 'body_measurements_complete_schema')),
         (28, 'create_analytics_events', load_migration(28, 'create_analytics_events')),
         (30, 'add_country_to_users', load_migration(30, 'add_country_to_users')),
+        (31, 'add_fabric_to_garment_metadata', load_migration(31, 'add_fabric_to_garment_metadata')),
     ]
     
     migration_manager.run_migrations(migrations)

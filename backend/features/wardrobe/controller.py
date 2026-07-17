@@ -540,6 +540,9 @@ def add_garment():
                 if total_percentage != 100:
                     return error_response_from_string('Fabric percentages must sum to 100%', 400, 'VALIDATION_ERROR')
                 fabric = json.dumps(fabric_input)
+        elif product_info and product_info.get('fabric'):
+            import json
+            fabric = json.dumps(product_info.get('fabric'))
         
         # Get care_instructions, size, description, url
         care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
@@ -1064,6 +1067,8 @@ def extract_garment_from_url():
                 cached_dict['sizes'] = json.loads(cached_dict['sizes'])
             if cached_dict.get('colors'):
                 cached_dict['colors'] = json.loads(cached_dict['colors'])
+            if cached_dict.get('fabric'):
+                cached_dict['fabric'] = json.loads(cached_dict['fabric'])
             logger.info(f"extract_garment_from_url: EXIT - Returning cached data")
             return success_response(data=cached_dict)
         
@@ -1080,13 +1085,14 @@ def extract_garment_from_url():
         # Cache the result
         try:
             db_manager.get_lastrowid(
-                """INSERT INTO garment_metadata (url, title, price, images, sizes, colors, brand)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO garment_metadata (url, title, price, images, sizes, colors, brand, fabric)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (url, product_info.get('title'), product_info.get('price'),
                  json.dumps(product_info.get('images', [])),
                  json.dumps(product_info.get('sizes', [])),
                  json.dumps(product_info.get('colors', [])),
-                 product_info.get('brand'))
+                 product_info.get('brand'),
+                 json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None)
             )
         except Exception as e:
             logger.warning(f"extract_garment_from_url: Failed to cache: {str(e)}")
@@ -1255,6 +1261,7 @@ def search_garments():
                 'brand': product_info.get('brand'),
                 'imageURL': image_url,
                 'category': category,
+                'fabric': product_info.get('fabric'),
                 'isRecent': False
             })
 

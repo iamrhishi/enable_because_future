@@ -859,7 +859,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/wool-blend-blazer-with-faux-fur-collar-zw-collection-p07522301.html\",\n        \"title\": \"WOOL BLEND BLAZER WITH FAUX FUR COLLAR ZW COLLECTION\",\n        \"price\": \"11950\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/9f9a/8987/dd594037ae26/445abff63cb4/07522301737-p/07522301737-p.jpg\",\n            \"https://static.zara.net/assets/public/613b/fdf8/b52c4fe5af74/2d1e9b04c625/07522301737-a1/07522301737-a1.jpg\"\n        ],\n        \"sizes\": [],\n        \"colors\": [\"Brown / Taupe |\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"jacket\",\n        \"confidence\": 0.8,\n        \"scraped_at\": \"2025-12-03 11:30:00\",\n        \"updated_at\": \"2025-12-03 11:30:00\"\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/wool-blend-blazer-with-faux-fur-collar-zw-collection-p07522301.html\",\n        \"title\": \"WOOL BLEND BLAZER WITH FAUX FUR COLLAR ZW COLLECTION\",\n        \"price\": \"11950\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/9f9a/8987/dd594037ae26/445abff63cb4/07522301737-p/07522301737-p.jpg\",\n            \"https://static.zara.net/assets/public/613b/fdf8/b52c4fe5af74/2d1e9b04c625/07522301737-a1/07522301737-a1.jpg\"\n        ],\n        \"sizes\": [],\n        \"colors\": [\"Brown / Taupe |\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"jacket\",\n        \"confidence\": 0.8,\n        \"fabric\": [\n            {\n                \"name\": \"wool\",\n                \"percentage\": 75\n            },\n            {\n                \"name\": \"polyester\",\n                \"percentage\": 25\n            }\n        ],\n        \"scraped_at\": \"2025-12-03 11:30:00\",\n        \"updated_at\": \"2025-12-03 11:30:00\"\n    }\n}"
 						},
 						{
 							"name": "Success (Fresh Scrape)",
@@ -891,7 +891,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"White\", \"Black\", \"Navy\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/in/en/product/12345\",\n        \"title\": \"BASIC COTTON T-SHIRT\",\n        \"price\": \"2990\",\n        \"images\": [\n            \"https://static.zara.net/assets/public/.../image1.jpg\",\n            \"https://static.zara.net/assets/public/.../image2.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"White\", \"Black\", \"Navy\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"t-shirt\",\n        \"confidence\": 0.9,\n        \"fabric\": [\n            {\n                \"name\": \"cotton\",\n                \"percentage\": 100\n            }\n        ]\n    }\n}"
 						}
 					]
 				},
@@ -3895,7 +3895,7 @@
 										}
 									],
 									"cookie": [],
-									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/us/en/oversized-leather-jacket-p03918220.html\",\n        \"title\": \"OVERSIZED LEATHER JACKET\",\n        \"price\": \"29990\",\n        \"images\": [\n            \"https://static.zara.net/photos/jacket-front.jpg\",\n            \"https://static.zara.net/photos/jacket-back.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"Black\", \"Brown\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"jacket\",\n        \"confidence\": 0.95\n    },\n    \"message\": \"Product scraped successfully\"\n}"
+									"body": "{\n    \"success\": true,\n    \"data\": {\n        \"url\": \"https://www.zara.com/us/en/oversized-leather-jacket-p03918220.html\",\n        \"title\": \"OVERSIZED LEATHER JACKET\",\n        \"price\": \"29990\",\n        \"images\": [\n            \"https://static.zara.net/photos/jacket-front.jpg\",\n            \"https://static.zara.net/photos/jacket-back.jpg\"\n        ],\n        \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n        \"colors\": [\"Black\", \"Brown\"],\n        \"brand\": \"Zara\",\n        \"category\": \"upper\",\n        \"type\": \"jacket\",\n        \"confidence\": 0.95,\n        \"fabric\": [\n            {\n                \"name\": \"leather\",\n                \"percentage\": 100\n            }\n        ]\n    },\n    \"message\": \"Product scraped successfully\"\n}"
 								}
 							]
 						},
