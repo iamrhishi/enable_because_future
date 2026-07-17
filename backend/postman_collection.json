@@ -463,7 +463,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
+							"raw": "{\n  \"height\": 175,\n  \"weight\": 70,\n  \"shoulder_circumference\": 110,\n  \"arm_length\": 60,\n  \"breast_circumference\": 95,\n  \"under_breast_circumference\": 85,\n  \"waist_circumference\": 80,\n  \"hip_circumference\": 95,\n  \"upper_thigh_circumference\": 55,\n  \"neck_circumference\": 38,\n  \"biceps_circumference\": 30,\n  \"upper_hip_circumference\": 90,\n  \"wide_hip_circumference\": 100,\n  \"calf_circumference\": 35,\n  \"collarbone_to_belly_button_length\": 45,\n  \"waist_to_crotch_front_length\": 25,\n  \"waist_to_crotch_back_length\": 30,\n  \"inner_leg_length\": 75,\n  \"foot_length\": 26,\n  \"foot_width\": 10,\n  \"unit\": \"metric\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/body-measurements",
