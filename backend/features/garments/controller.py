@@ -70,14 +70,15 @@ def _scrape_and_cache(url):
     try:
         db_manager.execute_query(
             """INSERT OR REPLACE INTO garment_metadata 
-               (url, title, price, images, sizes, colors, brand, fabric, scraped_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+               (url, title, price, images, sizes, colors, brand, fabric, description, scraped_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
             (url, product_info.get('title'), product_info.get('price'),
              json.dumps(product_info.get('images', [])),
              json.dumps(product_info.get('sizes', [])),
              json.dumps(product_info.get('colors', [])),
              product_info.get('brand'),
-             json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None)
+             json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None,
+             product_info.get('description'))
         )
     except Exception as e:
         logger.warning(f"Failed to cache garment metadata: {str(e)}")
@@ -91,6 +92,7 @@ def _scrape_and_cache(url):
         'colors': product_info.get('colors', []),
         'brand': product_info.get('brand'),
         'fabric': product_info.get('fabric'),
+        'description': product_info.get('description'),
         'category': categorization['category'],
         'type': categorization['type'],
         'confidence': categorization['confidence']
