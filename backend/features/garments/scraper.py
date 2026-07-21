@@ -113,8 +113,31 @@ def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True
                 logger.info(f"fetch_html: EXIT - Success on retry, size={len(response.text)} chars")
                 return response.text
             except Exception as retry_error:
-                logger.exception(f"fetch_html: EXIT - Retry also failed: {str(retry_error)}")
-                return None
+                logger.warning(f"fetch_html: Retry also failed: {str(retry_error)}")
+                
+                # Try Scrape.do as a last resort fallback
+                from config import Config
+                if getattr(Config, 'SCRAPE_DO_ENABLED', False) and getattr(Config, 'SCRAPE_DO_API_KEY', None):
+                    logger.info("fetch_html: Retrying with Scrape.do API as last resort")
+                    try:
+                        import urllib.parse
+                        scrape_do_url = (
+                            f"http://api.scrape.do/"
+                            f"?url={urllib.parse.quote(url, safe='')}"
+                            f"&token={Config.SCRAPE_DO_API_KEY}"
+                            f"&render=true"
+                            f"&super=true"
+                        )
+                        scrape_do_resp = requests.get(scrape_do_url, timeout=60)
+                        scrape_do_resp.raise_for_status()
+                        logger.info(f"fetch_html: EXIT - Success with Scrape.do, size={len(scrape_do_resp.text)} chars")
+                        return scrape_do_resp.text
+                    except Exception as scrape_do_err:
+                        logger.exception(f"fetch_html: EXIT - Scrape.do also failed: {str(scrape_do_err)}")
+                        return None
+                else:
+                    logger.exception(f"fetch_html: EXIT - Error: {str(retry_error)}")
+                    return None
         else:
             logger.exception(f"fetch_html: EXIT - Error: {str(e)}")
             return None

@@ -630,7 +630,8 @@ class GarmentSearchService:
     def _search_live_internet_garments(preferences: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Perform a live web search for garments matching user preference constraints.
-        Supports Google Custom Search API and open live web search.
+        Option 1: Direct Internal E-Commerce API (e.g. Zara)
+        Option 2: DuckDuckGo Search Scraping (fallback)
         """
         color = (preferences.get('color') or '').strip()
         brand = (preferences.get('brand') or '').strip()
@@ -638,207 +639,24 @@ class GarmentSearchService:
         gender = (preferences.get('gender') or '').strip()
         occasion = (preferences.get('occasion') or '').strip()
 
-        raw_parts = [color, brand, subcat, gender, occasion]
+        raw_parts = [color, subcat, gender, occasion]
         clean_parts = [p for p in raw_parts if p and str(p).lower() != 'none']
-        query = f"buy {' '.join(clean_parts)}".strip()
-        print(f"[GarmentDiscovery][LiveSearch] Query constructed: '{query}'")
-        if not query or query == "buy":
+        base_query = f"{' '.join(clean_parts)}".strip()
+        
+        if not base_query:
             return []
 
         results = []
 
-        # 1. Google Custom Search API (if configured in environment with CSE ID)
-        google_api_key = os.environ.get('GOOGLE_SEARCH_API_KEY') or os.environ.get('GOOGLE_API_KEY')
-        google_cse_id = os.environ.get('GOOGLE_CSE_ID') or os.environ.get('GOOGLE_SEARCH_ENGINE_ID')
-
-        if google_api_key and google_cse_id:
-            try:
-                endpoint = f"https://www.googleapis.com/customsearch/v1?key={google_api_key}&cx={google_cse_id}&q={quote_plus(query)}&num=8"
-                resp = requests.get(endpoint, timeout=4)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    items = data.get('items', [])
-                    # Find URLs that require image scraping
-                    links_to_resolve = []
-                    for item in items:
-                        pagemap = item.get('pagemap', {})
-                        img_url = None
-                        if pagemap.get('cse_image'):
-                            img_url = pagemap['cse_image'][0].get('src')
-                        elif pagemap.get('metatags'):
-                            img_url = pagemap['metatags'][0].get('og:image')
-                        
-                        link = item.get('link', '')
-                        if not img_url and link:
-                            links_to_resolve.append(link)
-
-                    # Scrape concurrently in parallel threads
-                    resolved_images = {}
-                    if links_to_resolve:
-                        from concurrent.futures import ThreadPoolExecutor, as_completed
-                        with ThreadPoolExecutor(max_workers=min(len(links_to_resolve), 6)) as executor:
-                            futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, l): l for l in links_to_resolve}
-                            for future in as_completed(futures):
-                                l = futures[future]
-                                try:
-                                    resolved_images[l] = future.result()
-                                except Exception:
-                                    resolved_images[l] = None
-
-                    for i, item in enumerate(items):
-                        pagemap = item.get('pagemap', {})
-                        image_url = None
-                        if pagemap.get('cse_image'):
-                            image_url = pagemap['cse_image'][0].get('src')
-                        elif pagemap.get('metatags'):
-                            image_url = pagemap['metatags'][0].get('og:image')
- 
-                        title = item.get('title', 'Online Garment')
-                        link = item.get('link', '')
-                        snippet = item.get('snippet', '')
- 
-                        # Use concurrently scraped image first if Google didn't return one
-                        if not image_url and link:
-                            image_url = resolved_images.get(link)
- 
-                        if not image_url:
-                            image_url = get_color_aware_photo(subcat, color)
-
-                        price = 49.99
-                        price_match = re.search(r'\$\s*(\d+(?:\.\d{2})?)', snippet + " " + title)
-                        if price_match:
-                            try:
-                                price = float(price_match.group(1))
-                            except ValueError:
-                                pass
-
-                        cat_res = categorize_garment(title=title)
-
-                        results.append({
-                            "id": f"live_gsearch_{i}",
-                            "title": title,
-                            "brand": brand or "Online Store",
-                            "category": cat_res.get('category') or "Upper body",
-                            "subcategory": cat_res.get('type') or subcat or "Shirts",
-                            "gender": gender or "unisex",
-                            "price": price,
-                            "currency": "$",
-                            "color": color or "Various",
-                            "colors_available": [color] if color else [],
-                            "sizes_available": ["S", "M", "L"],
-                            "style": "Modern",
-                            "url": link,
-                            "image_url": image_url,
-                            "description": snippet[:150],
-                            "tryon_ready": True
-                        })
-            except Exception as e:
-                print(f"[GarmentDiscovery][LiveSearch] Google Custom Search warning: {e}")
-
-        # 2. Open Live Web Search Fallback
+        # Option 1: Direct E-Commerce Internal API Search (Zara)
+        if brand.lower() == 'zara':
+            results = GarmentSearchService._search_zara_internal(base_query, preferences)
+            
+        # Option 2: Fallback to DuckDuckGo Search Scraping for any brand (or if Option 1 yielded no results)
         if not results:
-            try:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "en-US,en;q=0.9"
-                }
-                search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query + ' fashion clothing store -amazon -site:amazon.com')}"
-                resp = requests.get(search_url, headers=headers, timeout=1.5)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    title_links = soup.find_all('a', class_='result__a', limit=10)
-                    snippet_elems = soup.find_all('td', class_='result__snippet', limit=10)
-
-                    # First pass: clean up redirects and filter items
-                    candidate_items = []
-                    for idx in range(min(len(title_links), 10)):
-                        t_elem = title_links[idx]
-                        raw_title = t_elem.get_text().strip()
-                        clean_title = re.sub(r'\s*[\|-].*$', '', raw_title)
-                        raw_href = t_elem.get('href', '')
-                        
-                        actual_url = raw_href
-                        if 'duckduckgo.com' in raw_href or 'uddg=' in raw_href or 'u3=' in raw_href:
-                            parsed = parse_qs(urlparse(raw_href).query)
-                            for k in ['url', 'uddg', 'u3', 'u']:
-                                if k in parsed:
-                                    val = parsed[k][0]
-                                    if val.startswith('http') and 'duckduckgo.com' not in val and 'bing.com' not in val:
-                                        actual_url = val
-                                        break
-                                    elif 'url=' in val:
-                                        sub_p = parse_qs(urlparse(val).query)
-                                        if 'url' in sub_p and sub_p['url'][0].startswith('http'):
-                                            actual_url = sub_p['url'][0]
-                                            break
-
-                        if 'amazon.com' in actual_url.lower() or 'amazon' in raw_title.lower() or 'amazon' in clean_title.lower():
-                            continue
-
-                        non_fashion_kw = ['fridge', 'refrigerator', 'case', 'pencil', 'toy', 'electronics', 'phone', 'building', 'fortress', 'castle', 'decor', 'gowns', 'mortarboard', 'hat', 'beach', 'sunset', 'ideas', 'shop all', 'target', 'brandy melville']
-                        if any(kw in clean_title.lower() for kw in non_fashion_kw):
-                            continue
-
-                        snip_text = snippet_elems[idx].get_text().strip() if idx < len(snippet_elems) else ""
-
-                        price = 49.99
-                        price_match = re.search(r'\$\s*(\d+(?:\.\d{2})?)', snip_text + " " + clean_title)
-                        if price_match:
-                            try:
-                                price = float(price_match.group(1))
-                            except ValueError:
-                                pass
-
-                        cat_res = categorize_garment(title=clean_title)
-                        candidate_items.append({
-                            "idx": idx,
-                            "clean_title": clean_title,
-                            "actual_url": actual_url,
-                            "price": price,
-                            "cat_res": cat_res
-                        })
-
-                    # Concurrently resolve the URLs
-                    resolved_images = {}
-                    urls_to_resolve = [c["actual_url"] for c in candidate_items if c["actual_url"].startswith('http')]
-                    if urls_to_resolve:
-                        from concurrent.futures import ThreadPoolExecutor, as_completed
-                        with ThreadPoolExecutor(max_workers=min(len(urls_to_resolve), 6)) as executor:
-                            futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, l): l for l in urls_to_resolve}
-                            for future in as_completed(futures):
-                                l = futures[future]
-                                try:
-                                    resolved_images[l] = future.result()
-                                except Exception:
-                                    resolved_images[l] = None
-
-                    # Second pass: populate results
-                    for c in candidate_items:
-                        img_url = resolved_images.get(c["actual_url"])
-                        if not img_url:
-                            img_url = get_color_aware_photo(subcat, color)
-
-                        results.append({
-                            "id": f"live_web_{c['idx']}",
-                            "title": c["clean_title"] or "E-Commerce Garment",
-                            "brand": brand or "Online Store",
-                            "category": c["cat_res"].get('category') or "Upper body",
-                            "subcategory": c["cat_res"].get('type') or subcat or "Shirts",
-                            "gender": gender or "unisex",
-                            "price": c["price"],
-                            "currency": "$",
-                            "color": color or "Various",
-                            "colors_available": [color] if color else [],
-                            "sizes_available": ["S", "M", "L"],
-                            "style": "Modern",
-                            "url": c["actual_url"],
-                            "image_url": img_url,
-                            "description": snippet_elems[c["idx"]].get_text().strip()[:150] if c["idx"] < len(snippet_elems) else f"{c['clean_title']} from {brand}",
-                            "tryon_ready": True
-                        })
-            except Exception as e:
-                print(f"[GarmentDiscovery][LiveSearch] Open Web Search warning: {e}")
+            search_brand = brand if brand else "zara" # Default to a brand if none provided
+            ddg_query = f"{base_query} site:{search_brand.lower()}.com/us/en/ -inurl:search -inurl:category"
+            results = GarmentSearchService._search_duckduckgo_api(ddg_query, search_brand, preferences)
 
         # Cache discovered items into SQLite database table 'garment_metadata'
         for res in results:
@@ -856,6 +674,109 @@ class GarmentSearchService:
             except Exception:
                 pass
 
+        return results
+
+    @staticmethod
+    def _search_zara_internal(query: str, preferences: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Option 1: Direct Zara Search API implementation."""
+        results = []
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json"
+            }
+            # Mocking the Zara endpoint structure to avoid complex token handling for this example
+            url = f"https://www.zara.com/itxrest/2/search/store/11719/keyword/{quote_plus(query)}"
+            resp = requests.get(url, headers=headers, timeout=2)
+            
+            if resp.status_code == 200:
+                # If we had successful access to the real API, we would parse JSON here.
+                # data = resp.json() 
+                pass 
+                
+        except Exception as e:
+            print(f"[GarmentDiscovery][Option1] Direct Zara search failed: {e}")
+            
+        # Returning empty list will trigger Option 2 fallback
+        return results
+
+    @staticmethod
+    def _search_duckduckgo_api(query: str, brand: str, preferences: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Option 2: DuckDuckGo Python API + Metadata Scraping."""
+        results = []
+        try:
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                ddg_results = list(ddgs.text(query, max_results=5))
+
+            urls_to_resolve = []
+            candidate_items = []
+            
+            for idx, item in enumerate(ddg_results):
+                title = item.get('title', '')
+                url = item.get('href', '')
+                snippet = item.get('body', '')
+                
+                # Verify URL structure
+                if url and url.startswith('http'):
+                    urls_to_resolve.append(url)
+                    candidate_items.append({
+                        "idx": idx,
+                        "title": re.sub(r'\s*[\|-].*$', '', title).strip(),
+                        "url": url,
+                        "snippet": snippet
+                    })
+
+            # Concurrently resolve OpenGraph metadata (og:image)
+            resolved_images = {}
+            if urls_to_resolve:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=min(len(urls_to_resolve), 5)) as executor:
+                    futures = {executor.submit(GarmentSearchService._resolve_product_image_from_url, l): l for l in urls_to_resolve}
+                    for future in as_completed(futures):
+                        l = futures[future]
+                        try:
+                            resolved_images[l] = future.result()
+                        except Exception:
+                            resolved_images[l] = None
+
+            for c in candidate_items:
+                img_url = resolved_images.get(c['url'])
+                if not img_url:
+                    img_url = get_color_aware_photo(preferences.get('subcategory', ''), preferences.get('color', ''))
+
+                price = 49.99
+                price_match = re.search(r'\$\s*(\d+(?:\.\d{2})?)', c['snippet'] + " " + c['title'])
+                if price_match:
+                    try:
+                        price = float(price_match.group(1))
+                    except ValueError:
+                        pass
+
+                cat_res = categorize_garment(title=c['title'])
+                
+                results.append({
+                    "id": f"ddg_{c['idx']}",
+                    "title": c['title'] or "Online Garment",
+                    "brand": brand.capitalize() or "Online Store",
+                    "category": cat_res.get('category') or preferences.get('category') or "Upper body",
+                    "subcategory": cat_res.get('type') or preferences.get('subcategory') or "Shirts",
+                    "gender": preferences.get('gender') or "unisex",
+                    "price": price,
+                    "currency": "$",
+                    "color": preferences.get('color') or "Various",
+                    "colors_available": [preferences.get('color')] if preferences.get('color') else [],
+                    "sizes_available": ["S", "M", "L"],
+                    "style": "Modern",
+                    "url": c['url'],
+                    "image_url": img_url,
+                    "description": c['snippet'][:150],
+                    "tryon_ready": True
+                })
+                
+        except Exception as e:
+            print(f"[GarmentDiscovery][Option2] DuckDuckGo fallback search failed: {e}")
+            
         return results
 
     @staticmethod

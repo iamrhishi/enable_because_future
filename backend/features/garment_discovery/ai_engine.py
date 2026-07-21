@@ -157,6 +157,9 @@ Respond in STRICT JSON format with the following keys:
                         color_val = res_json['extracted_preferences'].get('color')
                         if color_val and isinstance(color_val, str):
                             res_json['extracted_preferences']['color'] = color_val.capitalize()
+                            
+                    if rule_res.get('ready_to_search'):
+                        res_json['ready_to_search'] = True
                 except Exception:
                     pass
                     
