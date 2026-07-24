@@ -68,6 +68,14 @@ def create_tryon_job():
         if not person_image:
             return error_response_from_string('selfie/person_image required or save avatar first', 400, 'VALIDATION_ERROR')
         
+        # If new selfie/person_image file was uploaded, validate single-person / single-face requirement
+        if 'selfie' in request.files or 'person_image' in request.files:
+            from shared.avatar_person_check import reject_message_if_avatar_not_person
+            rejection = reject_message_if_avatar_not_person(person_image)
+            if rejection:
+                logger.warning(f"create_tryon_job: Uploaded person image rejected for user_id={user_id}: {rejection}")
+                return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
         # Preprocess person image
         try:
             person_image = preprocess_image(person_image, resize=True, normalize=True)

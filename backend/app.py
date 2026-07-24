@@ -293,6 +293,10 @@ def save_avatar():
                     logger.warning(f"Avatar has no visible content (all transparent)")
             except Exception as trim_error:
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
+            
+            # Solidify alpha mask to fill interior semi-transparency and prevent background bleed-through
+            from shared.image_processing import clean_and_solidify_alpha_mask
+            avatar_data = clean_and_solidify_alpha_mask(avatar_data)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
@@ -448,6 +452,8 @@ def save_avatar_local():
             except Exception as trim_error:
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
                 
+            from shared.image_processing import clean_and_solidify_alpha_mask
+            avatar_data = clean_and_solidify_alpha_mask(avatar_data)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(

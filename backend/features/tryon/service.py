@@ -747,11 +747,11 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "- The person's HEAD must be at the EXACT same vertical position (same distance from top edge).\n",
             "- The person's FEET must be at the EXACT same vertical position (same distance from bottom edge).\n",
             "- If feet are visible in image 1, they MUST be visible in the output at the same position.\n",
-            "- Do NOT zoom in, zoom out, or change the scale of the person.\n",
-            "- Do NOT crop, cut off, or truncate any body parts (head, hands, arms, legs, feet).\n",
             "- The person must occupy the SAME area of the frame as in image 1.\n",
             "- Maintain identical aspect ratio, framing, and composition.\n\n",
-            "OUTPUT REQUIREMENTS:\n",
+            "SINGLE PERSON AND COMPOSITION REQUIREMENTS (CRITICAL):\n",
+            "- Output ONLY ONE SINGLE PERSON centered in the frame.\n",
+            "- Do NOT include any secondary people, background models, mannequin reflections, or extra bodies.\n",
             "- Output ONLY a single edited image (no side-by-side, no before/after comparison).\n",
             "- The garment must look naturally fitted on the person's body.\n",
             "- Preserve the person's pose, face, hair, skin, and any visible accessories.\n"
@@ -942,10 +942,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             elif result_img.mode != 'RGBA':
                 # Only convert if not already RGBA (e.g., LA or P mode)
                 result_img = result_img.convert('RGBA')
-                output = BytesIO()
-                result_img.save(output, format='PNG')
-                result_image_bytes = output.getvalue()
-            # If already RGBA with transparency, use result as-is (no need to re-save)
+            # Always solidify alpha mask to prevent semi-transparency background bleed-through
+            from shared.image_processing import clean_and_solidify_alpha_mask
+            result_image_bytes = clean_and_solidify_alpha_mask(result_image_bytes)
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails

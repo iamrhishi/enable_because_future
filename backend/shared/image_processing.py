@@ -355,3 +355,37 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
         logger.exception(f"fetch_image_from_url: EXIT - Error: {str(e)}")
         raise ValidationError(f"Error fetching image: {str(e)}")
 
+
+def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> bytes:
+    """
+    Clean and solidify the alpha mask of a PNG image.
+    Fills interior semi-transparent pixels (alpha > threshold) to alpha = 255 (100% solid opacity),
+    preventing background bleed-through / double body artifacts when rendered over client backdrops.
+    """
+    try:
+        import numpy as np
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        arr = np.array(img)
+        alpha = arr[:, :, 3]
+
+        fg_mask = alpha > threshold
+        if not np.any(fg_mask):
+            return image_bytes
+
+        # Make subject's body/clothes 100% opaque to stop semi-transparent background bleed
+        arr[:, :, 3][fg_mask] = 255
+
+        out_img = Image.fromarray(arr, mode='RGBA')
+        buf = BytesIO()
+        out_img.save(buf, format='PNG')
+        result = buf.getvalue()
+        logger.info(f"clean_and_solidify_alpha_mask: Solidified alpha mask (size {len(result)} bytes)")
+        return result
+    except Exception as e:
+        logger.warning(f"clean_and_solidify_alpha_mask error: {e}, returning original")
+        return image_bytes
+
+
