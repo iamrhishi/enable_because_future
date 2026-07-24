@@ -671,10 +671,10 @@ def create_tryon_job():
                                             import traceback
                                             logger.debug(traceback.format_exc())
                                     
-                                    # Get categorization from product title
+                                    # Get categorization from product info & URL
                                     categorization = None
-                                    if product_info.get('title'):
-                                        categorization = categorize_garment(title=product_info.get('title'))
+                                    first_img = product_info.get('images', [None])[0] if product_info and product_info.get('images') else None
+                                    categorization = categorize_garment(title=product_info.get('title'), url=item_url, image_url=first_img)
                                     
                                     # Build garment_details from product_info for Gemini
                                     garment_details = {
