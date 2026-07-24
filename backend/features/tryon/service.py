@@ -942,9 +942,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             elif result_img.mode != 'RGBA':
                 # Only convert if not already RGBA (e.g., LA or P mode)
                 result_img = result_img.convert('RGBA')
-            # Always solidify alpha mask to prevent semi-transparency background bleed-through
-            from shared.image_processing import clean_and_solidify_alpha_mask
+            # Always solidify alpha mask and normalize canvas framing to prevent semi-transparency and sizing/alignment bugs
+            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
             result_image_bytes = clean_and_solidify_alpha_mask(result_image_bytes)
+            result_image_bytes = normalize_avatar_framing(result_image_bytes)
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails
@@ -1215,10 +1216,18 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
                         if 'content' in candidate and 'parts' in candidate['content']:
                             for part in candidate['content']['parts']:
                                 if 'inlineData' in part:
-                                    image_data = part['inlineData']['data']
-                                    mime_type = part['inlineData'].get('mimeType', 'image/png')
-                                    result_url = f"data:{mime_type};base64,{image_data}"
-                                    logger.info(f"process_tryon_layered: EXIT - Success")
+                                    raw_b64 = part['inlineData']['data']
+                                    raw_bytes = base64.b64decode(raw_b64)
+                                    from rembg import remove  # type: ignore
+                                    try:
+                                        raw_bytes = remove(raw_bytes)
+                                    except Exception as bg_err:
+                                        logger.warning(f"process_tryon_layered: rembg error: {bg_err}")
+                                    from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+                                    processed_bytes = normalize_avatar_framing(clean_and_solidify_alpha_mask(raw_bytes))
+                                    new_b64 = base64.b64encode(processed_bytes).decode('utf-8')
+                                    result_url = f"data:image/png;base64,{new_b64}"
+                                    logger.info(f"process_tryon_layered: EXIT - Success (normalized framing)")
                                     return result_url
 
                     raise ExternalServiceError("No image in Gemini response", service='gemini')
