@@ -452,21 +452,61 @@ def normalize_avatar_framing(
         return image_bytes
 
 
+def _detect_person_in_image(image_bytes: bytes) -> bool:
+    """Check if an image contains a human face or body using OpenCV."""
+    try:
+        import cv2
+        import numpy as np
+        img = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None or img.size == 0:
+            return False
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        frontal_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        frontal = cv2.CascadeClassifier(frontal_path)
+        if not frontal.empty():
+            faces = frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
+            if faces is not None and len(faces) > 0:
+                return True
+
+        profile_path = cv2.data.haarcascades + 'haarcascade_profileface.xml'
+        profile = cv2.CascadeClassifier(profile_path)
+        if not profile.empty():
+            pfaces = profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
+            if pfaces is not None and len(pfaces) > 0:
+                return True
+
+        return False
+    except Exception:
+        return False
+
+
 def crop_garment_to_relevant_region(garment_bytes: bytes, garment_type: str = 'upper') -> bytes:
     """
     Crop garment image to isolate the relevant clothing item if it's a full-model photo.
     For 'upper' (shirts, blazers, tops), crops to upper ~65% region.
     For 'lower' (pants, skirts, shorts), crops to lower ~65% region.
-    Eliminates full model outfit confusion for Gemini virtual try-on.
+    Only crops if image has a tall aspect ratio AND contains a human model figure.
+    Flat-lay photos, hanger shots, or already cropped product images remain 100% untouched.
     """
     try:
         img = Image.open(BytesIO(garment_bytes))
         w, h = img.size
         aspect_ratio = h / float(w)
 
-        # Only crop if image has tall aspect ratio typical of full-body model photos (h/w > 1.15)
+        # 1. Only crop if image has tall aspect ratio typical of full-body model photos (h/w > 1.15)
         if aspect_ratio <= 1.15:
+            logger.info(f"crop_garment_to_relevant_region: Aspect ratio {aspect_ratio:.2f} <= 1.15 (already cropped/wide) - keeping original")
             return garment_bytes
+
+        # 2. Check if a human model is actually present in the photo
+        has_model = _detect_person_in_image(garment_bytes)
+        if not has_model:
+            logger.info("crop_garment_to_relevant_region: No human model detected in garment photo (flat-lay/isolated product) - keeping original")
+            return garment_bytes
+
+        logger.info(f"crop_garment_to_relevant_region: Detected human model in tall photo ({w}x{h}, ratio {aspect_ratio:.2f}) - cropping for {garment_type}")
 
         if img.mode in ('RGBA', 'LA'):
             bbox = img.getbbox()
