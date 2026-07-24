@@ -389,3 +389,67 @@ def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> by
         return image_bytes
 
 
+def normalize_avatar_framing(
+    image_bytes: bytes,
+    target_canvas_size: tuple[int, int] = (900, 1200),
+    target_height_percent: float = 0.95,
+    bottom_margin_percent: float = 0.02
+) -> bytes:
+    """
+    Normalize an avatar / try-on result image to standard 3:4 canvas framing.
+    Crops empty transparent padding around subject, scales figure so height is
+    target_height_percent (default 95%) of target canvas height, centers horizontally,
+    and anchors feet/bottom at bottom_margin_percent (default 2%).
+    Prevents giant, tiny, or floating avatar visual bugs.
+    """
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        bbox = img.getbbox()
+        if not bbox:
+            logger.warning("normalize_avatar_framing: Image has no non-transparent pixels")
+            return image_bytes
+
+        cropped_img = img.crop(bbox)
+        crop_w, crop_h = cropped_img.size
+
+        canvas_w, canvas_h = target_canvas_size
+        desired_subject_h = int(canvas_h * target_height_percent)
+
+        scale = desired_subject_h / float(crop_h)
+        scaled_w = int(crop_w * scale)
+        scaled_h = desired_subject_h
+
+        max_allowed_w = int(canvas_w * 0.96)
+        if scaled_w > max_allowed_w:
+            scale = max_allowed_w / float(crop_w)
+            scaled_w = max_allowed_w
+            scaled_h = int(crop_h * scale)
+
+        resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+
+        canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+
+        paste_x = (canvas_w - scaled_w) // 2
+
+        bottom_margin = int(canvas_h * bottom_margin_percent)
+        paste_y = canvas_h - bottom_margin - scaled_h
+
+        if paste_y < 0:
+            paste_y = (canvas_h - scaled_h) // 2
+
+        canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
+
+        buf = BytesIO()
+        canvas.save(buf, format='PNG')
+        result = buf.getvalue()
+        logger.info(f"normalize_avatar_framing: Normalized to {canvas_w}x{canvas_h} canvas, subject {scaled_w}x{scaled_h}")
+        return result
+    except Exception as e:
+        logger.warning(f"normalize_avatar_framing error: {e}, returning original bytes")
+        return image_bytes
+
+
+
