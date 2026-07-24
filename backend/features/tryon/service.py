@@ -810,12 +810,14 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 "contents": [{
                     "parts": [
                         {"text": use_prompt},
+                        {"text": "\n[IMAGE 1: PERSON / AVATAR MODEL TO DRESS]\n"},
                         {
                             "inline_data": {
                                 "mime_type": "image/png",
                                 "data": person_base64,
                             },
                         },
+                        {"text": "\n[IMAGE 2: GARMENT / CLOTHING ITEM TO FIT ONTO PERSON IN IMAGE 1]\n"},
                         {
                             "inline_data": {
                                 "mime_type": "image/png",
@@ -1185,12 +1187,14 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
             "contents": [{
                 "parts": [
                     {"text": prompt},
+                    {"text": "\n[IMAGE 1: PERSON / AVATAR MODEL TO DRESS]\n"},
                     {
                         "inline_data": {
                             "mime_type": "image/png",
                             "data": person_base64
                         }
                     },
+                    {"text": "\n[IMAGE 2: GARMENT / CLOTHING ITEM TO FIT ONTO PERSON IN IMAGE 1]\n"},
                     {
                         "inline_data": {
                             "mime_type": "image/png",
