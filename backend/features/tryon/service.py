@@ -588,6 +588,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             garment_image = garment_image[0]
             logger.info(f"process_tryon: Received list of images, using first one only")
 
+        # Focus crop garment image to isolate upper/lower item if full-model photo
+        from shared.image_processing import crop_garment_to_relevant_region
+        garment_image = crop_garment_to_relevant_region(garment_image, garment_type=garment_type)
+
         if Config.GEMINI_TRYON_INPUT_MAX_EDGE > 0:
             me = Config.GEMINI_TRYON_INPUT_MAX_EDGE
             p0_len, g0_len = len(person_image), len(garment_image)
@@ -1085,6 +1089,10 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
         # Handle list of images - use only the first one
         if isinstance(garment_image, list):
             garment_image = garment_image[0]
+
+        # Focus crop garment image to isolate upper/lower item if full-model photo
+        from shared.image_processing import crop_garment_to_relevant_region
+        garment_image = crop_garment_to_relevant_region(garment_image, garment_type=garment_type)
 
         # Log image sizes
         person_size_mb = len(person_image) / (1024 * 1024)

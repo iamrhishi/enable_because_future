@@ -452,4 +452,66 @@ def normalize_avatar_framing(
         return image_bytes
 
 
+def crop_garment_to_relevant_region(garment_bytes: bytes, garment_type: str = 'upper') -> bytes:
+    """
+    Crop garment image to isolate the relevant clothing item if it's a full-model photo.
+    For 'upper' (shirts, blazers, tops), crops to upper ~65% region.
+    For 'lower' (pants, skirts, shorts), crops to lower ~65% region.
+    Eliminates full model outfit confusion for Gemini virtual try-on.
+    """
+    try:
+        img = Image.open(BytesIO(garment_bytes))
+        w, h = img.size
+        aspect_ratio = h / float(w)
+
+        # Only crop if image has tall aspect ratio typical of full-body model photos (h/w > 1.15)
+        if aspect_ratio <= 1.15:
+            return garment_bytes
+
+        if img.mode in ('RGBA', 'LA'):
+            bbox = img.getbbox()
+            if bbox:
+                img = img.crop(bbox)
+                w, h = img.size
+
+        if garment_type == 'upper':
+            crop_box = (0, 0, w, int(h * 0.65))
+        elif garment_type == 'lower':
+            crop_box = (0, int(h * 0.35), w, h)
+        else:
+            return garment_bytes
+
+        cropped = img.crop(crop_box)
+        buf = BytesIO()
+        cropped.save(buf, format=img.format or 'PNG')
+        result = buf.getvalue()
+        logger.info(f"crop_garment_to_relevant_region: Cropped {garment_type} garment from {w}x{h} to {cropped.size[0]}x{cropped.size[1]}")
+        return result
+    except Exception as e:
+        logger.warning(f"crop_garment_to_relevant_region error: {e}, returning original")
+        return garment_bytes
+
+
+def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_mean_diff: float = 8.0) -> bool:
+    """
+    Check if img2 is substantially identical to img1 (indicating Gemini returned the original avatar unchanged).
+    """
+    try:
+        import numpy as np
+        img1 = Image.open(BytesIO(img1_bytes)).convert('RGB').resize((128, 128))
+        img2 = Image.open(BytesIO(img2_bytes)).convert('RGB').resize((128, 128))
+
+        arr1 = np.array(img1, dtype=np.float32)
+        arr2 = np.array(img2, dtype=np.float32)
+
+        mean_diff = float(np.mean(np.abs(arr1 - arr2)))
+        unchanged = mean_diff < max_mean_diff
+        logger.info(f"is_image_substantially_unchanged: mean_pixel_diff={mean_diff:.2f}, unchanged={unchanged}")
+        return unchanged
+    except Exception as e:
+        logger.warning(f"is_image_substantially_unchanged error: {e}")
+        return False
+
+
+
 
