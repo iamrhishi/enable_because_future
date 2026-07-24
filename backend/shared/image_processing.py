@@ -485,7 +485,7 @@ def _detect_person_in_image(image_bytes: bytes) -> bool:
 def crop_garment_to_relevant_region(garment_bytes: bytes, garment_type: str = 'upper') -> bytes:
     """
     Crop garment image to isolate the relevant clothing item if it's a full-model photo.
-    For 'upper' (shirts, blazers, tops), crops to upper ~65% region.
+    For 'upper' (shirts, blazers, tops, sweaters), crops to upper ~85% region to include full garment hem.
     For 'lower' (pants, skirts, shorts), crops to lower ~65% region.
     Only crops if image has a tall aspect ratio AND contains a human model figure.
     Flat-lay photos, hanger shots, or already cropped product images remain 100% untouched.
@@ -515,7 +515,7 @@ def crop_garment_to_relevant_region(garment_bytes: bytes, garment_type: str = 'u
                 w, h = img.size
 
         if garment_type == 'upper':
-            crop_box = (0, 0, w, int(h * 0.65))
+            crop_box = (0, 0, w, int(h * 0.85))
         elif garment_type == 'lower':
             crop_box = (0, int(h * 0.35), w, h)
         else:

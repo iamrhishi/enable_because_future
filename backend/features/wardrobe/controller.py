@@ -459,7 +459,13 @@ def add_garment():
         category_section = form_data.get('category_section') or data.get('category_section')
         category = form_data.get('category') or data.get('category')
         custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
-        category_id = form_data.get('category_id') or data.get('category_id')
+        category_id_raw = form_data.get('category_id') or data.get('category_id')
+        category_id = None
+        if category_id_raw is not None and str(category_id_raw).strip().lower() not in ('null', 'undefined', ''):
+            try:
+                category_id = int(category_id_raw)
+            except (ValueError, TypeError):
+                category_id = None
         
         # Validate category_section if provided
         if category_section:
@@ -495,8 +501,8 @@ def add_garment():
         # Validate category
         if custom_category_name:
             # Verify custom category exists
-            if category_id:
-                cat = WardrobeCategory.get_by_id(int(category_id), user_id)
+            if category_id is not None:
+                cat = WardrobeCategory.get_by_id(category_id, user_id)
                 if not cat:
                     return error_response_from_string('Category not found', 404, 'NOT_FOUND')
         elif category is not None and category not in ['upper', 'lower']:
@@ -571,7 +577,7 @@ def add_garment():
             image_path=image_url,
             category=category if not custom_category_name else None,
             custom_category_name=custom_category_name,
-            category_id=int(category_id) if category_id else None,
+            category_id=category_id,
             category_section=category_section,
             garment_category_type=garment_type,
             brand=product_info.get('brand') if product_info else form_data.get('brand') or data.get('brand'),

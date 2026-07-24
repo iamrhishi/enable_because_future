@@ -948,10 +948,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             elif result_img.mode != 'RGBA':
                 # Only convert if not already RGBA (e.g., LA or P mode)
                 result_img = result_img.convert('RGBA')
-            # Always solidify alpha mask and normalize canvas framing to prevent semi-transparency and sizing/alignment bugs
-            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+            # Always solidify alpha mask to prevent semi-transparency
+            from shared.image_processing import clean_and_solidify_alpha_mask
             result_image_bytes = clean_and_solidify_alpha_mask(result_image_bytes)
-            result_image_bytes = normalize_avatar_framing(result_image_bytes)
         except Exception as processing_error:
             logger.warning(f"process_tryon: Image processing failed: {str(processing_error)}, using Gemini result as-is")
             # Continue with Gemini's result if processing fails
@@ -969,27 +968,29 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
                 # If we padded the input, we need to extract the center portion
                 if pad_left > 0 or pad_top > 0:
-                    # Must match dimensions of image 1 sent to the API (not original_width + 2*pad_left; that can be off by one)
+                    # Must match dimensions of image 1 sent to the API
                     padded_width = api_canvas_width if api_canvas_width else original_width + (2 * pad_left)
                     padded_height = api_canvas_height if api_canvas_height else original_height + (2 * pad_top)
                     logger.info(f"process_tryon: Input was padded to {padded_width}x{padded_height}, need to extract center {original_width}x{original_height}")
 
-                    # Scale result to match the padded dimensions first
+                    # Scale result to fill padded dimensions without vertical offset
                     if result_width != padded_width or result_height != padded_height:
-                        # Scale proportionally to match padded dimensions
-                        scale = min(padded_width / result_width, padded_height / result_height)
-                        scaled_w = int(result_width * scale)
-                        scaled_h = int(result_height * scale)
-                        result_img = result_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
-                        logger.info(f"process_tryon: Scaled result to {scaled_w}x{scaled_h}")
+                        output_ratio = result_width / result_height if result_height > 0 else 1.0
+                        target_ratio = padded_width / padded_height if padded_height > 0 else 1.0
 
-                        # Center on canvas of padded size if needed
-                        if scaled_w != padded_width or scaled_h != padded_height:
-                            canvas = Image.new('RGBA', (padded_width, padded_height), (0, 0, 0, 0))
-                            paste_x = (padded_width - scaled_w) // 2
-                            paste_y = (padded_height - scaled_h) // 2
-                            canvas.paste(result_img, (paste_x, paste_y), result_img)
-                            result_img = canvas
+                        if abs(output_ratio - target_ratio) < 0.05:
+                            result_img = result_img.resize((padded_width, padded_height), Image.Resampling.LANCZOS)
+                            logger.info(f"process_tryon: Resized output to match padded canvas: {padded_width}x{padded_height}")
+                        else:
+                            scale = max(padded_width / result_width, padded_height / result_height)
+                            new_w = int(result_width * scale)
+                            new_h = int(result_height * scale)
+                            result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+                            crop_l = (new_w - padded_width) // 2
+                            crop_t = 0
+                            result_img = result_img.crop((crop_l, crop_t, crop_l + padded_width, crop_t + padded_height))
+                            logger.info(f"process_tryon: Scaled to fill padded canvas and top-cropped to {padded_width}x{padded_height}")
 
                     # Now crop to extract the original (unpadded) region
                     crop_left = pad_left
@@ -1012,20 +1013,20 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = result_img.resize((original_width, original_height), Image.Resampling.LANCZOS)
                             logger.info(f"process_tryon: Resized output to match input dimensions (same aspect ratio)")
                         else:
-                            # Different aspect ratio - scale to FILL and crop (preserves person size)
+                            # Different aspect ratio - scale to FILL and top-crop (preserves head/feet position)
                             scale_w = original_width / result_width
                             scale_h = original_height / result_height
-                            scale = max(scale_w, scale_h)  # Use max to preserve person size
+                            scale = max(scale_w, scale_h)
 
                             new_w = int(result_width * scale)
                             new_h = int(result_height * scale)
                             result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                            # Center crop to target dimensions
+                            # Top crop to preserve head and feet position
                             crop_left = (new_w - original_width) // 2
-                            crop_top = (new_h - original_height) // 2
+                            crop_top = 0
                             result_img = result_img.crop((crop_left, crop_top, crop_left + original_width, crop_top + original_height))
-                            logger.info(f"process_tryon: Scaled to fill and cropped (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
+                            logger.info(f"process_tryon: Scaled to fill and top-cropped (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
                     else:
                         logger.info(f"process_tryon: Output dimensions already match input: {result_width}x{result_height}")
 
@@ -1044,7 +1045,11 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 output = BytesIO()
                 result_img.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
-                logger.info(f"process_tryon: Final output dimensions: {result_img.size[0]}x{result_img.size[1]}")
+                
+                # Apply normalize_avatar_framing to format final canvas framing nicely
+                from shared.image_processing import normalize_avatar_framing
+                result_image_bytes = normalize_avatar_framing(result_image_bytes)
+                logger.info(f"process_tryon: Final output dimensions after framing: {result_img.size[0]}x{result_img.size[1]}")
             except Exception as resize_error:
                 logger.warning(f"process_tryon: Dimension matching failed: {str(resize_error)}, using result as-is")
 
@@ -1235,8 +1240,8 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
                                         raw_bytes = remove(raw_bytes)
                                     except Exception as bg_err:
                                         logger.warning(f"process_tryon_layered: rembg error: {bg_err}")
-                                    from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
-                                    processed_bytes = normalize_avatar_framing(clean_and_solidify_alpha_mask(raw_bytes))
+                                    from shared.image_processing import clean_and_solidify_alpha_mask
+                                    processed_bytes = clean_and_solidify_alpha_mask(raw_bytes)
                                     new_b64 = base64.b64encode(processed_bytes).decode('utf-8')
                                     result_url = f"data:image/png;base64,{new_b64}"
                                     logger.info(f"process_tryon_layered: EXIT - Success (normalized framing)")
