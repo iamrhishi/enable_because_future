@@ -721,7 +721,12 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
         # Build comprehensive prompt with all garment details
         prompt_parts = [
-            "TASK: Virtual try-on - dress the person in image 1 with the garment from image 2.\n\n"
+            "TASK: Virtual try-on - dress the person in image 1 with the garment from image 2.\n\n",
+            "CRITICAL FULL-BODY PRESERVATION:\n",
+            "- If Image 1 shows a full-body person (head to toe including legs, pants, and shoes), you MUST preserve the full-body framing.\n",
+            "- You MUST generate the FULL-BODY of the person from head to toe.\n",
+            "- Do NOT crop at the waist, do NOT zoom in, and do NOT generate a half-body or waist-up portrait.\n",
+            "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n\n"
         ]
 
         # Add garment details if available
@@ -749,8 +754,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
         prompt_parts.extend([
             "- The person's HEAD must be at the EXACT same vertical position (same distance from top edge).\n",
-            "- The person's FEET must be at the EXACT same vertical position (same distance from bottom edge).\n",
-            "- If feet are visible in image 1, they MUST be visible in the output at the same position.\n",
+            "- The person's FEET, SHOES, AND LEGS must remain fully visible at the EXACT same position from image 1.\n",
+            "- If feet/shoes are visible in image 1, they MUST be visible in the output at the same position.\n",
+            "- Maintain full-body camera framing (do not convert full body into a half-body or waist-up portrait).\n",
             "- The person must occupy the SAME area of the frame as in image 1.\n",
             "- Maintain identical aspect ratio, framing, and composition.\n\n",
             "SINGLE PERSON AND COMPOSITION REQUIREMENTS (CRITICAL):\n",
@@ -768,8 +774,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "TASK: Virtual try-on.\n\n",
             f"Image 1 shows a person. Image 2 shows a garment.\n"
             f"Edit image 1 so the person wears the garment from image 2 on their {body_location}. "
-            "Keep the same pose, face, hair, skin tone, proportions, and camera framing as image 1.\n",
-            "If the person's head or feet appear in image 1, keep them visible; do not crop them out.\n\n",
+            "Keep the exact same full-body framing (head to toe including legs, pants, and shoes), pose, face, hair, skin tone, and camera framing as image 1.\n",
+            "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n\n",
             "Match the garment's colors, patterns, cut, neckline, sleeves, hem, and silhouette from image 2 as faithfully as reasonable.\n",
             "Output one photorealistic full image only. No collage, no before/after split, no text, no labels.\n\n",
         ]
@@ -973,7 +979,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                     padded_height = api_canvas_height if api_canvas_height else original_height + (2 * pad_top)
                     logger.info(f"process_tryon: Input was padded to {padded_width}x{padded_height}, need to extract center {original_width}x{original_height}")
 
-                    # Scale result to fill padded dimensions without vertical offset
+                    # Scale result to fit padded dimensions without cropping body parts
                     if result_width != padded_width or result_height != padded_height:
                         output_ratio = result_width / result_height if result_height > 0 else 1.0
                         target_ratio = padded_width / padded_height if padded_height > 0 else 1.0
@@ -982,15 +988,17 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = result_img.resize((padded_width, padded_height), Image.Resampling.LANCZOS)
                             logger.info(f"process_tryon: Resized output to match padded canvas: {padded_width}x{padded_height}")
                         else:
-                            scale = max(padded_width / result_width, padded_height / result_height)
+                            scale = min(padded_width / float(result_width), padded_height / float(result_height))
                             new_w = int(result_width * scale)
                             new_h = int(result_height * scale)
-                            result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                            resized_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                            crop_l = (new_w - padded_width) // 2
-                            crop_t = 0
-                            result_img = result_img.crop((crop_l, crop_t, crop_l + padded_width, crop_t + padded_height))
-                            logger.info(f"process_tryon: Scaled to fill padded canvas and top-cropped to {padded_width}x{padded_height}")
+                            canvas = Image.new('RGBA', (padded_width, padded_height), (0, 0, 0, 0))
+                            paste_x = (padded_width - new_w) // 2
+                            paste_y = (padded_height - new_h) // 2
+                            canvas.paste(resized_img, (paste_x, paste_y), resized_img)
+                            result_img = canvas
+                            logger.info(f"process_tryon: Scaled to fit padded canvas: {padded_width}x{padded_height}")
 
                     # Now crop to extract the original (unpadded) region
                     crop_left = pad_left
@@ -1013,20 +1021,21 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = result_img.resize((original_width, original_height), Image.Resampling.LANCZOS)
                             logger.info(f"process_tryon: Resized output to match input dimensions (same aspect ratio)")
                         else:
-                            # Different aspect ratio - scale to FILL and top-crop (preserves head/feet position)
-                            scale_w = original_width / result_width
-                            scale_h = original_height / result_height
-                            scale = max(scale_w, scale_h)
+                            # Different aspect ratio - scale to FIT without cropping off body parts
+                            scale_w = original_width / float(result_width)
+                            scale_h = original_height / float(result_height)
+                            scale = min(scale_w, scale_h)
 
                             new_w = int(result_width * scale)
                             new_h = int(result_height * scale)
-                            result_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                            resized_img = result_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                            # Top crop to preserve head and feet position
-                            crop_left = (new_w - original_width) // 2
-                            crop_top = 0
-                            result_img = result_img.crop((crop_left, crop_top, crop_left + original_width, crop_top + original_height))
-                            logger.info(f"process_tryon: Scaled to fill and top-cropped (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
+                            canvas = Image.new('RGBA', (original_width, original_height), (0, 0, 0, 0))
+                            paste_x = (original_width - new_w) // 2
+                            paste_y = (original_height - new_h) // 2
+                            canvas.paste(resized_img, (paste_x, paste_y), resized_img)
+                            result_img = canvas
+                            logger.info(f"process_tryon: Scaled to fit canvas without cropping body (aspect ratio: {output_ratio:.3f} -> {input_ratio:.3f})")
                     else:
                         logger.info(f"process_tryon: Output dimensions already match input: {result_width}x{result_height}")
 
@@ -1144,6 +1153,10 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
         # Build LAYERING-specific prompt
         prompt_parts = [
             "TASK: Add a new garment LAYER over the person's existing outfit.\n\n",
+            "CRITICAL FULL-BODY PRESERVATION:\n",
+            "- If Image 1 shows a full-body person (head to toe including legs, pants, and shoes), you MUST preserve the full-body framing.\n",
+            "- You MUST generate the FULL-BODY of the person from head to toe.\n",
+            "- Do NOT crop at the waist, do NOT zoom in, and keep lower body (pants, legs, shoes) visible.\n\n",
             "CRITICAL: The person in image 1 is ALREADY WEARING CLOTHES. ",
             "You must PRESERVE their existing outfit and ADD the new garment FROM IMAGE 2 on top.\n\n"
         ]
@@ -1170,8 +1183,9 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
 
         prompt_parts.extend([
             "- Keep the person's HEAD at the EXACT same position (same distance from top).\n",
-            "- Keep the person's FEET at the EXACT same position if visible.\n",
+            "- Keep the person's FEET, SHOES, AND LEGS at the EXACT same position from image 1.\n",
             "- Do NOT zoom, crop, or change the framing in any way.\n",
+            "- Maintain full-body camera framing (do not convert full body into a half-body or waist-up portrait).\n",
             "- Do NOT cut off any body parts.\n\n",
             "OUTPUT:\n",
             "- Single edited image showing the person wearing their original outfit WITH the new garment layered on top.\n",

@@ -358,9 +358,9 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
 
 def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> bytes:
     """
-    Clean and solidify the alpha mask of a PNG image.
+    Clean and solidify the interior alpha mask of a PNG image.
     Fills interior semi-transparent pixels (alpha > threshold) to alpha = 255 (100% solid opacity),
-    preventing background bleed-through / double body artifacts when rendered over client backdrops.
+    while using erosion to leave perimeter anti-aliased edge pixels untouched (preventing dark halos).
     """
     try:
         import numpy as np
@@ -375,8 +375,20 @@ def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> by
         if not np.any(fg_mask):
             return image_bytes
 
-        # Make subject's body/clothes 100% opaque to stop semi-transparent background bleed
-        arr[:, :, 3][fg_mask] = 255
+        # Try using OpenCV erosion to solidify ONLY interior pixels while preserving soft edge anti-aliasing
+        try:
+            import cv2
+            fg_bytes = fg_mask.astype(np.uint8)
+            kernel_size = 5  # 5x5 ellipse kernel (~2-3px erosion from perimeter)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            eroded_fg = cv2.erode(fg_bytes, kernel)
+            
+            # Make interior 100% opaque to stop background bleed, preserving outer soft edge
+            arr[:, :, 3][eroded_fg > 0] = 255
+        except Exception as cv_err:
+            logger.warning(f"clean_and_solidify_alpha_mask: OpenCV erosion failed ({cv_err}), falling back to gentle solidifying")
+            # Fallback without cv2: only solidify high-confidence foreground pixels (alpha > 200)
+            arr[:, :, 3][alpha > 200] = 255
 
         out_img = Image.fromarray(arr, mode='RGBA')
         buf = BytesIO()
@@ -397,10 +409,10 @@ def normalize_avatar_framing(
 ) -> bytes:
     """
     Normalize an avatar / try-on result image to standard 3:4 canvas framing.
-    Crops empty transparent padding around subject, scales figure so height is
-    target_height_percent (default 95%) of target canvas height, centers horizontally,
-    and anchors feet/bottom at bottom_margin_percent (default 2%).
-    Prevents giant, tiny, or floating avatar visual bugs.
+    Crops empty transparent padding around subject.
+    For full-body figures, scales height to target_height_percent (default 95%).
+    For upper-body / 3/4 figures, preserves natural scale matching avatar proportions
+    instead of blowing up upper-body crops to giant sizes.
     """
     try:
         img = Image.open(BytesIO(image_bytes))
@@ -412,40 +424,70 @@ def normalize_avatar_framing(
             logger.warning("normalize_avatar_framing: Image has no non-transparent pixels")
             return image_bytes
 
-        cropped_img = img.crop(bbox)
-        crop_w, crop_h = cropped_img.size
+        left, top, right, bottom = bbox
+        crop_w = right - left
+        crop_h = bottom - top
 
         canvas_w, canvas_h = target_canvas_size
-        desired_subject_h = int(canvas_h * target_height_percent)
+        img_w, img_h = img.size
 
-        scale = desired_subject_h / float(crop_h)
-        scaled_w = int(crop_w * scale)
-        scaled_h = desired_subject_h
+        # Check if subject is full body (spans top to bottom, height >= 78% of image height)
+        is_full_body = crop_h >= (img_h * 0.78) or (crop_h / float(crop_w) >= 2.1)
 
-        max_allowed_w = int(canvas_w * 0.96)
-        if scaled_w > max_allowed_w:
-            scale = max_allowed_w / float(crop_w)
-            scaled_w = max_allowed_w
-            scaled_h = int(crop_h * scale)
+        if is_full_body:
+            # Full body: scale to target_height_percent (95% height) and anchor near bottom
+            desired_subject_h = int(canvas_h * target_height_percent)
+            scale = desired_subject_h / float(crop_h)
+            scaled_w = int(crop_w * scale)
+            scaled_h = desired_subject_h
 
-        resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+            max_allowed_w = int(canvas_w * 0.92)
+            if scaled_w > max_allowed_w:
+                scale = max_allowed_w / float(crop_w)
+                scaled_w = max_allowed_w
+                scaled_h = int(crop_h * scale)
 
-        canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+            cropped_img = img.crop(bbox)
+            resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
 
-        paste_x = (canvas_w - scaled_w) // 2
+            canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+            paste_x = (canvas_w - scaled_w) // 2
+            bottom_margin = int(canvas_h * bottom_margin_percent)
+            paste_y = canvas_h - bottom_margin - scaled_h
+            if paste_y < 0:
+                paste_y = (canvas_h - scaled_h) // 2
 
-        bottom_margin = int(canvas_h * bottom_margin_percent)
-        paste_y = canvas_h - bottom_margin - scaled_h
+            canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
+        else:
+            # Upper body / partial crop:
+            # If the image is ALREADY on standard canvas (900x1200) with head near top (top <= 120),
+            # DO NOT STRETCH/BLOW UP the upper body! Preserve original canvas scale and positioning.
+            if img_w == canvas_w and img_h == canvas_h and top <= 120:
+                canvas = img
+            else:
+                # Scale proportionally based on width scale to match standard avatar proportions
+                scale = canvas_w / float(img_w) if img_w > 0 else 1.0
+                scaled_w = int(crop_w * scale)
+                scaled_h = int(crop_h * scale)
 
-        if paste_y < 0:
-            paste_y = (canvas_h - scaled_h) // 2
+                # Cap width to max 75% of canvas width to prevent giant shoulders
+                max_w = int(canvas_w * 0.75)
+                if scaled_w > max_w:
+                    scale = max_w / float(crop_w)
+                    scaled_w = max_w
+                    scaled_h = int(crop_h * scale)
 
-        canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
+                cropped_img = img.crop(bbox)
+                resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+                canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+                paste_x = (canvas_w - scaled_w) // 2
+                paste_y = int(top * scale)
+                canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
 
         buf = BytesIO()
         canvas.save(buf, format='PNG')
         result = buf.getvalue()
-        logger.info(f"normalize_avatar_framing: Normalized to {canvas_w}x{canvas_h} canvas, subject {scaled_w}x{scaled_h}")
+        logger.info(f"normalize_avatar_framing: Normalized to {canvas_w}x{canvas_h} canvas, is_full_body={is_full_body}")
         return result
     except Exception as e:
         logger.warning(f"normalize_avatar_framing error: {e}, returning original bytes")
