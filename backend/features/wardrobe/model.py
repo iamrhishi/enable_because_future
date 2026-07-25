@@ -100,8 +100,14 @@ class WardrobeItem:
                 if platform_category_name:
                     # For platform categories, also check garment_category_type as fallback
                     # Some items might have garment_category_type set but not category_id
-                    query += " AND (category_id = ? OR garment_category_type = ?)"
-                    params.extend([category_id, platform_category_name])
+                    keywords = [w.rstrip('s').lower() for w in platform_category_name.split('_') if len(w) > 2]
+                    if keywords:
+                        like_conditions = " OR ".join(["LOWER(garment_category_type) LIKE ?"] * len(keywords))
+                        query += f" AND (category_id = ? OR garment_category_type = ? OR {like_conditions})"
+                        params.extend([category_id, platform_category_name] + [f"%{kw}%" for kw in keywords])
+                    else:
+                        query += " AND (category_id = ? OR garment_category_type = ?)"
+                        params.extend([category_id, platform_category_name])
                 else:
                     # For user categories, filter by category_id only
                     query += " AND category_id = ?"
