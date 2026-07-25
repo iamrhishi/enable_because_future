@@ -438,19 +438,47 @@ def add_garment():
             )
             
             # Use brand-specific extractor
-            extractor = BrandExtractorFactory.get_extractor(garment_url)
-            product_info = extractor.extract_product_info(garment_url)
+            try:
+                extractor = BrandExtractorFactory.get_extractor(garment_url)
+                product_info = extractor.extract_product_info(garment_url)
+            except Exception as e:
+                logger.warning(f"add_garment: BrandExtractor failed for URL {garment_url}: {str(e)}")
+                product_info = None
+
+            provided_image_url = form_data.get('image_url') or data.get('image_url')
             
-            # Fetch first image from extracted images
-            if product_info.get('images'):
+            # Fetch first image from extracted images or fallback to provided image_url
+            if product_info and product_info.get('images'):
                 try:
                     garment_image = fetch_image_from_url(product_info['images'][0])
                     garment_image = preprocess_image(garment_image, resize=True, normalize=True)
                 except Exception as e:
-                    logger.warning(f"add_garment: Failed to fetch image from URL: {str(e)}")
-                    return error_response_from_string(f'Failed to fetch image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+                    logger.warning(f"add_garment: Failed to fetch image from extracted URL: {str(e)}")
+                    if provided_image_url:
+                        try:
+                            garment_image = fetch_image_from_url(provided_image_url)
+                            garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                        except Exception as ex:
+                            return error_response_from_string(f'Failed to fetch image from URL: {str(ex)}', 400, 'VALIDATION_ERROR')
+                    else:
+                        return error_response_from_string(f'Failed to fetch image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+            elif provided_image_url:
+                try:
+                    garment_image = fetch_image_from_url(provided_image_url)
+                    garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                except Exception as e:
+                    return error_response_from_string(f'Failed to fetch provided image_url: {str(e)}', 400, 'VALIDATION_ERROR')
             else:
                 return error_response_from_string('No images found in product URL', 400, 'VALIDATION_ERROR')
+
+        # Method 3: Direct image URL
+        elif 'image_url' in form_data or data.get('image_url'):
+            provided_image_url = form_data.get('image_url') or data.get('image_url')
+            try:
+                garment_image = fetch_image_from_url(provided_image_url)
+                garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+            except Exception as e:
+                return error_response_from_string(f'Failed to fetch image_url: {str(e)}', 400, 'VALIDATION_ERROR')
         
         if not garment_image:
             return error_response_from_string('garment_image or garment_url required', 400, 'VALIDATION_ERROR')
