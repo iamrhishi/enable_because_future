@@ -537,7 +537,11 @@ def add_garment():
             return error_response_from_string('Category must be "upper" or "lower" if not using custom category', 400, 'VALIDATION_ERROR')
         
         # Auto-categorize if not provided
-        title = product_info.get('title') if product_info else form_data.get('title') or data.get('title')
+        # User form_data takes priority over scraped product_info
+        form_title = (form_data.get('title') or data.get('title') or '').strip()
+        scraped_title = (product_info.get('title') or '').strip() if product_info else ''
+        title = form_title if form_title else (scraped_title if scraped_title else None)
+
         if not category or category == 'upper':  # Default categorization
             categorization = categorize_garment(title=title)
             category = categorization['category']
@@ -584,6 +588,14 @@ def add_garment():
         description = form_data.get('description') or data.get('description')
         url = form_data.get('url') or data.get('url') or garment_url
 
+        form_brand = (form_data.get('brand') or data.get('brand') or '').strip()
+        scraped_brand = (product_info.get('brand') or '').strip() if product_info else ''
+        brand = form_brand if form_brand else (scraped_brand if scraped_brand else None)
+
+        form_color = (form_data.get('color') or data.get('color') or '').strip()
+        scraped_color = (product_info.get('colors', [None])[0] or '').strip() if product_info and product_info.get('colors') else ''
+        color = form_color if form_color else (scraped_color if scraped_color else None)
+
         # Check for duplicate URL in same category_section
         if url:
             existing_item = WardrobeItem.get_by_url(user_id, url, category_section)
@@ -608,8 +620,8 @@ def add_garment():
             category_id=category_id,
             category_section=category_section,
             garment_category_type=garment_type,
-            brand=product_info.get('brand') if product_info else form_data.get('brand') or data.get('brand'),
-            color=product_info.get('colors', [None])[0] if product_info and product_info.get('colors') else form_data.get('color') or data.get('color'),
+            brand=brand,
+            color=color,
             is_external=bool(garment_url),
             title=title,
             fabric=fabric,
