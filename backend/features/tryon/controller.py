@@ -6,6 +6,7 @@ JWT authentication via @require_auth decorator extracts user_id from token
 
 from flask import Blueprint, request, send_file, Response
 from io import BytesIO
+from datetime import datetime, timedelta
 import base64
 import json
 import requests
@@ -560,10 +561,19 @@ def create_tryon_job():
                                     all_images = product_info.get('images', [])
                                     images_to_cache = all_images[:2]  # Only cache first 2 images
                                     db_manager.execute_query(
-                                        """INSERT OR REPLACE INTO garment_metadata 
+                                        """INSERT INTO garment_metadata
                                            (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                                        (item_url, 
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                           ON CONFLICT (url) DO UPDATE SET
+                                               title = EXCLUDED.title,
+                                               price = EXCLUDED.price,
+                                               images = EXCLUDED.images,
+                                               sizes = EXCLUDED.sizes,
+                                               colors = EXCLUDED.colors,
+                                               brand = EXCLUDED.brand,
+                                               updated_at = CURRENT_TIMESTAMP,
+                                               last_accessed_at = CURRENT_TIMESTAMP""",
+                                        (item_url,
                                          product_info.get('title'), 
                                          product_info.get('price'),
                                          json_module.dumps(images_to_cache),  # Only cache 1-2 images, not all
@@ -577,10 +587,19 @@ def create_tryon_job():
                                     if base_url != item_url:
                                         try:
                                             db_manager.execute_query(
-                                                """INSERT OR REPLACE INTO garment_metadata 
+                                                """INSERT INTO garment_metadata
                                                    (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
-                                                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                                                (base_url, 
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                                   ON CONFLICT (url) DO UPDATE SET
+                                                       title = EXCLUDED.title,
+                                                       price = EXCLUDED.price,
+                                                       images = EXCLUDED.images,
+                                                       sizes = EXCLUDED.sizes,
+                                                       colors = EXCLUDED.colors,
+                                                       brand = EXCLUDED.brand,
+                                                       updated_at = CURRENT_TIMESTAMP,
+                                                       last_accessed_at = CURRENT_TIMESTAMP""",
+                                                (base_url,
                                                  product_info.get('title'), 
                                                  product_info.get('price'),
                                                  json_module.dumps(images_to_cache),  # Only cache 1-2 images
@@ -594,14 +613,15 @@ def create_tryon_job():
                                     
                                     # Cleanup old cached images (TTL: 1 day of inactivity)
                                     try:
+                                        cache_cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
                                         db_manager.execute_query(
-                                            """UPDATE garment_metadata 
+                                            """UPDATE garment_metadata
                                                SET cached_image_1 = NULL, cached_image_1_url = NULL,
                                                    cached_image_2 = NULL, cached_image_2_url = NULL,
                                                    cached_images_at = NULL
-                                               WHERE last_accessed_at < datetime('now', '-1 day') 
+                                               WHERE last_accessed_at < ?
                                                  AND cached_images_at IS NOT NULL""",
-                                            ()
+                                            (cache_cutoff,)
                                         )
                                         logger.debug(f"create_tryon_job: Cleaned up cached images older than 1 day")
                                     except Exception as cleanup_error:

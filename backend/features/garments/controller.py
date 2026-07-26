@@ -69,9 +69,19 @@ def _scrape_and_cache(url):
     # Store/update in cache (INSERT OR REPLACE)
     try:
         db_manager.execute_query(
-            """INSERT OR REPLACE INTO garment_metadata 
+            """INSERT INTO garment_metadata
                (url, title, price, images, sizes, colors, brand, fabric, description, scraped_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+               ON CONFLICT (url) DO UPDATE SET
+                   title = EXCLUDED.title,
+                   price = EXCLUDED.price,
+                   images = EXCLUDED.images,
+                   sizes = EXCLUDED.sizes,
+                   colors = EXCLUDED.colors,
+                   brand = EXCLUDED.brand,
+                   fabric = EXCLUDED.fabric,
+                   description = EXCLUDED.description,
+                   updated_at = CURRENT_TIMESTAMP""",
             (url, product_info.get('title'), product_info.get('price'),
              json.dumps(product_info.get('images', [])),
              json.dumps(product_info.get('sizes', [])),

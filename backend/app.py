@@ -5,7 +5,7 @@ from flask_cors import CORS  # type: ignore
 import os
 import base64
 from config import Config
-from shared.database import db_manager, get_db_connection
+from shared.database import db_manager
 from features.auth.service import generate_token
 from shared.response import success_response, error_response, error_response_from_string, server_error_response
 from shared.errors import ValidationError, AuthenticationError, DatabaseError, NotFoundError
@@ -627,31 +627,23 @@ def update_avatar():
             }), 400
         
         logger.info(f"Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
-        
-        # Connect to database
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        
+
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE userid = ?", (user_id,))
-        user = cursor.fetchone()
-        
+        user = db_manager.execute_query(
+            "SELECT id FROM users WHERE userid = ?", (user_id,), fetch_one=True
+        )
+
         if not user:
-            cursor.close()
-            connection.close()
             return jsonify({
                 'success': False,
                 'error': 'User not found'
             }), 404
-        
+
         # Update user's avatar
-        update_query = "UPDATE users SET avatar = ? WHERE userid = ?"
-        cursor.execute(update_query, (avatar_data, user_id))
-        
-        connection.commit()
-        cursor.close()
-        connection.close()
-        
+        db_manager.execute_query(
+            "UPDATE users SET avatar = ? WHERE userid = ?", (avatar_data, user_id)
+        )
+
         logger.info(f"Avatar updated successfully for user: {user_id}")
         
         return jsonify({
