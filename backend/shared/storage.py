@@ -148,6 +148,31 @@ class StorageService:
             logger.exception(f"StorageService.get_image: EXIT - Error: {str(e)}")
             raise ExternalServiceError(f"Failed to read image: {str(e)}", service='storage')
     
+    def delete_prefix(self, prefix: str) -> int:
+        """
+        Delete every object under a path prefix (e.g. 'wardrobe/user123/').
+        Used for GDPR erasure - removes all of a user's files across
+        avatars/wardrobe/tryon-results in one call, regardless of how many
+        individual items exist.
+
+        Returns:
+            Number of files deleted
+        """
+        prefix = prefix.lstrip('/')
+        full_path = self.images_dir / prefix
+        if not full_path.exists():
+            return 0
+
+        count = 0
+        for f in full_path.rglob('*'):
+            if f.is_file():
+                f.unlink()
+                count += 1
+        import shutil
+        shutil.rmtree(full_path, ignore_errors=True)
+        logger.info(f"StorageService.delete_prefix: Deleted {count} files under {prefix}")
+        return count
+
     def save_garment_image(self, image_data: bytes, user_id: str, garment_id: str) -> str:
         """
         Save a garment image using the standard wardrobe storage convention.

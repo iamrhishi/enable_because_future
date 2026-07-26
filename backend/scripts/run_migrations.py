@@ -61,6 +61,7 @@ def main():
         (31, 'add_fabric_to_garment_metadata', load_migration(31, 'add_fabric_to_garment_metadata')),
         (32, 'seed_all_platform_categories', load_migration(31, 'seed_all_platform_categories')),
         (33, 'add_description_to_garment_metadata', load_migration(32, 'add_description_to_garment_metadata')),
+        (34, 'add_is_deleted_to_users', load_migration(34, 'add_is_deleted_to_users')),
     ]
     
     migration_manager.run_migrations(migrations)

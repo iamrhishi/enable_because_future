@@ -29,7 +29,9 @@ CREATE TABLE users (
     avatar_path VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP
 );
 
 CREATE TABLE body_measurements (

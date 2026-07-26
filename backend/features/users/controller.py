@@ -6,6 +6,7 @@ from shared.analytics import track_event, EventType
 from shared.validators import validate_email, validate_password
 from shared.errors import ValidationError
 from shared.logger import logger
+from shared.database import db_manager
 from datetime import datetime
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
@@ -308,5 +309,68 @@ def delete_account():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"delete_account: EXIT - Error: {str(e)}")
+        return server_error_response(e, context='Server error', status_code=500)
+
+
+@users_bp.route('/data-export', methods=['GET'])
+@require_auth
+def export_my_data():
+    """
+    GDPR Article 15 (right of access) / Article 20 (data portability):
+    return everything stored about the authenticated user in one bundle.
+
+    Image bytes themselves aren't inlined (impractical for a JSON response) -
+    wardrobe/avatar images are referenced by their existing /images URLs,
+    which the user can fetch directly; try-on result/original photos are
+    listed by job id with their existing metadata.
+    """
+    user_id = request.user_id
+    logger.info(f"export_my_data: ENTRY - user_id={user_id}")
+
+    try:
+        user = User.get_by_id(user_id)
+        if not user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+
+        body_measurements = db_manager.execute_query(
+            "SELECT * FROM body_measurements WHERE user_id = ?", (user_id,), fetch_one=True
+        )
+        wardrobe_items = db_manager.execute_query(
+            "SELECT id, garment_id, garment_type, garment_url, title, brand, color, size, "
+            "price, fabric, description, category, category_section, image_path, url, date_added "
+            "FROM wardrobe WHERE user_id = ?", (user_id,), fetch_all=True
+        )
+        wardrobe_categories = db_manager.execute_query(
+            "SELECT name, description, category_section, created_at FROM wardrobe_categories WHERE user_id = ?",
+            (user_id,), fetch_all=True
+        )
+        tryon_jobs = db_manager.execute_query(
+            "SELECT job_id, status, progress, result_url, garment_url, error_message, created_at, updated_at "
+            "FROM tryon_jobs WHERE user_id = ?", (user_id,), fetch_all=True
+        )
+        tryon_results = db_manager.execute_query(
+            "SELECT id, try_on_count, applied_garments, created_at FROM tryon_results WHERE user_id = ?",
+            (user_id,), fetch_all=True
+        )
+        analytics_events = db_manager.execute_query(
+            "SELECT event_type, metadata, created_at FROM analytics_events_all WHERE user_id = ? ORDER BY created_at",
+            (user_id,), fetch_all=True
+        ) if db_manager.table_exists('analytics_events_all') else []
+
+        export = {
+            'profile': user.to_dict(),
+            'body_measurements': body_measurements,
+            'wardrobe_items': wardrobe_items or [],
+            'wardrobe_categories': wardrobe_categories or [],
+            'tryon_jobs': tryon_jobs or [],
+            'tryon_results': tryon_results or [],
+            'analytics_events': analytics_events or [],
+        }
+
+        logger.info(f"export_my_data: EXIT - Exported data for user_id={user_id}")
+        return success_response(data=export)
+
+    except Exception as e:
+        logger.exception(f"export_my_data: EXIT - Error: {str(e)}")
         return server_error_response(e, context='Server error', status_code=500)
 

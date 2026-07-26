@@ -116,6 +116,24 @@ class GCSStorageService:
             logger.exception(f"GCSStorageService.get_image: EXIT - Error: {str(e)}")
             raise ExternalServiceError(f"Failed to read image: {str(e)}", service='storage')
 
+    def delete_prefix(self, prefix: str) -> int:
+        """
+        Delete every object under a path prefix (e.g. 'wardrobe/user123/').
+        Used for GDPR erasure - removes all of a user's files across
+        avatars/wardrobe/tryon-results in one call, regardless of how many
+        individual items exist.
+
+        Returns:
+            Number of objects deleted
+        """
+        prefix = prefix.lstrip('/')
+        count = 0
+        for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
+            blob.delete()
+            count += 1
+        logger.info(f"GCSStorageService.delete_prefix: Deleted {count} objects under {prefix}")
+        return count
+
     def save_garment_image(self, image_data: bytes, user_id: str, garment_id: str) -> str:
         """Save a garment image using the standard wardrobe storage convention."""
         file_path = f"wardrobe/{user_id}/{garment_id}.png"
