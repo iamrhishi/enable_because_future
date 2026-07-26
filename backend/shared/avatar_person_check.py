@@ -140,27 +140,49 @@ def reject_message_if_avatar_not_person(
 
     img_area = float(w * h)
 
-    def _analyze_faces(faces):
-        """Returns (count, max_area_ratio) for meaningful faces."""
-        if faces is None or len(faces) == 0:
-            return 0, 0.0
-        count = 0
-        max_ratio = 0.0
-        for (_, _, fw, fh) in faces:
-            ratio = (fw * fh) / img_area
-            if ratio >= _FACE_MIN_AREA_RATIO:
-                count += 1
-                max_ratio = max(max_ratio, ratio)
-        return count, max_ratio
+    def _merge_overlapping_boxes(boxes, iou_threshold=0.3):
+        """Deduplicate face detection boxes across frontal and profile cascades using IoU."""
+        if boxes is None or len(boxes) == 0:
+            return []
+        box_list = [tuple(b) for b in boxes]
+        box_list = sorted(box_list, key=lambda b: b[2] * b[3], reverse=True)
+        merged = []
+        for box in box_list:
+            x1, y1, w1, h1 = box
+            area1 = w1 * h1
+            if area1 / img_area < _FACE_MIN_AREA_RATIO:
+                continue
+            duplicate = False
+            for mbox in merged:
+                mx, my, mw, mh = mbox
+                marea = mw * mh
+                ix = max(0, min(x1 + w1, mx + mw) - max(x1, mx))
+                iy = max(0, min(y1 + h1, my + mh) - max(y1, my))
+                inter = ix * iy
+                union = area1 + marea - inter
+                if union > 0 and (inter / union) > iou_threshold:
+                    duplicate = True
+                    break
+            if not duplicate:
+                merged.append(box)
+        return merged
 
     # Detect faces
-    faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
-    faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
+    raw_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
+    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
 
-    count_f, max_ratio_f = _analyze_faces(faces_f)
-    count_p, max_ratio_p = _analyze_faces(faces_p)
-    total_faces = count_f + count_p
-    max_face_ratio = max(max_ratio_f, max_ratio_p)
+    all_raw_faces = []
+    if raw_faces_f is not None and len(raw_faces_f) > 0:
+        all_raw_faces.extend(raw_faces_f)
+    if raw_faces_p is not None and len(raw_faces_p) > 0:
+        all_raw_faces.extend(raw_faces_p)
+
+    unique_faces = _merge_overlapping_boxes(all_raw_faces, iou_threshold=0.3)
+    total_faces = len(unique_faces)
+    max_face_ratio = 0.0
+    for (_, _, fw, fh) in unique_faces:
+        ratio = (fw * fh) / img_area
+        max_face_ratio = max(max_face_ratio, ratio)
 
     # Detect full bodies via HOG
     hog = cv2.HOGDescriptor()
@@ -179,7 +201,7 @@ def reject_message_if_avatar_not_person(
             valid_bodies += 1
 
     logger.info(
-        f'avatar_person_check: faces={total_faces}, max_face_ratio={max_face_ratio:.3f}, '
+        f'avatar_person_check: unique_faces={total_faces}, max_face_ratio={max_face_ratio:.3f}, '
         f'bodies={valid_bodies}'
     )
 
@@ -189,7 +211,7 @@ def reject_message_if_avatar_not_person(
     if total_faces > 1:
         return _result(
             'Please upload a photo with only one person. '
-            'Collages, group photos, or composite images cannot be used as avatars.',
+            'Collages, group photos, or composite images containing multiple faces cannot be used as avatars.',
             AvatarRejectionCode.MULTIPLE_PEOPLE
         )
 

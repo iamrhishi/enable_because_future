@@ -68,6 +68,14 @@ def create_tryon_job():
         if not person_image:
             return error_response_from_string('selfie/person_image required or save avatar first', 400, 'VALIDATION_ERROR')
         
+        # If new selfie/person_image file was uploaded, validate single-person / single-face requirement
+        if 'selfie' in request.files or 'person_image' in request.files:
+            from shared.avatar_person_check import reject_message_if_avatar_not_person
+            rejection = reject_message_if_avatar_not_person(person_image)
+            if rejection:
+                logger.warning(f"create_tryon_job: Uploaded person image rejected for user_id={user_id}: {rejection}")
+                return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
         # Preprocess person image
         try:
             person_image = preprocess_image(person_image, resize=True, normalize=True)
@@ -663,10 +671,10 @@ def create_tryon_job():
                                             import traceback
                                             logger.debug(traceback.format_exc())
                                     
-                                    # Get categorization from product title
+                                    # Get categorization from product info & URL
                                     categorization = None
-                                    if product_info.get('title'):
-                                        categorization = categorize_garment(title=product_info.get('title'))
+                                    first_img = product_info.get('images', [None])[0] if product_info and product_info.get('images') else None
+                                    categorization = categorize_garment(title=product_info.get('title'), url=item_url, image_url=first_img)
                                     
                                     # Build garment_details from product_info for Gemini
                                     garment_details = {

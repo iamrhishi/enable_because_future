@@ -226,6 +226,7 @@ def update_measurements():
         
         # Length measurements
         length_fields = [
+            'collarbone_to_belly_button_length',
             'waist_to_crotch_front_length', 'waist_to_crotch_back_length',
             'inner_leg_length', 'foot_length', 'foot_width'
         ]
