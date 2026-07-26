@@ -317,18 +317,33 @@ def delete_events_before(before: datetime) -> int:
         Number of events deleted
     """
     try:
+        cutoff = before.strftime('%Y-%m-%d %H:%M:%S')
+
         # Get count first
         count_row = db_manager.execute_query(
             "SELECT COUNT(*) as count FROM analytics_events WHERE created_at < ?",
-            (before.strftime('%Y-%m-%d %H:%M:%S'),),
+            (cutoff,),
             fetch_one=True
         )
         count = count_row['count'] if count_row else 0
 
+        # Archive before deleting - the dashboard needs full history, but this
+        # table gets wiped daily after the email report goes out.
+        try:
+            db_manager.execute_query(
+                """INSERT INTO analytics_events_archive
+                   (event_type, user_id, user_email, metadata, ip_address, user_agent, created_at)
+                   SELECT event_type, user_id, user_email, metadata, ip_address, user_agent, created_at
+                   FROM analytics_events WHERE created_at < ?""",
+                (cutoff,)
+            )
+        except Exception as archive_error:
+            logger.warning(f"analytics.delete_events_before: Failed to archive events (continuing with wipe): {archive_error}")
+
         # Delete
         db_manager.execute_query(
             "DELETE FROM analytics_events WHERE created_at < ?",
-            (before.strftime('%Y-%m-%d %H:%M:%S'),)
+            (cutoff,)
         )
 
         logger.info(f"analytics.delete_events_before: Deleted {count} events before {before}")

@@ -187,6 +187,23 @@ CREATE TABLE analytics_events (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Permanent, never-deleted mirror of analytics_events. The existing daily
+-- email report wipes analytics_events after sending (see shared/analytics.py
+-- delete_events_before) - this table is archived into just before that wipe,
+-- so the Looker Studio dashboard has full history to query.
+CREATE TABLE analytics_events_archive (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    user_id TEXT,
+    user_email TEXT,
+    metadata TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMP
+);
+CREATE INDEX idx_analytics_archive_created_at ON analytics_events_archive(created_at);
+CREATE INDEX idx_analytics_archive_event_type ON analytics_events_archive(event_type);
+
 CREATE TABLE hello (
     id SERIAL PRIMARY KEY,
     message VARCHAR(255) NOT NULL
@@ -197,3 +214,13 @@ CREATE TABLE schema_migrations (
     name TEXT NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Single source for the analytics dashboard (Looker Studio): full event
+-- history (archive) plus whatever hasn't been archived/wiped yet (today's
+-- live events), so the dashboard is always current without querying two tables.
+CREATE VIEW analytics_events_all AS
+SELECT event_type, user_id, user_email, metadata, ip_address, user_agent, created_at
+FROM analytics_events_archive
+UNION ALL
+SELECT event_type, user_id, user_email, metadata, ip_address, user_agent, created_at
+FROM analytics_events;
