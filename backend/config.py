@@ -71,6 +71,12 @@ class Config:
     # Local File Storage Configuration
     IMAGES_DIR = os.environ.get('IMAGES_DIR', 'images')  # Base directory for storing images
     IMAGES_BASE_URL = os.environ.get('IMAGES_BASE_URL', '/images')  # Base URL for serving images
+
+    # Cloud Storage (GCS) Configuration - when GCS_BUCKET_NAME is set, image
+    # storage uses this bucket instead of local disk (required on Cloud Run,
+    # whose filesystem is ephemeral). Unset by default for local dev.
+    GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', '')
+    GCS_SIGNED_URL_EXPIRATION_HOURS = int(os.environ.get('GCS_SIGNED_URL_EXPIRATION_HOURS', '24'))
     
     # Scraping Configuration (optional)
     # Proxy support - set ENABLE_PROXY=true to enable

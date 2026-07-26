@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, Response, send_from_directory
+from flask import Flask, jsonify, request, Response, send_from_directory, redirect
 from werkzeug.exceptions import BadRequest, HTTPException
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
@@ -36,16 +36,25 @@ Config.validate()
 # Serve images from local storage
 @app.route('/images/<path:filename>')
 def serve_image(filename):
-    """Serve images from local storage directory"""
+    """Serve images - redirects to a fresh signed URL when GCS-backed, otherwise local disk"""
     try:
+        if Config.GCS_BUCKET_NAME:
+            from shared.storage import get_storage_service
+            storage_service = get_storage_service()
+            try:
+                signed_url = storage_service.get_signed_url(filename)
+            except Exception:
+                return jsonify({"error": "Image not found"}), 404
+            return redirect(signed_url)
+
         from pathlib import Path
         images_dir = Path(Config.IMAGES_DIR)
         file_path = images_dir / filename
-        
+
         # Security: Ensure file is within images directory
         if not str(file_path.resolve()).startswith(str(images_dir.resolve())):
             return jsonify({"error": "Invalid path"}), 403
-        
+
         if file_path.exists():
             return send_from_directory(str(images_dir), filename)
         else:
@@ -83,16 +92,26 @@ def get_user_avatar_file(userid):
         if not user.avatar_path:
             logger.warning(f"get_user_avatar_file: User has no avatar - userid={userid}")
             return jsonify({"error": "User has no avatar"}), 404
-        
+
+        if Config.GCS_BUCKET_NAME:
+            from shared.storage import get_storage_service
+            try:
+                signed_url = get_storage_service().get_signed_url(user.avatar_path)
+            except Exception:
+                logger.warning(f"get_user_avatar_file: Avatar object not found - userid={userid}, path={user.avatar_path}")
+                return jsonify({"error": "Avatar file not found"}), 404
+            logger.info(f"get_user_avatar_file: EXIT - Redirecting to signed URL for userid={userid}")
+            return redirect(signed_url)
+
         # Serve the file
         images_dir = Path(Config.IMAGES_DIR)
         file_path = images_dir / user.avatar_path
-        
+
         # Security: Ensure file is within images directory
         if not str(file_path.resolve()).startswith(str(images_dir.resolve())):
             logger.warning(f"get_user_avatar_file: Invalid path - userid={userid}")
             return jsonify({"error": "Invalid path"}), 403
-        
+
         if file_path.exists():
             logger.info(f"get_user_avatar_file: EXIT - Serving avatar for userid={userid}")
             return send_from_directory(str(images_dir), user.avatar_path)
@@ -542,22 +561,13 @@ def get_avatar():
         if not user or not user.avatar:
             return error_response_from_string('Avatar not found', 404, 'NOT_FOUND')
         
-        # Try to find avatar URL from disk storage first
-        # Look for avatar files in avatars/{user_id}/ directory
-        from pathlib import Path
-        from config import Config
-        images_dir = Path(Config.IMAGES_DIR)
-        avatar_dir = images_dir / 'avatars' / user_id
-        
+        # Prefer the stored avatar_path reference (works for both local disk
+        # and GCS - avoids scanning the filesystem, which doesn't exist on
+        # Cloud Run's ephemeral disk / doesn't apply to GCS-backed storage).
         avatar_url = None
-        if avatar_dir.exists():
-            # Find most recent avatar file
-            avatar_files = sorted(avatar_dir.glob('*.png'), key=lambda p: p.stat().st_mtime, reverse=True)
-            if avatar_files:
-                # Construct URL
-                relative_path = f"avatars/{user_id}/{avatar_files[0].name}"
-                base_url = request.url_root.rstrip('/')
-                avatar_url = f"{base_url}/images/{relative_path}"
+        if user.avatar_path:
+            base_url = request.url_root.rstrip('/')
+            avatar_url = f"{base_url}/images/{user.avatar_path}"
         
         # If no disk file found, return blob (backward compatibility)
         # But also include URL if available
