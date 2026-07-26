@@ -15,11 +15,12 @@ from shared.database import db_manager
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
 from shared.garment_utils import categorize_garment
 from shared.models.user import User
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.analytics import track_event, EventType
 from shared.logger import logger
 from shared.validators import validate_url
+from shared.errors import ValidationError
 
 tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 
@@ -224,7 +225,7 @@ def create_tryon_job():
                         options = {}
                 
                 garment_index = options.get('garment_index', 0)
-                if garment_index >= len(item_urls):
+                if not isinstance(garment_index, int) or garment_index < 0 or garment_index >= len(item_urls):
                     garment_index = 0
                 
                 item_url = item_urls[garment_index]
@@ -1006,18 +1007,12 @@ def create_multi_tryon_job():
         if 'top_garment_image' in request.files:
             top_image = request.files['top_garment_image'].read()
         elif 'top_garment_url' in request.form:
-            import requests
-            response = requests.get(request.form.get('top_garment_url'), timeout=10)
-            if response.status_code == 200:
-                top_image = response.content
-        
+            top_image = fetch_image_from_url(request.form.get('top_garment_url'))
+
         if 'bottom_garment_image' in request.files:
             bottom_image = request.files['bottom_garment_image'].read()
         elif 'bottom_garment_url' in request.form:
-            import requests
-            response = requests.get(request.form.get('bottom_garment_url'), timeout=10)
-            if response.status_code == 200:
-                bottom_image = response.content
+            bottom_image = fetch_image_from_url(request.form.get('bottom_garment_url'))
         
         if not top_image or not bottom_image:
             return error_response_from_string('Both top and bottom garments required', 400, 'VALIDATION_ERROR')
@@ -1043,9 +1038,12 @@ def create_multi_tryon_job():
             status_code=202
         )
         
+    except ValidationError as e:
+        logger.warning(f"create_multi_tryon_job: EXIT - ValidationError: {str(e)}")
+        return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_multi_tryon_job: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 @tryon_bp.route('/tryon/layered', methods=['POST'])

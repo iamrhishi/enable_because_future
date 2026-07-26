@@ -7,7 +7,7 @@ import base64
 from config import Config
 from shared.database import db_manager, get_db_connection
 from features.auth.service import generate_token
-from shared.response import success_response, error_response, error_response_from_string
+from shared.response import success_response, error_response, error_response_from_string, server_error_response
 from shared.errors import ValidationError, AuthenticationError, DatabaseError, NotFoundError
 from shared.validators import validate_email, validate_password, validate_required
 from shared.middleware import require_auth, optional_auth
@@ -26,6 +26,9 @@ from features.sizing.controller import sizing_bp
 
 app = Flask(__name__)
 CORS(app, origins=Config.CORS_ORIGINS)
+
+from shared.rate_limit import limiter
+limiter.init_app(app)
 
 # Validate configuration
 Config.validate()
@@ -585,13 +588,15 @@ def update_avatar():
         # Get JSON data with base64 encoded image
         data = request.get_json()
         
-        if not data or 'user_id' not in data or 'avatar_data' not in data:
+        if not data or 'avatar_data' not in data:
             return jsonify({
                 'success': False,
-                'error': 'User ID and avatar data are required'
+                'error': 'Avatar data is required'
             }), 400
-        
-        user_id = data.get('user_id')
+
+        # Always operate on the authenticated user from the JWT, never a
+        # client-supplied user_id, to prevent overwriting another user's avatar.
+        user_id = request.user_id
         avatar_base64 = data.get('avatar_data')
         
         # Remove data URL prefix if present (e.g., "data:image/png;base64,")
@@ -655,20 +660,10 @@ def update_avatar():
         }), 200
         
     except Exception as e:
-        logger.error(f"Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
-    except Exception as e:
-        logger.error(f"Server error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
-        }), 500
+        logger.exception(f"update_avatar: Server error: {e}")
+        return server_error_response(e, context='Server error')
 
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5001))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    app.run(debug=Config.FLASK_DEBUG, host="0.0.0.0", port=port)

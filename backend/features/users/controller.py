@@ -1,9 +1,12 @@
 from flask import Blueprint, request
 from shared.models.user import User
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.analytics import track_event, EventType
+from shared.validators import validate_email, validate_password
+from shared.errors import ValidationError
 from shared.logger import logger
+from datetime import datetime
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
@@ -41,19 +44,7 @@ def get_avatar():
             })
     except Exception as e:
         logger.exception(f"get_avatar: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
-
-from flask import Blueprint, request
-from shared.models.user import User
-from shared.response import success_response, error_response_from_string
-from shared.middleware import require_auth
-from shared.validators import validate_email, validate_password
-from shared.errors import ValidationError
-from shared.logger import logger
-from datetime import datetime
-
-users_bp = Blueprint('users', __name__, url_prefix='/api/users')
-
+        return server_error_response(e, context='Server error', status_code=500)
 
 @users_bp.route('/profile', methods=['GET'])
 @require_auth  # JWT decorator validates token and sets request.user_id from token
@@ -79,7 +70,7 @@ def get_profile():
         
     except Exception as e:
         logger.exception(f"get_profile: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @users_bp.route('/profile', methods=['PUT', 'PATCH'])
@@ -111,7 +102,12 @@ def update_profile():
         update_data = {}
 
         if 'email' in data:
-            update_data['email'] = validate_email(str(data['email']).strip())
+            new_email = validate_email(str(data['email']).strip())
+            if new_email != user.email:
+                existing_user = User.get_by_email(new_email)
+                if existing_user and existing_user.userid != user_id:
+                    return error_response_from_string('Email already registered', 409, 'EMAIL_EXISTS')
+            update_data['email'] = new_email
 
         # Gender is optional; validate only when a non-empty value is provided
         if 'gender' in data:
@@ -163,7 +159,7 @@ def update_profile():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"update_profile: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @users_bp.route('/profile/change-password', methods=['POST'])
@@ -242,7 +238,7 @@ def change_password():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"change_password: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 def _parse_delete_account_body():
@@ -312,5 +308,5 @@ def delete_account():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"delete_account: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 

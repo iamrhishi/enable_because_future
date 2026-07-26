@@ -12,9 +12,9 @@ from shared.storage import get_storage_service
 from features.wardrobe.extractors import BrandExtractorFactory
 from shared.garment_utils import categorize_garment
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
-from shared.validators import validate_url
+from shared.validators import validate_public_url as validate_url
 from shared.errors import ValidationError, NotFoundError
 from shared.logger import logger
 import base64
@@ -81,7 +81,7 @@ def get_wardrobe_options():
         
     except Exception as e:
         logger.exception(f"get_wardrobe_options: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== CATEGORY MANAGEMENT =====
@@ -146,7 +146,7 @@ def create_category():
         
     except Exception as e:
         logger.exception(f"create_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories', methods=['GET'])
@@ -212,7 +212,7 @@ def get_categories():
         
     except Exception as e:
         logger.exception(f"get_categories: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/category-sections', methods=['GET'])
@@ -233,7 +233,7 @@ def get_category_sections():
         
     except Exception as e:
         logger.exception(f"get_category_sections: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/category-sections', methods=['POST'])
@@ -290,7 +290,7 @@ def create_category_section():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_category_section: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['GET'])
@@ -315,7 +315,7 @@ def get_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"get_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['PUT'])
@@ -365,7 +365,7 @@ def update_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"update_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['DELETE'])
@@ -392,7 +392,7 @@ def delete_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"delete_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== GARMENT MANAGEMENT =====
@@ -650,7 +650,7 @@ def add_garment():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"add_garment: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items', methods=['GET'])
@@ -732,7 +732,7 @@ def get_wardrobe_items():
         
     except Exception as e:
         logger.exception(f"get_wardrobe_items: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['GET'])
@@ -763,7 +763,7 @@ def get_wardrobe_item(item_id: int):
         
     except Exception as e:
         logger.exception(f"get_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['PUT'])
@@ -915,7 +915,7 @@ def update_wardrobe_item(item_id: int):
         
     except Exception as e:
         logger.exception(f"update_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['DELETE'])
@@ -953,7 +953,7 @@ def delete_wardrobe_item(item_id: int):
 
     except Exception as e:
         logger.exception(f"delete_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/wishlist/<int:item_id>', methods=['DELETE'])
@@ -998,7 +998,7 @@ def remove_from_wishlist(item_id: int):
 
     except Exception as e:
         logger.exception(f"remove_from_wishlist: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/wishlist/<int:item_id>/move-to-wardrobe', methods=['POST'])
@@ -1062,7 +1062,7 @@ def move_from_wishlist_to_wardrobe(item_id: int):
 
     except Exception as e:
         logger.exception(f"move_from_wishlist_to_wardrobe: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== GARMENT EXTRACTION FROM URL =====
@@ -1151,7 +1151,7 @@ def extract_garment_from_url():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"extract_garment_from_url: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== EXTENSION SPECIFIC ENDPOINTS =====
@@ -1252,7 +1252,7 @@ def save_extracted_garment():
         
     except Exception as e:
         logger.exception(f"save_extracted_garment: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Failed to save garment: {str(e)}', 500)
+        return server_error_response(e, context='Failed to save garment', status_code=500)
 
 
 # ===== SEARCH =====
@@ -1286,7 +1286,7 @@ def search_garments():
 
         if url:
             # Extract product info from URL
-            from shared.validators import validate_url
+            from shared.validators import validate_public_url as validate_url
             validated_url = validate_url(url)
 
             extractor = BrandExtractorFactory.get_extractor(validated_url)
@@ -1347,4 +1347,4 @@ def search_garments():
 
     except Exception as e:
         logger.exception(f"search_garments: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Search failed: {str(e)}', 500)
+        return server_error_response(e, context='Search failed', status_code=500)

@@ -3,8 +3,10 @@ Sizing recommendation API endpoints
 """
 
 from flask import Blueprint, request
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
+from shared.validators import validate_public_url
+from shared.errors import ValidationError
 from shared.logger import logger
 from features.body_measurements.model import BodyMeasurements
 from features.sizing.service import fetch_garment_from_lovable, calculate_size_recommendation
@@ -146,6 +148,11 @@ def get_garment_info():
                 400, 'VALIDATION_ERROR'
             )
 
+        if url:
+            # SSRF guard: this URL may end up fetched server-side by the scrape
+            # fallback below, so reject anything resolving to a private/internal address.
+            url = validate_public_url(url)
+
         garment_data = fetch_garment_from_lovable(url=url, garment_id=garment_id, sku=sku)
 
         if garment_data:
@@ -194,6 +201,9 @@ def get_garment_info():
                 404, 'NOT_FOUND'
             )
 
+    except ValidationError as e:
+        logger.warning(f"get_garment_info: EXIT - ValidationError: {str(e)}")
+        return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"get_garment_info: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')

@@ -327,10 +327,13 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
         ValidationError: If fetch fails
     """
     logger.info(f"fetch_image_from_url: ENTRY - url={url[:100]}")
-    
+
     try:
         import requests
-        
+
+        from shared.validators import validate_public_url
+        url = validate_public_url(url)
+
         from features.garments.scraping_constants import get_default_headers, get_proxy_config, get_proxy_auth
         headers = get_default_headers()
         proxies = get_proxy_config()

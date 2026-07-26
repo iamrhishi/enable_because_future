@@ -6,7 +6,7 @@ JWT authentication via @require_auth decorator extracts user_id from token
 
 from flask import Blueprint, request
 from features.body_measurements.model import BodyMeasurements
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.validators import validate_numeric
 from shared.errors import NotFoundError, ValidationError
@@ -131,7 +131,7 @@ def create_or_update_measurements():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_or_update_measurements: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @body_measurements_bp.route('', methods=['GET'])
@@ -158,7 +158,7 @@ def get_measurements():
         
     except Exception as e:
         logger.exception(f"get_measurements: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @body_measurements_bp.route('', methods=['PUT'])
@@ -262,5 +262,5 @@ def update_measurements():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"update_measurements: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 

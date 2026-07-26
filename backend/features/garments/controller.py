@@ -9,9 +9,9 @@ import json
 import re
 from datetime import datetime, timedelta
 from shared.database import db_manager
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth, optional_auth
-from shared.validators import validate_url
+from shared.validators import validate_public_url as validate_url
 from shared.errors import ValidationError
 from shared.logger import logger
 from shared.garment_utils import categorize_garment
@@ -218,7 +218,7 @@ def scrape_product():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"scrape_product: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @garments_bp.route('/refresh', methods=['POST'])
@@ -268,7 +268,7 @@ def refresh_product():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"refresh_product: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @garments_bp.route('/categorize', methods=['POST'])
@@ -301,7 +301,7 @@ def categorize():
         
     except Exception as e:
         logger.exception(f"categorize: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Error categorizing: {str(e)}', 500)
+        return server_error_response(e, context='Error categorizing', status_code=500)
 
 
 @garments_bp.route('/extract-images', methods=['POST'])
@@ -387,5 +387,5 @@ def get_defaults():
 
     except Exception as e:
         logger.exception(f"get_defaults: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Error loading default garments: {str(e)}', 500)
+        return server_error_response(e, context='Error loading default garments', status_code=500)
 
