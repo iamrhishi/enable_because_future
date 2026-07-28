@@ -7,10 +7,11 @@ from flask import Blueprint, request, jsonify
 from features.auth.service import generate_token
 from shared.models.user import User
 from features.body_measurements.model import BodyMeasurements
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.validators import validate_email, validate_password, validate_numeric
 from shared.errors import ValidationError, AuthenticationError
 from shared.analytics import track_event, EventType
+from shared.rate_limit import limiter
 from config import Config
 from shared.logger import logger
 import uuid
@@ -19,6 +20,7 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
 
 @auth_bp.route('/create-account', methods=['POST'])
+@limiter.limit('10 per hour')
 def create_account():
     """Create a new user account with personal information and body measurements"""
     logger.info("create_account: ENTRY")
@@ -37,6 +39,7 @@ def create_account():
         street = (data.get('street') or '').strip()
         city = (data.get('city') or '').strip()
         postal_code = (data.get('postal_code') or data.get('postal-code') or '').strip()  # Support both formats
+        country = (data.get('country') or '').strip()
         
         # Validate password confirmation
         if password != confirm_password:
@@ -169,6 +172,7 @@ def create_account():
             street=street if street else None,
             city=city if city else None,
             postal_code=postal_code if postal_code else None,
+            country=country if country else None,
             is_active=True
         )
         user.save()  # This will hash the password
@@ -237,10 +241,11 @@ def create_account():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_account: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit('20 per minute')
 def login():
     """
     Login user and return JWT token
@@ -289,7 +294,7 @@ def login():
         
     except Exception as e:
         logger.exception(f"login: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 

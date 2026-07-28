@@ -9,9 +9,9 @@ import json
 import re
 from datetime import datetime, timedelta
 from shared.database import db_manager
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth, optional_auth
-from shared.validators import validate_url
+from shared.validators import validate_public_url as validate_url
 from shared.errors import ValidationError
 from shared.logger import logger
 from shared.garment_utils import categorize_garment
@@ -69,14 +69,26 @@ def _scrape_and_cache(url):
     # Store/update in cache (INSERT OR REPLACE)
     try:
         db_manager.execute_query(
-            """INSERT OR REPLACE INTO garment_metadata 
-               (url, title, price, images, sizes, colors, brand, scraped_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+            """INSERT INTO garment_metadata
+               (url, title, price, images, sizes, colors, brand, fabric, description, scraped_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+               ON CONFLICT (url) DO UPDATE SET
+                   title = EXCLUDED.title,
+                   price = EXCLUDED.price,
+                   images = EXCLUDED.images,
+                   sizes = EXCLUDED.sizes,
+                   colors = EXCLUDED.colors,
+                   brand = EXCLUDED.brand,
+                   fabric = EXCLUDED.fabric,
+                   description = EXCLUDED.description,
+                   updated_at = CURRENT_TIMESTAMP""",
             (url, product_info.get('title'), product_info.get('price'),
              json.dumps(product_info.get('images', [])),
              json.dumps(product_info.get('sizes', [])),
              json.dumps(product_info.get('colors', [])),
-             product_info.get('brand'))
+             product_info.get('brand'),
+             json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None,
+             product_info.get('description'))
         )
     except Exception as e:
         logger.warning(f"Failed to cache garment metadata: {str(e)}")
@@ -89,6 +101,8 @@ def _scrape_and_cache(url):
         'sizes': product_info.get('sizes', []),
         'colors': product_info.get('colors', []),
         'brand': product_info.get('brand'),
+        'fabric': product_info.get('fabric'),
+        'description': product_info.get('description'),
         'category': categorization['category'],
         'type': categorization['type'],
         'confidence': categorization['confidence']
@@ -182,6 +196,11 @@ def scrape_product():
                         cached_dict['colors'] = json.loads(cached_dict['colors'])
                     except:
                         cached_dict['colors'] = []
+                if cached_dict.get('fabric'):
+                    try:
+                        cached_dict['fabric'] = json.loads(cached_dict['fabric'])
+                    except:
+                        cached_dict['fabric'] = None
                 
                 # Check if cache is valid (has data and not expired)
                 if _is_cache_valid(cached_dict, force_refresh=False):
@@ -209,7 +228,7 @@ def scrape_product():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"scrape_product: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @garments_bp.route('/refresh', methods=['POST'])
@@ -259,7 +278,7 @@ def refresh_product():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"refresh_product: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @garments_bp.route('/categorize', methods=['POST'])
@@ -292,7 +311,7 @@ def categorize():
         
     except Exception as e:
         logger.exception(f"categorize: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Error categorizing: {str(e)}', 500)
+        return server_error_response(e, context='Error categorizing', status_code=500)
 
 
 @garments_bp.route('/extract-images', methods=['POST'])
@@ -378,5 +397,5 @@ def get_defaults():
 
     except Exception as e:
         logger.exception(f"get_defaults: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Error loading default garments: {str(e)}', 500)
+        return server_error_response(e, context='Error loading default garments', status_code=500)
 

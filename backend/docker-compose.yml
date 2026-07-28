@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: becausefuture
+      POSTGRES_USER: becausefuture
+      POSTGRES_PASSWORD: localdev
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-run on first container start (empty data dir only) - keeps local
+      # Postgres schema in sync with migrations/postgres_schema.sql.
+      - ./migrations/postgres_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./migrations/postgres_seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U becausefuture -d becausefuture"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      FLASK_ENV: development
+      FLASK_DEBUG: "true"
+      DATABASE_URL: postgresql://becausefuture:localdev@postgres:5432/becausefuture
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./images:/app/images
+
+volumes:
+  pgdata:

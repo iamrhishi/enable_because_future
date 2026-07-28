@@ -1,9 +1,13 @@
 from flask import Blueprint, request
 from shared.models.user import User
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.analytics import track_event, EventType
+from shared.validators import validate_email, validate_password
+from shared.errors import ValidationError
 from shared.logger import logger
+from shared.database import db_manager
+from datetime import datetime
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
@@ -41,19 +45,7 @@ def get_avatar():
             })
     except Exception as e:
         logger.exception(f"get_avatar: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
-
-from flask import Blueprint, request
-from shared.models.user import User
-from shared.response import success_response, error_response_from_string
-from shared.middleware import require_auth
-from shared.validators import validate_email, validate_password
-from shared.errors import ValidationError
-from shared.logger import logger
-from datetime import datetime
-
-users_bp = Blueprint('users', __name__, url_prefix='/api/users')
-
+        return server_error_response(e, context='Server error', status_code=500)
 
 @users_bp.route('/profile', methods=['GET'])
 @require_auth  # JWT decorator validates token and sets request.user_id from token
@@ -79,7 +71,7 @@ def get_profile():
         
     except Exception as e:
         logger.exception(f"get_profile: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @users_bp.route('/profile', methods=['PUT', 'PATCH'])
@@ -111,7 +103,12 @@ def update_profile():
         update_data = {}
 
         if 'email' in data:
-            update_data['email'] = validate_email(str(data['email']).strip())
+            new_email = validate_email(str(data['email']).strip())
+            if new_email != user.email:
+                existing_user = User.get_by_email(new_email)
+                if existing_user and existing_user.userid != user_id:
+                    return error_response_from_string('Email already registered', 409, 'EMAIL_EXISTS')
+            update_data['email'] = new_email
 
         # Gender is optional; validate only when a non-empty value is provided
         if 'gender' in data:
@@ -141,7 +138,7 @@ def update_profile():
             else:
                 update_data['birthday'] = None
 
-        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code']:
+        for field in ['first_name', 'last_name', 'street', 'city', 'postal_code', 'country']:
             if field in data:
                 value = str(data[field]).strip() if data[field] else None
                 update_data[field] = value
@@ -163,7 +160,7 @@ def update_profile():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"update_profile: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @users_bp.route('/profile/change-password', methods=['POST'])
@@ -242,7 +239,7 @@ def change_password():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"change_password: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 def _parse_delete_account_body():
@@ -312,5 +309,68 @@ def delete_account():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"delete_account: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
+
+
+@users_bp.route('/data-export', methods=['GET'])
+@require_auth
+def export_my_data():
+    """
+    GDPR Article 15 (right of access) / Article 20 (data portability):
+    return everything stored about the authenticated user in one bundle.
+
+    Image bytes themselves aren't inlined (impractical for a JSON response) -
+    wardrobe/avatar images are referenced by their existing /images URLs,
+    which the user can fetch directly; try-on result/original photos are
+    listed by job id with their existing metadata.
+    """
+    user_id = request.user_id
+    logger.info(f"export_my_data: ENTRY - user_id={user_id}")
+
+    try:
+        user = User.get_by_id(user_id)
+        if not user:
+            return error_response_from_string('User not found', 404, 'NOT_FOUND')
+
+        body_measurements = db_manager.execute_query(
+            "SELECT * FROM body_measurements WHERE user_id = ?", (user_id,), fetch_one=True
+        )
+        wardrobe_items = db_manager.execute_query(
+            "SELECT id, garment_id, garment_type, garment_url, title, brand, color, size, "
+            "price, fabric, description, category, category_section, image_path, url, date_added "
+            "FROM wardrobe WHERE user_id = ?", (user_id,), fetch_all=True
+        )
+        wardrobe_categories = db_manager.execute_query(
+            "SELECT name, description, category_section, created_at FROM wardrobe_categories WHERE user_id = ?",
+            (user_id,), fetch_all=True
+        )
+        tryon_jobs = db_manager.execute_query(
+            "SELECT job_id, status, progress, result_url, garment_url, error_message, created_at, updated_at "
+            "FROM tryon_jobs WHERE user_id = ?", (user_id,), fetch_all=True
+        )
+        tryon_results = db_manager.execute_query(
+            "SELECT id, try_on_count, applied_garments, created_at FROM tryon_results WHERE user_id = ?",
+            (user_id,), fetch_all=True
+        )
+        analytics_events = db_manager.execute_query(
+            "SELECT event_type, metadata, created_at FROM analytics_events_all WHERE user_id = ? ORDER BY created_at",
+            (user_id,), fetch_all=True
+        ) if db_manager.table_exists('analytics_events_all') else []
+
+        export = {
+            'profile': user.to_dict(),
+            'body_measurements': body_measurements,
+            'wardrobe_items': wardrobe_items or [],
+            'wardrobe_categories': wardrobe_categories or [],
+            'tryon_jobs': tryon_jobs or [],
+            'tryon_results': tryon_results or [],
+            'analytics_events': analytics_events or [],
+        }
+
+        logger.info(f"export_my_data: EXIT - Exported data for user_id={user_id}")
+        return success_response(data=export)
+
+    except Exception as e:
+        logger.exception(f"export_my_data: EXIT - Error: {str(e)}")
+        return server_error_response(e, context='Server error', status_code=500)
 

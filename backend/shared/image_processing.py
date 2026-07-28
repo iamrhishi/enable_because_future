@@ -327,10 +327,13 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
         ValidationError: If fetch fails
     """
     logger.info(f"fetch_image_from_url: ENTRY - url={url[:100]}")
-    
+
     try:
         import requests
-        
+
+        from shared.validators import validate_public_url
+        url = validate_public_url(url)
+
         from features.garments.scraping_constants import get_default_headers, get_proxy_config, get_proxy_auth
         headers = get_default_headers()
         proxies = get_proxy_config()
@@ -354,4 +357,246 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
     except Exception as e:
         logger.exception(f"fetch_image_from_url: EXIT - Error: {str(e)}")
         raise ValidationError(f"Error fetching image: {str(e)}")
+
+
+def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> bytes:
+    """
+    Clean and solidify the interior alpha mask of a PNG image.
+    Fills interior semi-transparent pixels (alpha > threshold) to alpha = 255 (100% solid opacity),
+    while using erosion to leave perimeter anti-aliased edge pixels untouched (preventing dark halos).
+    """
+    try:
+        import numpy as np
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        arr = np.array(img)
+        alpha = arr[:, :, 3]
+
+        fg_mask = alpha > threshold
+        if not np.any(fg_mask):
+            return image_bytes
+
+        # Try using OpenCV erosion to solidify ONLY interior pixels while preserving soft edge anti-aliasing
+        try:
+            import cv2
+            fg_bytes = fg_mask.astype(np.uint8)
+            kernel_size = 5  # 5x5 ellipse kernel (~2-3px erosion from perimeter)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            eroded_fg = cv2.erode(fg_bytes, kernel)
+            
+            # Make interior 100% opaque to stop background bleed, preserving outer soft edge
+            arr[:, :, 3][eroded_fg > 0] = 255
+        except Exception as cv_err:
+            logger.warning(f"clean_and_solidify_alpha_mask: OpenCV erosion failed ({cv_err}), falling back to gentle solidifying")
+            # Fallback without cv2: only solidify high-confidence foreground pixels (alpha > 200)
+            arr[:, :, 3][alpha > 200] = 255
+
+        out_img = Image.fromarray(arr, mode='RGBA')
+        buf = BytesIO()
+        out_img.save(buf, format='PNG')
+        result = buf.getvalue()
+        logger.info(f"clean_and_solidify_alpha_mask: Solidified alpha mask (size {len(result)} bytes)")
+        return result
+    except Exception as e:
+        logger.warning(f"clean_and_solidify_alpha_mask error: {e}, returning original")
+        return image_bytes
+
+
+def normalize_avatar_framing(
+    image_bytes: bytes,
+    target_canvas_size: tuple[int, int] = (900, 1200),
+    target_height_percent: float = 0.95,
+    bottom_margin_percent: float = 0.02
+) -> bytes:
+    """
+    Normalize an avatar / try-on result image to standard 3:4 canvas framing.
+    Crops empty transparent padding around subject.
+    For full-body figures, scales height to target_height_percent (default 95%).
+    For upper-body / 3/4 figures, preserves natural scale matching avatar proportions
+    instead of blowing up upper-body crops to giant sizes.
+    """
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        bbox = img.getbbox()
+        if not bbox:
+            logger.warning("normalize_avatar_framing: Image has no non-transparent pixels")
+            return image_bytes
+
+        left, top, right, bottom = bbox
+        crop_w = right - left
+        crop_h = bottom - top
+
+        canvas_w, canvas_h = target_canvas_size
+        img_w, img_h = img.size
+
+        # Check if subject is full body (spans top to bottom, height >= 78% of image height)
+        is_full_body = crop_h >= (img_h * 0.78) or (crop_h / float(crop_w) >= 2.1)
+
+        if is_full_body:
+            # Full body: scale to target_height_percent (95% height) and anchor near bottom
+            desired_subject_h = int(canvas_h * target_height_percent)
+            scale = desired_subject_h / float(crop_h)
+            scaled_w = int(crop_w * scale)
+            scaled_h = desired_subject_h
+
+            max_allowed_w = int(canvas_w * 0.92)
+            if scaled_w > max_allowed_w:
+                scale = max_allowed_w / float(crop_w)
+                scaled_w = max_allowed_w
+                scaled_h = int(crop_h * scale)
+
+            cropped_img = img.crop(bbox)
+            resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+
+            canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+            paste_x = (canvas_w - scaled_w) // 2
+            bottom_margin = int(canvas_h * bottom_margin_percent)
+            paste_y = canvas_h - bottom_margin - scaled_h
+            if paste_y < 0:
+                paste_y = (canvas_h - scaled_h) // 2
+
+            canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
+        else:
+            # Upper body / partial crop:
+            # If the image is ALREADY on standard canvas (900x1200) with head near top (top <= 120),
+            # DO NOT STRETCH/BLOW UP the upper body! Preserve original canvas scale and positioning.
+            if img_w == canvas_w and img_h == canvas_h and top <= 120:
+                canvas = img
+            else:
+                # Scale proportionally based on width scale to match standard avatar proportions
+                scale = canvas_w / float(img_w) if img_w > 0 else 1.0
+                scaled_w = int(crop_w * scale)
+                scaled_h = int(crop_h * scale)
+
+                # Cap width to max 75% of canvas width to prevent giant shoulders
+                max_w = int(canvas_w * 0.75)
+                if scaled_w > max_w:
+                    scale = max_w / float(crop_w)
+                    scaled_w = max_w
+                    scaled_h = int(crop_h * scale)
+
+                cropped_img = img.crop(bbox)
+                resized_subject = cropped_img.resize((scaled_w, scaled_h), Image.Resampling.LANCZOS)
+                canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
+                paste_x = (canvas_w - scaled_w) // 2
+                paste_y = int(top * scale)
+                canvas.paste(resized_subject, (paste_x, paste_y), resized_subject)
+
+        buf = BytesIO()
+        canvas.save(buf, format='PNG')
+        result = buf.getvalue()
+        logger.info(f"normalize_avatar_framing: Normalized to {canvas_w}x{canvas_h} canvas, is_full_body={is_full_body}")
+        return result
+    except Exception as e:
+        logger.warning(f"normalize_avatar_framing error: {e}, returning original bytes")
+        return image_bytes
+
+
+def _detect_person_in_image(image_bytes: bytes) -> bool:
+    """Check if an image contains a human face or body using OpenCV."""
+    try:
+        import cv2
+        import numpy as np
+        img = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None or img.size == 0:
+            return False
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        frontal_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        frontal = cv2.CascadeClassifier(frontal_path)
+        if not frontal.empty():
+            faces = frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
+            if faces is not None and len(faces) > 0:
+                return True
+
+        profile_path = cv2.data.haarcascades + 'haarcascade_profileface.xml'
+        profile = cv2.CascadeClassifier(profile_path)
+        if not profile.empty():
+            pfaces = profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
+            if pfaces is not None and len(pfaces) > 0:
+                return True
+
+        return False
+    except Exception:
+        return False
+
+
+def crop_garment_to_relevant_region(garment_bytes: bytes, garment_type: str = 'upper') -> bytes:
+    """
+    Crop garment image to isolate the relevant clothing item if it's a full-model photo.
+    For 'upper' (shirts, blazers, tops, sweaters), crops to upper ~85% region to include full garment hem.
+    For 'lower' (pants, skirts, shorts), crops to lower ~65% region.
+    Only crops if image has a tall aspect ratio AND contains a human model figure.
+    Flat-lay photos, hanger shots, or already cropped product images remain 100% untouched.
+    """
+    try:
+        img = Image.open(BytesIO(garment_bytes))
+        w, h = img.size
+        aspect_ratio = h / float(w)
+
+        # 1. Only crop if image has tall aspect ratio typical of full-body model photos (h/w > 1.15)
+        if aspect_ratio <= 1.15:
+            logger.info(f"crop_garment_to_relevant_region: Aspect ratio {aspect_ratio:.2f} <= 1.15 (already cropped/wide) - keeping original")
+            return garment_bytes
+
+        # 2. Check if a human model is actually present in the photo
+        has_model = _detect_person_in_image(garment_bytes)
+        if not has_model:
+            logger.info("crop_garment_to_relevant_region: No human model detected in garment photo (flat-lay/isolated product) - keeping original")
+            return garment_bytes
+
+        logger.info(f"crop_garment_to_relevant_region: Detected human model in tall photo ({w}x{h}, ratio {aspect_ratio:.2f}) - cropping for {garment_type}")
+
+        if img.mode in ('RGBA', 'LA'):
+            bbox = img.getbbox()
+            if bbox:
+                img = img.crop(bbox)
+                w, h = img.size
+
+        if garment_type == 'upper':
+            crop_box = (0, 0, w, int(h * 0.85))
+        elif garment_type == 'lower':
+            crop_box = (0, int(h * 0.35), w, h)
+        else:
+            return garment_bytes
+
+        cropped = img.crop(crop_box)
+        buf = BytesIO()
+        cropped.save(buf, format=img.format or 'PNG')
+        result = buf.getvalue()
+        logger.info(f"crop_garment_to_relevant_region: Cropped {garment_type} garment from {w}x{h} to {cropped.size[0]}x{cropped.size[1]}")
+        return result
+    except Exception as e:
+        logger.warning(f"crop_garment_to_relevant_region error: {e}, returning original")
+        return garment_bytes
+
+
+def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_mean_diff: float = 8.0) -> bool:
+    """
+    Check if img2 is substantially identical to img1 (indicating Gemini returned the original avatar unchanged).
+    """
+    try:
+        import numpy as np
+        img1 = Image.open(BytesIO(img1_bytes)).convert('RGB').resize((128, 128))
+        img2 = Image.open(BytesIO(img2_bytes)).convert('RGB').resize((128, 128))
+
+        arr1 = np.array(img1, dtype=np.float32)
+        arr2 = np.array(img2, dtype=np.float32)
+
+        mean_diff = float(np.mean(np.abs(arr1 - arr2)))
+        unchanged = mean_diff < max_mean_diff
+        logger.info(f"is_image_substantially_unchanged: mean_pixel_diff={mean_diff:.2f}, unchanged={unchanged}")
+        return unchanged
+    except Exception as e:
+        logger.warning(f"is_image_substantially_unchanged error: {e}")
+        return False
+
+
+
 

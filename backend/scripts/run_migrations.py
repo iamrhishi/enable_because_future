@@ -58,6 +58,11 @@ def main():
         (27, 'body_measurements_complete_schema', load_migration(27, 'body_measurements_complete_schema')),
         (28, 'create_analytics_events', load_migration(28, 'create_analytics_events')),
         (29, 'create_garment_discovery_tables', load_migration(29, 'create_garment_discovery_tables')),
+        (30, 'add_country_to_users', load_migration(30, 'add_country_to_users')),
+        (31, 'add_fabric_to_garment_metadata', load_migration(31, 'add_fabric_to_garment_metadata')),
+        (32, 'seed_all_platform_categories', load_migration(31, 'seed_all_platform_categories')),
+        (33, 'add_description_to_garment_metadata', load_migration(32, 'add_description_to_garment_metadata')),
+        (34, 'add_is_deleted_to_users', load_migration(34, 'add_is_deleted_to_users')),
     ]
     
     migration_manager.run_migrations(migrations)

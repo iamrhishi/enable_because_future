@@ -1,13 +1,13 @@
-from flask import Flask, jsonify, request, Response, send_from_directory
+from flask import Flask, jsonify, request, Response, send_from_directory, redirect
 from werkzeug.exceptions import BadRequest, HTTPException
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
 import os
 import base64
 from config import Config
-from shared.database import db_manager, get_db_connection
+from shared.database import db_manager
 from features.auth.service import generate_token
-from shared.response import success_response, error_response, error_response_from_string
+from shared.response import success_response, error_response, error_response_from_string, server_error_response
 from shared.errors import ValidationError, AuthenticationError, DatabaseError, NotFoundError
 from shared.validators import validate_email, validate_password, validate_required
 from shared.middleware import require_auth, optional_auth
@@ -28,22 +28,34 @@ from features.garment_discovery.controller import garment_discovery_bp
 app = Flask(__name__)
 CORS(app, origins=Config.CORS_ORIGINS)
 
+from shared.rate_limit import limiter
+limiter.init_app(app)
+
 # Validate configuration
 Config.validate()
 
 # Serve images from local storage
 @app.route('/images/<path:filename>')
 def serve_image(filename):
-    """Serve images from local storage directory"""
+    """Serve images - redirects to a fresh signed URL when GCS-backed, otherwise local disk"""
     try:
+        if Config.GCS_BUCKET_NAME:
+            from shared.storage import get_storage_service
+            storage_service = get_storage_service()
+            try:
+                signed_url = storage_service.get_signed_url(filename)
+            except Exception:
+                return jsonify({"error": "Image not found"}), 404
+            return redirect(signed_url)
+
         from pathlib import Path
         images_dir = Path(Config.IMAGES_DIR)
         file_path = images_dir / filename
-        
+
         # Security: Ensure file is within images directory
         if not str(file_path.resolve()).startswith(str(images_dir.resolve())):
             return jsonify({"error": "Invalid path"}), 403
-        
+
         if file_path.exists():
             return send_from_directory(str(images_dir), filename)
         else:
@@ -81,16 +93,26 @@ def get_user_avatar_file(userid):
         if not user.avatar_path:
             logger.warning(f"get_user_avatar_file: User has no avatar - userid={userid}")
             return jsonify({"error": "User has no avatar"}), 404
-        
+
+        if Config.GCS_BUCKET_NAME:
+            from shared.storage import get_storage_service
+            try:
+                signed_url = get_storage_service().get_signed_url(user.avatar_path)
+            except Exception:
+                logger.warning(f"get_user_avatar_file: Avatar object not found - userid={userid}, path={user.avatar_path}")
+                return jsonify({"error": "Avatar file not found"}), 404
+            logger.info(f"get_user_avatar_file: EXIT - Redirecting to signed URL for userid={userid}")
+            return redirect(signed_url)
+
         # Serve the file
         images_dir = Path(Config.IMAGES_DIR)
         file_path = images_dir / user.avatar_path
-        
+
         # Security: Ensure file is within images directory
         if not str(file_path.resolve()).startswith(str(images_dir.resolve())):
             logger.warning(f"get_user_avatar_file: Invalid path - userid={userid}")
             return jsonify({"error": "Invalid path"}), 403
-        
+
         if file_path.exists():
             logger.info(f"get_user_avatar_file: EXIT - Serving avatar for userid={userid}")
             return send_from_directory(str(images_dir), user.avatar_path)
@@ -246,6 +268,29 @@ def save_avatar():
             from features.tryon.service import _remove_background_local
             from PIL import Image
             from io import BytesIO
+
+            # Ensure minimum resolution for avatar (768px minimum dimension)
+            MIN_AVATAR_DIMENSION = 768
+            try:
+                img = Image.open(BytesIO(avatar_data))
+                width, height = img.size
+                min_dim = min(width, height)
+                if min_dim < MIN_AVATAR_DIMENSION:
+                    scale = MIN_AVATAR_DIMENSION / min_dim
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    logger.info(f"Avatar upscaled from {width}x{height} to {new_width}x{new_height} (min dimension {MIN_AVATAR_DIMENSION}px)")
+                    output = BytesIO()
+                    # Preserve original format
+                    img_format = img.format or 'PNG'
+                    if img.mode == 'RGBA' and img_format == 'JPEG':
+                        img_format = 'PNG'
+                    img.save(output, format=img_format)
+                    avatar_data = output.getvalue()
+            except Exception as scale_error:
+                logger.warning(f"Could not check/scale avatar resolution: {str(scale_error)}, continuing with original")
+
             logger.info(f"Removing background from avatar using rembg (local) for user: {user_id}")
             avatar_data = _remove_background_local(avatar_data)
             try:
@@ -272,6 +317,11 @@ def save_avatar():
                     logger.warning(f"Avatar has no visible content (all transparent)")
             except Exception as trim_error:
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
+            
+            # Solidify alpha mask to fill interior semi-transparency and prevent background bleed-through
+            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+            avatar_data = clean_and_solidify_alpha_mask(avatar_data)
+            avatar_data = normalize_avatar_framing(avatar_data)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
@@ -427,6 +477,9 @@ def save_avatar_local():
             except Exception as trim_error:
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
                 
+            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+            avatar_data = clean_and_solidify_alpha_mask(avatar_data)
+            avatar_data = normalize_avatar_framing(avatar_data)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
@@ -510,22 +563,13 @@ def get_avatar():
         if not user or not user.avatar:
             return error_response_from_string('Avatar not found', 404, 'NOT_FOUND')
         
-        # Try to find avatar URL from disk storage first
-        # Look for avatar files in avatars/{user_id}/ directory
-        from pathlib import Path
-        from config import Config
-        images_dir = Path(Config.IMAGES_DIR)
-        avatar_dir = images_dir / 'avatars' / user_id
-        
+        # Prefer the stored avatar_path reference (works for both local disk
+        # and GCS - avoids scanning the filesystem, which doesn't exist on
+        # Cloud Run's ephemeral disk / doesn't apply to GCS-backed storage).
         avatar_url = None
-        if avatar_dir.exists():
-            # Find most recent avatar file
-            avatar_files = sorted(avatar_dir.glob('*.png'), key=lambda p: p.stat().st_mtime, reverse=True)
-            if avatar_files:
-                # Construct URL
-                relative_path = f"avatars/{user_id}/{avatar_files[0].name}"
-                base_url = request.url_root.rstrip('/')
-                avatar_url = f"{base_url}/images/{relative_path}"
+        if user.avatar_path:
+            base_url = request.url_root.rstrip('/')
+            avatar_url = f"{base_url}/images/{user.avatar_path}"
         
         # If no disk file found, return blob (backward compatibility)
         # But also include URL if available
@@ -556,13 +600,15 @@ def update_avatar():
         # Get JSON data with base64 encoded image
         data = request.get_json()
         
-        if not data or 'user_id' not in data or 'avatar_data' not in data:
+        if not data or 'avatar_data' not in data:
             return jsonify({
                 'success': False,
-                'error': 'User ID and avatar data are required'
+                'error': 'Avatar data is required'
             }), 400
-        
-        user_id = data.get('user_id')
+
+        # Always operate on the authenticated user from the JWT, never a
+        # client-supplied user_id, to prevent overwriting another user's avatar.
+        user_id = request.user_id
         avatar_base64 = data.get('avatar_data')
         
         # Remove data URL prefix if present (e.g., "data:image/png;base64,")
@@ -593,31 +639,23 @@ def update_avatar():
             }), 400
         
         logger.info(f"Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
-        
-        # Connect to database
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        
+
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE userid = ?", (user_id,))
-        user = cursor.fetchone()
-        
+        user = db_manager.execute_query(
+            "SELECT id FROM users WHERE userid = ?", (user_id,), fetch_one=True
+        )
+
         if not user:
-            cursor.close()
-            connection.close()
             return jsonify({
                 'success': False,
                 'error': 'User not found'
             }), 404
-        
+
         # Update user's avatar
-        update_query = "UPDATE users SET avatar = ? WHERE userid = ?"
-        cursor.execute(update_query, (avatar_data, user_id))
-        
-        connection.commit()
-        cursor.close()
-        connection.close()
-        
+        db_manager.execute_query(
+            "UPDATE users SET avatar = ? WHERE userid = ?", (avatar_data, user_id)
+        )
+
         logger.info(f"Avatar updated successfully for user: {user_id}")
         
         return jsonify({
@@ -626,20 +664,10 @@ def update_avatar():
         }), 200
         
     except Exception as e:
-        logger.error(f"Database error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Database error: {str(e)}'
-        }), 500
-        
-    except Exception as e:
-        logger.error(f"Server error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
-        }), 500
+        logger.exception(f"update_avatar: Server error: {e}")
+        return server_error_response(e, context='Server error')
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=Config.FLASK_DEBUG, host="0.0.0.0", port=port)
