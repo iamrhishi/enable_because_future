@@ -15,10 +15,15 @@ class WardrobeItem:
                  brand: str = None, color: str = None, is_external: bool = False,
                  title: str = None, category_id: int = None, custom_category_name: str = None,
                  fabric: str = None, care_instructions: str = None, size: str = None,
-                 description: str = None, category_section: str = None, url: str = None, **kwargs):
+                 description: str = None, category_section: str = None, url: str = None,
+                 image_path_no_bg: str = None, **kwargs):
         self.id = id
         self.user_id = user_id
         self.image_path = image_path
+        # Cached background-removed version of image_path, populated the first
+        # time this item is used in a try-on (see job_queue._process_job) so
+        # rembg doesn't need to re-run on every subsequent try-on of the item.
+        self.image_path_no_bg = image_path_no_bg
         self.category = category  # 'upper', 'lower', or None if using custom category
         self.category_id = category_id  # ID of custom category
         self.custom_category_name = custom_category_name  # Name of custom category
@@ -178,7 +183,25 @@ class WardrobeItem:
         except Exception as e:
             logger.exception(f"WardrobeItem.save: EXIT - Error: {str(e)}")
             raise
-    
+
+    @staticmethod
+    def update_image_path_no_bg(item_id: int, user_id: str, image_path_no_bg: str):
+        """
+        Persist the cached background-removed image path for a wardrobe item.
+        Deliberately a narrow single-column update (not routed through save())
+        so it can't accidentally null the cache out on an unrelated field edit.
+        """
+        logger.info(f"WardrobeItem.update_image_path_no_bg: ENTRY - id={item_id}")
+        try:
+            db_manager.execute_query(
+                "UPDATE wardrobe SET image_path_no_bg = ? WHERE id = ? AND user_id = ?",
+                (image_path_no_bg, item_id, user_id)
+            )
+            logger.info(f"WardrobeItem.update_image_path_no_bg: EXIT - Updated for id={item_id}")
+        except Exception as e:
+            logger.exception(f"WardrobeItem.update_image_path_no_bg: EXIT - Error: {str(e)}")
+            raise
+
     @classmethod
     def get_by_url(cls, user_id: str, url: str, category_section: str = None) -> Optional['WardrobeItem']:
         """Check if item with same URL already exists for user"""

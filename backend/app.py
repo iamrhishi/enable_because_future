@@ -42,6 +42,16 @@ limiter.init_app(app)
 # Validate configuration
 Config.validate()
 
+# Warm the rembg background-removal session now, not on first request - session
+# init takes a few seconds and this way it happens during Cloud Run's startup
+# probe (before traffic is routed to this instance), not on a live user's request.
+try:
+    from features.tryon.service import _get_rembg_session
+    _get_rembg_session()
+    logger.info("app: Warmed rembg session at startup")
+except Exception as warmup_error:
+    logger.warning(f"app: Failed to warm rembg session at startup: {warmup_error}")
+
 # Serve images from local storage
 @app.route('/images/<path:filename>')
 def serve_image(filename):

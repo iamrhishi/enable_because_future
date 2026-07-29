@@ -9,7 +9,7 @@ import threading
 import uuid
 import time
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from shared.database import db_manager
 from shared.logger import logger
 from shared.errors import ValidationError
@@ -141,10 +141,30 @@ class JobQueue:
             # creation, not on this. Preprocessing/validation already ran synchronously
             # in the request handler (cheap, so it's fine to fail fast there).
             garment_image = job_data['garment_image']
-            if isinstance(garment_image, list):
+            if job_data.get('skip_bg_removal'):
+                logger.info(f"JobQueue._process_job: Skipping rembg - garment image already background-removed (cached)")
+            elif isinstance(garment_image, list):
                 garment_image = [_remove_background_local(img) for img in garment_image]
             else:
                 garment_image = _remove_background_local(garment_image)
+
+                # Cache the result against the wardrobe item, if applicable, so
+                # future try-ons with this same item skip rembg entirely. Best
+                # effort - a caching failure shouldn't fail the try-on job.
+                wardrobe_item_for_bg_cache = job_data.get('wardrobe_item_for_bg_cache')
+                if wardrobe_item_for_bg_cache:
+                    try:
+                        item_id, cache_user_id = wardrobe_item_for_bg_cache
+                        from shared.storage import get_storage_service
+                        from features.wardrobe.model import WardrobeItem
+                        storage_service = get_storage_service()
+                        stored_path = storage_service.upload_image(
+                            garment_image, f"wardrobe/{cache_user_id}/{item_id}_nobg.png", content_type='image/png'
+                        )
+                        WardrobeItem.update_image_path_no_bg(item_id, cache_user_id, stored_path)
+                        logger.info(f"JobQueue._process_job: Cached background-removed image for wardrobe item {item_id}")
+                    except Exception as cache_error:
+                        logger.warning(f"JobQueue._process_job: Failed to cache background-removed image: {str(cache_error)}")
 
             # Process try-on with timeout check
             logger.info(f"JobQueue._process_job: Calling process_tryon for job {job_id}")
@@ -268,7 +288,8 @@ class JobQueue:
     
     def create_job(self, user_id: str, person_image: bytes, garment_image: bytes,
                    garment_type: str = 'upper', garment_details: Dict = None, options: Dict = None,
-                   garment_url: str = None) -> str:
+                   garment_url: str = None, skip_bg_removal: bool = False,
+                   wardrobe_item_for_bg_cache: Optional[Tuple[int, str]] = None) -> str:
         """
         Create a new try-on job
 
@@ -276,6 +297,12 @@ class JobQueue:
 
         Args:
             garment_url: Source URL of the garment for reference
+            skip_bg_removal: True if garment_image already has its background
+                removed (e.g. loaded from a wardrobe item's cached version) -
+                skips the rembg call in the worker.
+            wardrobe_item_for_bg_cache: (item_id, user_id) to write the
+                computed background-removed image back to, so future try-ons
+                of this item can reuse it. None if not applicable/already cached.
 
         Returns:
             job_id: Unique job identifier
@@ -308,7 +335,9 @@ class JobQueue:
                 'garment_image': garment_image,
                 'garment_type': garment_type,
                 'garment_details': garment_details,  # For Gemini API
-                'options': options or {}
+                'options': options or {},
+                'skip_bg_removal': skip_bg_removal,
+                'wardrobe_item_for_bg_cache': wardrobe_item_for_bg_cache,
             }
             
             # Non-blocking put with timeout

@@ -90,6 +90,8 @@ def create_tryon_job():
         garment_type = 'upper'  # Default
         garment_details = None  # Will be populated from scraping or request
         source_garment_url = None  # Track the source URL for saving with try-on result
+        skip_bg_removal = False  # True when garment_image is already background-removed (cached)
+        wardrobe_item_for_bg_cache = None  # (item_id, user_id) to cache bg-removal result against, if applicable
         
         # Method 1: Wardrobe item ID (most efficient - uses already stored images)
         if 'wardrobe_item_id' in request.form or 'item_id' in request.form:
@@ -111,21 +113,37 @@ def create_tryon_job():
                 # Load image from storage
                 if wardrobe_item.image_path:
                     storage_service = get_storage_service()
-                    # Extract path from image_path (remove /images/ prefix if present)
-                    image_path = wardrobe_item.image_path
-                    if image_path.startswith('/images/'):
-                        image_path = image_path.replace('/images/', '')
-                    
-                    try:
-                        garment_image = storage_service.get_image(image_path)
-                        logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id} image from storage")
-                    except Exception as storage_error:
-                        logger.warning(f"create_tryon_job: Failed to load image from storage: {str(storage_error)}")
-                        return error_response_from_string(
-                            f'Failed to load image for wardrobe item {wardrobe_item_id}: {str(storage_error)}',
-                            404,
-                            'NOT_FOUND'
-                        )
+
+                    # Prefer the cached background-removed version if this item has
+                    # already been used in a try-on before - skips rembg entirely.
+                    if wardrobe_item.image_path_no_bg:
+                        no_bg_path = wardrobe_item.image_path_no_bg
+                        if no_bg_path.startswith('/images/'):
+                            no_bg_path = no_bg_path.replace('/images/', '')
+                        try:
+                            garment_image = storage_service.get_image(no_bg_path)
+                            skip_bg_removal = True
+                            logger.info(f"create_tryon_job: Using cached background-removed image for wardrobe item {wardrobe_item_id}")
+                        except Exception as cache_error:
+                            logger.warning(f"create_tryon_job: Failed to load cached bg-removed image, falling back to original: {str(cache_error)}")
+
+                    if garment_image is None:
+                        # Extract path from image_path (remove /images/ prefix if present)
+                        image_path = wardrobe_item.image_path
+                        if image_path.startswith('/images/'):
+                            image_path = image_path.replace('/images/', '')
+
+                        try:
+                            garment_image = storage_service.get_image(image_path)
+                            wardrobe_item_for_bg_cache = (wardrobe_item_id, user_id)
+                            logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id} image from storage")
+                        except Exception as storage_error:
+                            logger.warning(f"create_tryon_job: Failed to load image from storage: {str(storage_error)}")
+                            return error_response_from_string(
+                                f'Failed to load image for wardrobe item {wardrobe_item_id}: {str(storage_error)}',
+                                404,
+                                'NOT_FOUND'
+                            )
                 else:
                     return error_response_from_string(
                         f'Wardrobe item {wardrobe_item_id} has no image',
@@ -838,7 +856,9 @@ def create_tryon_job():
             garment_type=garment_type,
             garment_details=garment_details,  # Pass garment details to Gemini
             options=options,
-            garment_url=source_garment_url  # Save source URL with try-on result
+            garment_url=source_garment_url,  # Save source URL with try-on result
+            skip_bg_removal=skip_bg_removal,
+            wardrobe_item_for_bg_cache=wardrobe_item_for_bg_cache
         )
 
         # Track try-on start (get user email for reporting)

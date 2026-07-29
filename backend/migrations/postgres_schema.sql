@@ -129,6 +129,7 @@ CREATE TABLE wardrobe (
     image_path TEXT,
     category_section VARCHAR(100),
     url TEXT,
+    image_path_no_bg TEXT,
     UNIQUE(user_id, garment_id)
 );
 

@@ -11,12 +11,31 @@ import time
 import re
 import json
 import hashlib
+import threading
 import numpy as np  # type: ignore
 from PIL import Image  # type: ignore
 from io import BytesIO
 from config import Config
 from shared.logger import logger
 from shared.errors import ExternalServiceError
+
+_rembg_session = None
+_rembg_session_lock = threading.Lock()
+
+
+def _get_rembg_session():
+    """
+    Lazily create and reuse a single rembg ONNX session across all calls/threads.
+    onnxruntime sessions support concurrent Run() calls, and re-creating one per
+    call otherwise re-pays session init cost on every background removal.
+    """
+    global _rembg_session
+    if _rembg_session is None:
+        with _rembg_session_lock:
+            if _rembg_session is None:
+                from rembg import new_session
+                _rembg_session = new_session('u2net')
+    return _rembg_session
 
 
 # =============================================================================
@@ -327,9 +346,9 @@ def _detect_person_boundaries(person_image: bytes) -> dict:
     """
     try:
         from rembg import remove  # type: ignore
-        
+
         # Remove background to get person mask
-        person_with_bg_removed = remove(person_image)
+        person_with_bg_removed = remove(person_image, session=_get_rembg_session())
         
         # Convert to PIL Image
         img = Image.open(BytesIO(person_with_bg_removed))
@@ -951,8 +970,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 # Use rembg to remove background
                 logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
                 from rembg import remove  # type: ignore
-                
-                result_image_bytes = remove(result_image_bytes)
+
+                result_image_bytes = remove(result_image_bytes, session=_get_rembg_session())
                 logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
                 
                 # Verify and convert rembg result to RGBA if needed
@@ -1264,7 +1283,7 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
                                     raw_bytes = base64.b64decode(raw_b64)
                                     from rembg import remove  # type: ignore
                                     try:
-                                        raw_bytes = remove(raw_bytes)
+                                        raw_bytes = remove(raw_bytes, session=_get_rembg_session())
                                     except Exception as bg_err:
                                         logger.warning(f"process_tryon_layered: rembg error: {bg_err}")
                                     from shared.image_processing import clean_and_solidify_alpha_mask
@@ -1495,7 +1514,7 @@ def _remove_background_local(image_data: bytes) -> bytes:
     try:
         from rembg import remove  # type: ignore
 
-        result = remove(image_data)
+        result = remove(image_data, session=_get_rembg_session())
         logger.info(f"_remove_background_local: EXIT - Success, result size={len(result)} bytes")
         return result
     except Exception as e:
