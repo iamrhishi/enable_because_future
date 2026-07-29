@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, Response, send_from_directory, redirect
 from werkzeug.exceptions import BadRequest, HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
 import os
@@ -25,6 +26,14 @@ from features.fit_analysis.controller import fit_analysis_bp
 from features.sizing.controller import sizing_bp
 
 app = Flask(__name__)
+
+# Cloud Run sits behind a TLS-terminating Load Balancer, so Flask only ever
+# sees a plain HTTP request internally - without this, request.url_root/
+# request.scheme report 'http' even though the original client request was
+# HTTPS, producing broken http:// URLs (e.g. avatar_url) that mobile OSes
+# refuse to load over cleartext by default.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1, x_host=1)
+
 CORS(app, origins=Config.CORS_ORIGINS)
 
 from shared.rate_limit import limiter
@@ -43,7 +52,8 @@ def serve_image(filename):
             storage_service = get_storage_service()
             try:
                 signed_url = storage_service.get_signed_url(filename)
-            except Exception:
+            except Exception as e:
+                logger.exception(f"serve_image: Failed to generate signed URL for {filename}: {str(e)}")
                 return jsonify({"error": "Image not found"}), 404
             return redirect(signed_url)
 
@@ -97,8 +107,8 @@ def get_user_avatar_file(userid):
             from shared.storage import get_storage_service
             try:
                 signed_url = get_storage_service().get_signed_url(user.avatar_path)
-            except Exception:
-                logger.warning(f"get_user_avatar_file: Avatar object not found - userid={userid}, path={user.avatar_path}")
+            except Exception as e:
+                logger.exception(f"get_user_avatar_file: Failed to sign URL - userid={userid}, path={user.avatar_path}: {str(e)}")
                 return jsonify({"error": "Avatar file not found"}), 404
             logger.info(f"get_user_avatar_file: EXIT - Redirecting to signed URL for userid={userid}")
             return redirect(signed_url)

@@ -143,7 +143,7 @@ class WardrobeItem:
                        WHERE id = ? AND user_id = ?""",
                     (self.image_path, self.category, self.category_id, self.custom_category_name,
                      self.category_section, self.garment_category_type, self.brand, self.color,
-                     self.is_external, self.title, self.fabric, self.care_instructions,
+                     bool(self.is_external), self.title, self.fabric, self.care_instructions,
                      self.size, self.description, self.url, self.id, self.user_id)
                 )
                 logger.info(f"WardrobeItem.save: EXIT - Item updated")
@@ -170,7 +170,7 @@ class WardrobeItem:
                     (self.user_id, garment_id, garment_image, garment_type, self.image_path, self.category,
                      self.category_id, self.custom_category_name, self.category_section,
                      self.garment_category_type, self.brand, self.color,
-                     self.is_external, self.title, self.fabric,
+                     bool(self.is_external), self.title, self.fabric,
                      self.care_instructions, self.size, self.description, self.url)
                 )
                 self.id = item_id

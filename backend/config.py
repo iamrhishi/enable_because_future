@@ -77,6 +77,11 @@ class Config:
     # whose filesystem is ephemeral). Unset by default for local dev.
     GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', '')
     GCS_SIGNED_URL_EXPIRATION_HOURS = int(os.environ.get('GCS_SIGNED_URL_EXPIRATION_HOURS', '24'))
+    # Fallback target for signed-URL self-impersonation, used only if the
+    # ambient runtime credentials don't already expose service_account_email.
+    GCS_SIGNING_SERVICE_ACCOUNT = os.environ.get(
+        'GCS_SIGNING_SERVICE_ACCOUNT', 'bcf-cloudrun@becausefuture.iam.gserviceaccount.com'
+    )
     
     # Scraping Configuration (optional)
     # Proxy support - set ENABLE_PROXY=true to enable
