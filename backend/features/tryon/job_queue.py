@@ -35,10 +35,27 @@ class JobQueue:
         logger.info(f"JobQueue.__init__: EXIT - Initialized (max_queue_size={MAX_QUEUE_SIZE}, timeout={JOB_TIMEOUT_SECONDS}s)")
 
     def _cleanup_stuck_jobs(self):
-        """Mark any jobs stuck in 'processing' status as failed (from previous crash)"""
+        """
+        Mark jobs stuck in 'processing' status as failed (from a previous crash).
+
+        This runs on every JobQueue() instantiation - i.e. on every container
+        instance's startup, not just after a real crash. Cloud Run routinely
+        runs multiple instances concurrently, each with its own in-memory
+        JobQueue; a 'processing' row can legitimately belong to a DIFFERENT,
+        currently-alive instance that started it moments ago. Without the
+        time filter below, instance B booting up would immediately mark
+        instance A's brand-new, actively-running job as failed. Only jobs
+        that have been 'processing' for longer than the max allowed job
+        runtime (plus a safety margin) are actually abandoned.
+        """
         try:
+            import datetime
+            cutoff = (
+                datetime.datetime.utcnow() - datetime.timedelta(seconds=JOB_TIMEOUT_SECONDS + 30)
+            ).strftime('%Y-%m-%d %H:%M:%S')
             stuck_jobs = db_manager.execute_query(
-                "SELECT job_id FROM tryon_jobs WHERE status = 'processing'",
+                "SELECT job_id FROM tryon_jobs WHERE status = 'processing' AND updated_at < ?",
+                (cutoff,),
                 fetch_all=True
             )
             if stuck_jobs:
