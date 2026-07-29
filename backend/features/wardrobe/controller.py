@@ -585,7 +585,13 @@ def add_garment():
         # Get care_instructions, size, description, url
         care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
         size = form_data.get('size') or data.get('size')
-        description = form_data.get('description') or data.get('description')
+        # User-entered description takes priority; fall back to the scraped
+        # description (same override pattern as title/brand/color above) -
+        # otherwise the scraped description is cached but never actually used.
+        description = (
+            form_data.get('description') or data.get('description')
+            or (product_info.get('description') if product_info else None)
+        )
         url = form_data.get('url') or data.get('url') or garment_url
 
         form_brand = (form_data.get('brand') or data.get('brand') or '').strip()

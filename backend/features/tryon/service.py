@@ -895,7 +895,20 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             result = response.json()
             parsed = _parse_gemini_tryon_image_response(result)
             if parsed[0] == "ok":
-                result_image_bytes = parsed[1]
+                candidate_image_bytes = parsed[1]
+                from shared.image_processing import is_image_substantially_unchanged
+                if (
+                    attempt_idx < len(generation_attempts) - 1
+                    and is_image_substantially_unchanged(padded_person_image, candidate_image_bytes)
+                ):
+                    logger.warning(
+                        "process_tryon: Gemini returned an unchanged image on %s (%s/%s); retrying",
+                        attempt_name,
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                    )
+                    continue
+                result_image_bytes = candidate_image_bytes
                 if attempt_idx > 0:
                     logger.info(
                         "process_tryon: Gemini succeeded on generation attempt %s/%s (%s)",
