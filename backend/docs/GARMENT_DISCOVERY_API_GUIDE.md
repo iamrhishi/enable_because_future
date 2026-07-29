@@ -36,7 +36,8 @@ All endpoints support both authenticated users and anonymous guest sessions:
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/garment-discovery/sessions` | Create a new discovery session |
-| `POST` | `/api/garment-discovery/chat` | Main conversational message turn endpoint |
+| `POST` | `/api/garment-discovery/chat` | Main conversational message turn endpoint (REST) |
+| `POST` | `/api/garment-discovery/chat/stream` | Real-time SSE streaming turn endpoint |
 | `POST` | `/api/garment-discovery/refine` | Quick action endpoint to refine recommendations |
 | `GET` | `/api/garment-discovery/sessions/<session_id>` | Get session state, preferences, and message history |
 | `GET` | `/api/garment-discovery/sessions` | List all discovery sessions for a user |

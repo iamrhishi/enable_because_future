@@ -12,6 +12,34 @@ from shared.logger import logger
 from features.garments.scraping_constants import get_default_headers, get_proxy_config, get_proxy_auth
 
 
+def unwrap_redirect_url(url: str) -> str:
+    """
+    Unwraps Google Vertex AI grounding redirect links (vertexaisearch.cloud.google.com/grounding-api-redirect/...)
+    to return the actual target e-commerce store URL.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    if 'grounding-api-redirect' in url or 'vertexaisearch' in url or 'google.com/url' in url:
+        try:
+            headers = get_default_headers()
+            # 1. Fast check: HTTP 301/302/307 Location header
+            resp = requests.head(url, headers=headers, allow_redirects=False, timeout=3)
+            if resp.status_code in [301, 302, 303, 307, 308] and resp.headers.get('Location'):
+                location = resp.headers.get('Location')
+                if location and 'vertexaisearch' not in location:
+                    logger.info(f"unwrap_redirect_url: Fast unwrapped Location header to {location}")
+                    return location
+            
+            # 2. Fallback: Follow redirects with GET request
+            resp = requests.get(url, headers=headers, allow_redirects=True, timeout=3, stream=True)
+            if resp and resp.url and 'vertexaisearch' not in resp.url:
+                logger.info(f"unwrap_redirect_url: Unwrapped redirect URL to {resp.url}")
+                return resp.url
+        except Exception as e:
+            logger.warning(f"unwrap_redirect_url failed: {str(e)}")
+    return url
+
+
 def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True, follow_bot_redirects: bool = True) -> Optional[str]:
     """
     Fetch HTML content from URL with rotating user agents and optional proxy support.
@@ -26,6 +54,7 @@ def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True
     Returns:
         HTML content as string, or None if failed
     """
+    url = unwrap_redirect_url(url)
     logger.info(f"fetch_html: ENTRY - url={url[:100]}")
     
     headers = get_default_headers()

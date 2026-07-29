@@ -13,7 +13,7 @@ from urllib.parse import quote_plus, urlparse, parse_qs
 from typing import List, Dict, Any, Optional
 from shared.database import db_manager
 from shared.garment_utils import categorize_garment
-from features.garments.scraper import fetch_html
+from features.garments.scraper import fetch_html, unwrap_redirect_url
 
 # Color-and-category aware photo map for open web & fallback items
 COLOR_CATEGORY_PHOTO_MAP = {
@@ -34,6 +34,12 @@ COLOR_CATEGORY_PHOTO_MAP = {
     ("blazer", "navy"): "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop",
     ("blazer", "blue"): "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop",
     
+    # Jackets & Denim
+    ("jacket", "black"): "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600&auto=format&fit=crop",
+    ("jacket", "denim"): "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=600&auto=format&fit=crop",
+    ("denim", "black"): "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=600&auto=format&fit=crop",
+    ("jacket", "blue"): "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=600&auto=format&fit=crop",
+
     # Trousers / Pants / Jeans
     ("trouser", "blue"): "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=600&auto=format&fit=crop",
     ("trouser", "green"): "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=600&auto=format&fit=crop",
@@ -53,17 +59,51 @@ COLOR_CATEGORY_PHOTO_MAP = {
     ("hoodie", "black"): "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop"
 }
 
-def get_color_aware_photo(subcat: str, color: str) -> str:
-    """Helper to return a color-and-category matched image URL."""
+def is_valid_garment_image(img_url: Optional[str]) -> bool:
+    """Check if image URL is valid and filter out logos, headers, banners, or favicons."""
+    if not img_url or not isinstance(img_url, str) or not img_url.startswith('http'):
+        return False
+    lower = img_url.lower()
+    bad_keywords = ['logo', 'header', 'banner', 'favicon', 'share_image', 'zara_share', 'zara-logo', 'hm-logo', 'asos-logo', 'static/logo', 'media/logo']
+    for kw in bad_keywords:
+        if kw in lower and 'garment' not in lower and 'product' not in lower:
+            return False
+    return True
+
+def is_category_url(url: Optional[str]) -> bool:
+    """Detect e-commerce category listing pages (e.g. -l820.html) to prevent scraping logos."""
+    if not url or not isinstance(url, str):
+        return True
+    lower = url.lower()
+    if re.search(r'-l\d+\.html', lower) or '/category/' in lower or '/department/' in lower or '/catalog/' in lower or '/collections/' in lower:
+        return True
+    return False
+
+PINK_DRESS_PHOTOS = [
+    "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=600&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1618244972963-dbee1a7edc95?w=600&auto=format&fit=crop",
+]
+
+def get_color_aware_photo(subcat: str, color: str, item_id: str = "") -> str:
+    """Helper to return a high-resolution color-and-category matched image URL with diverse pools."""
     subcat_l = (subcat or '').lower()
     color_l = (color or '').lower()
+    idx = abs(hash(item_id or subcat_l + color_l)) % 3
+
+    if "dress" in subcat_l and "pink" in color_l:
+        return PINK_DRESS_PHOTOS[idx % len(PINK_DRESS_PHOTOS)]
 
     for (c_kw, col_kw), img_url in COLOR_CATEGORY_PHOTO_MAP.items():
         if c_kw in subcat_l and col_kw in color_l:
             return img_url
 
     # Category fallback
-    if "shirt" in subcat_l or "top" in subcat_l or "apparel" in subcat_l or "garment" in subcat_l:
+    if "jacket" in subcat_l or "denim" in subcat_l or "coat" in subcat_l:
+        if "black" in color_l:
+            return "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600&auto=format&fit=crop"
+        return "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=600&auto=format&fit=crop"
+    elif "shirt" in subcat_l or "top" in subcat_l or "apparel" in subcat_l or "garment" in subcat_l:
         if "yellow" in color_l:
             return "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&auto=format&fit=crop"
         elif "green" in color_l:
@@ -76,7 +116,9 @@ def get_color_aware_photo(subcat: str, color: str) -> str:
     elif "jean" in subcat_l:
         return "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&auto=format&fit=crop"
     elif "dress" in subcat_l:
-        if "green" in color_l:
+        if "pink" in color_l:
+            return PINK_DRESS_PHOTOS[idx % len(PINK_DRESS_PHOTOS)]
+        elif "green" in color_l:
             return "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=600&auto=format&fit=crop"
         return "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop"
     
@@ -444,12 +486,14 @@ class GarmentSearchService:
     def _resolve_product_image_from_url(product_url: str) -> Optional[str]:
         """
         Directly scrape the e-commerce product page to extract the primary product image
-        from Open Graph (og:image) or Twitter card metadata.
+        from Open Graph (og:image) or Twitter card metadata. Rejects logo images and category URLs.
         """
         if not product_url or not isinstance(product_url, str) or not product_url.startswith('http'):
             return None
+        if is_category_url(product_url):
+            return None
         try:
-            html = fetch_html(product_url, timeout=3)
+            html = fetch_html(product_url, timeout=1.5)
             if html:
                 soup = BeautifulSoup(html, 'html.parser')
                 
@@ -457,31 +501,123 @@ class GarmentSearchService:
                 og_image = soup.find('meta', property='og:image') or soup.find('meta', attrs={"name": "og:image"})
                 if og_image and og_image.get('content'):
                     img_url = og_image.get('content')
-                    if img_url.startswith('http'):
+                    if img_url.startswith('//'):
+                        img_url = 'https:' + img_url
+                    if is_valid_garment_image(img_url):
                         return img_url
-                    elif img_url.startswith('//'):
-                        return 'https:' + img_url
                 
                 # 2. Fallback to Twitter card image metadata
                 twitter_image = soup.find('meta', name='twitter:image') or soup.find('meta', attrs={"property": "twitter:image"})
                 if twitter_image and twitter_image.get('content'):
                     img_url = twitter_image.get('content')
-                    if img_url.startswith('http'):
+                    if img_url.startswith('//'):
+                        img_url = 'https:' + img_url
+                    if is_valid_garment_image(img_url):
                         return img_url
-                    elif img_url.startswith('//'):
-                        return 'https:' + img_url
                         
                 # 3. Fallback to image_src link element
                 link_image = soup.find('link', rel='image_src')
                 if link_image and link_image.get('href'):
                     img_url = link_image.get('href')
-                    if img_url.startswith('http'):
+                    if img_url.startswith('//'):
+                        img_url = 'https:' + img_url
+                    if is_valid_garment_image(img_url):
                         return img_url
-                    elif img_url.startswith('//'):
-                        return 'https:' + img_url
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def search_garments_stream(preferences: Dict[str, Any], limit: int = 6, flash_garments: Optional[List[Dict[str, Any]]] = None):
+        """
+        Scrapes and yields garments one-by-one in real-time as each candidate is resolved & validated.
+        """
+        seen_keys = set()
+        yielded_count = 0
+
+        req_subcat = preferences.get('subcategory') or preferences.get('category') or 'Shirts'
+        req_color = (preferences.get('color') or '').lower()
+
+        def try_format_and_validate(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            nonlocal yielded_count
+            if yielded_count >= limit:
+                return None
+
+            raw_title = item.get('title', '').lower()
+            norm_key = re.sub(r'[\s\W_]+', '', raw_title[:18])
+            if norm_key in seen_keys:
+                return None
+
+            # Color check: if color mismatch, replace image with color-aware photo or enforce color
+            item_color = (item.get('color') or '').lower()
+            if req_color and item_color and req_color != item_color and req_color not in item_color:
+                item['color'] = preferences.get('color')
+                item['image_url'] = get_color_aware_photo(item.get('subcategory') or req_subcat, req_color)
+
+            # Image validity check: replace logo/hanger with color-aware photo
+            if not is_valid_garment_image(item.get('image_url')):
+                item['image_url'] = get_color_aware_photo(item.get('subcategory') or req_subcat, item.get('color') or req_color)
+
+            seen_keys.add(norm_key)
+            yielded_count += 1
+            return item
+
+        # 1. Process Gemini Flash grounded item candidates one by one
+        if flash_garments and isinstance(flash_garments, list):
+            for idx, fg in enumerate(flash_garments):
+                if isinstance(fg, dict) and fg.get('title'):
+                    title = fg.get('title', 'Online Garment')
+                    brand = fg.get('brand') or 'Online Store'
+                    url = unwrap_redirect_url(fg.get('url') or '#')
+                    price = float(fg.get('price') or 39.99)
+                    img_url = fg.get('image_url')
+
+                    # If URL is category listing page or missing product image, scrape item image
+                    if (not img_url or not is_valid_garment_image(img_url)) and url and url.startswith('http') and not is_category_url(url):
+                        resolved_img = GarmentSearchService._resolve_product_image_from_url(url)
+                        if is_valid_garment_image(resolved_img):
+                            img_url = resolved_img
+
+                    if not is_valid_garment_image(img_url):
+                        img_url = get_color_aware_photo(req_subcat, fg.get('color') or req_color)
+
+                    candidate = {
+                        "id": f"flash_grounding_{idx}",
+                        "title": title,
+                        "brand": brand,
+                        "category": preferences.get('category') or "Upper body",
+                        "subcategory": req_subcat,
+                        "gender": preferences.get('gender') or "unisex",
+                        "price": price,
+                        "currency": "$",
+                        "color": fg.get('color') or preferences.get('color') or "Black",
+                        "colors_available": [fg.get('color')] if fg.get('color') else [],
+                        "sizes_available": ["S", "M", "L"],
+                        "style": "Modern",
+                        "url": url,
+                        "image_url": img_url,
+                        "description": f"{title} from {brand}",
+                        "tryon_ready": True
+                    }
+
+                    validated = try_format_and_validate(candidate)
+                    if validated:
+                        yield validated
+                        if yielded_count >= limit:
+                            return
+
+        # 2. Process Curated & Database catalog candidates matching request
+        all_catalog = CURATED_GARMENT_CATALOG + GarmentSearchService._get_db_garments()
+        for candidate in all_catalog:
+            score = GarmentSearchService._calculate_relevance_score(candidate, preferences)
+            if score >= 0.5:
+                candidate_copy = dict(candidate)
+                candidate_copy['relevance_score'] = round(score, 2)
+                validated = try_format_and_validate(candidate_copy)
+                if validated:
+                    yield validated
+                    if yielded_count >= limit:
+                        return
 
     @staticmethod
     def search_garments(preferences: Dict[str, Any], limit: int = 6, flash_garments: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
@@ -521,7 +657,7 @@ class GarmentSearchService:
                 if isinstance(fg, dict) and fg.get('title'):
                     title = fg.get('title', 'Online Garment')
                     brand = fg.get('brand') or 'Online Store'
-                    url = fg.get('url') or '#'
+                    url = unwrap_redirect_url(fg.get('url') or '#')
                     price = float(fg.get('price') or 39.99)
                     img_url = fg.get('image_url')
                     if not img_url or not isinstance(img_url, str) or not img_url.startswith('http'):

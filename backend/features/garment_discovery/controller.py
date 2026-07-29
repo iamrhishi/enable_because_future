@@ -9,7 +9,8 @@ Endpoints:
 - POST   /api/garment-discovery/refine
 """
 
-from flask import Blueprint, request, jsonify
+import json
+from flask import Blueprint, request, jsonify, Response, stream_with_context
 from shared.models.discovery import DiscoverySession, DiscoveryMessage
 from features.garment_discovery.ai_engine import ConversationalAIEngine
 from features.garment_discovery.search_service import GarmentSearchService
@@ -119,22 +120,20 @@ def delete_session(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@garment_discovery_bp.route('/chat/stream', methods=['POST'])
 @garment_discovery_bp.route('/chat', methods=['POST'])
 def chat():
     """
-    Conversational turn endpoint.
-    Body:
-    {
-       "session_id": "optional-uuid",
-       "message": "User text prompt",
-       "preferences_override": {}
-    }
+    Conversational turn endpoint with optional SSE streaming.
+    Supports standard JSON response or Server-Sent Events (SSE) streaming when calling
+    /chat/stream or passing ?stream=true.
     """
     try:
         data = request.get_json() or {}
         user_message = data.get('message', '').strip()
         session_id = data.get('session_id')
         user_id = data.get('user_id') or _get_request_user_id()
+        is_stream = request.args.get('stream') == 'true' or request.path.endswith('/stream') or data.get('stream') == True
 
         if not user_message:
             return jsonify({"success": False, "error": "Message content is required"}), 400
@@ -177,7 +176,42 @@ def chat():
         extracted_prefs = ai_result.get('extracted_preferences', {})
         session.update_preferences(extracted_prefs)
 
-        # Perform garment discovery search if ready or requested
+        if is_stream:
+            def generate_sse():
+                # 1. Yield session & intent context
+                yield f"data: {json.dumps({'type': 'session', 'session_id': session.session_id, 'preferences': session.preferences, 'intent': ai_result.get('intent')})}\n\n"
+
+                # 2. Yield assistant text message immediately
+                reply_text = ai_result.get('reply_text', '')
+                yield f"data: {json.dumps({'type': 'text', 'content': reply_text})}\n\n"
+
+                # 3. Stream garments progressively as discovered/scraped
+                discovered_garments = []
+                if ai_result.get('ready_to_search') or ai_result.get('intent') in ['search_garments', 'refine_search']:
+                    flash_garments = ai_result.get('live_garments', [])
+                    for garment in GarmentSearchService.search_garments_stream(session.preferences, limit=6, flash_garments=flash_garments):
+                        discovered_garments.append(garment)
+                        yield f"data: {json.dumps({'type': 'garment', 'garment': garment})}\n\n"
+
+                # 4. Save to database
+                assistant_msg = DiscoveryMessage.create(
+                    session_id=session.session_id,
+                    sender='assistant',
+                    content=reply_text,
+                    garments=discovered_garments,
+                    metadata={
+                        "intent": ai_result.get('intent'),
+                        "suggested_followups": ai_result.get('suggested_followups', []),
+                        "search_query": ai_result.get('search_query', '')
+                    }
+                )
+
+                # 5. Yield completion event
+                yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id, 'suggested_followups': ai_result.get('suggested_followups', [])})}\n\n"
+
+            return Response(stream_with_context(generate_sse()), mimetype='text/event-stream')
+
+        # Standard non-streaming REST Response
         discovered_garments = []
         if ai_result.get('ready_to_search') or ai_result.get('intent') in ['search_garments', 'refine_search']:
             flash_garments = ai_result.get('live_garments', [])
