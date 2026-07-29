@@ -775,27 +775,20 @@ def create_tryon_job():
         if not garment_image:
             return error_response_from_string('garment_image, wardrobe_item_id, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
         
-        # Preprocess garment image(s) and remove background using rembg
+        # Preprocess (validate/resize/normalize) garment image(s). Background removal
+        # (rembg) is deliberately NOT done here - it's the slow, variable-latency step
+        # (can take 1-50+s) and belongs in the async worker (job_queue._process_job),
+        # not in the request handler the client is waiting on for job_id/status=queued.
         try:
-            from features.tryon.service import _remove_background_local
             if isinstance(garment_image, list):
                 garment_image = [preprocess_image(img, resize=True, normalize=True) for img in garment_image]
-                garment_image = [_remove_background_local(img) for img in garment_image]
-                logger.info(f"create_tryon_job: Preprocessed and background removed for {len(garment_image)} garment images")
+                logger.info(f"create_tryon_job: Preprocessed {len(garment_image)} garment images")
             else:
                 garment_image = preprocess_image(garment_image, resize=True, normalize=True)
-                garment_image = _remove_background_local(garment_image)
-                logger.info("create_tryon_job: Preprocessed and background removed for garment image")
-            # Add detailed logging for garment image after preprocessing
-            if garment_image is None or (isinstance(garment_image, bytes) and len(garment_image) == 0):
-                logger.error("create_tryon_job: ERROR - Garment image is None or empty after preprocessing/background removal")
-            elif isinstance(garment_image, bytes):
-                logger.info(f"create_tryon_job: Garment image bytes length after preprocessing: {len(garment_image)}")
-            elif isinstance(garment_image, list):
-                logger.info(f"create_tryon_job: Garment image list length after preprocessing: {len(garment_image)}")
+                logger.info(f"create_tryon_job: Preprocessed garment image, {len(garment_image)} bytes")
         except Exception as e:
-            logger.exception(f"create_tryon_job: Garment image preprocessing or background removal failed: {str(e)}")
-            return error_response_from_string(f'Garment image validation or background removal failed: {str(e)}', 400, 'VALIDATION_ERROR')
+            logger.exception(f"create_tryon_job: Garment image preprocessing failed: {str(e)}")
+            return error_response_from_string(f'Garment image validation failed: {str(e)}', 400, 'VALIDATION_ERROR')
         
         # Get garment_type from form or options, or use detected type
         if 'garment_type' in request.form:

@@ -134,19 +134,29 @@ class JobQueue:
             self._update_job_status(job_id, 'processing', progress=10)
 
             # Import here to avoid circular imports
-            from features.tryon.service import process_tryon
-            
+            from features.tryon.service import process_tryon, _remove_background_local
+
+            # Remove garment background here (in the worker, not the request handler) -
+            # rembg can take anywhere from 1-50+s and the client is waiting on job
+            # creation, not on this. Preprocessing/validation already ran synchronously
+            # in the request handler (cheap, so it's fine to fail fast there).
+            garment_image = job_data['garment_image']
+            if isinstance(garment_image, list):
+                garment_image = [_remove_background_local(img) for img in garment_image]
+            else:
+                garment_image = _remove_background_local(garment_image)
+
             # Process try-on with timeout check
             logger.info(f"JobQueue._process_job: Calling process_tryon for job {job_id}")
-            
+
             # Check timeout before processing
             elapsed = time.time() - start_time
             if elapsed > JOB_TIMEOUT_SECONDS:
                 raise ValidationError(f"Job timeout: {elapsed:.1f}s > {JOB_TIMEOUT_SECONDS}s")
-            
+
             result_data = process_tryon(
                 job_data['person_image'],
-                job_data['garment_image'],
+                garment_image,
                 job_data.get('garment_type', 'upper'),
                 job_data.get('garment_details', None),  # Pass garment details for Gemini
                 job_data.get('options', {})
