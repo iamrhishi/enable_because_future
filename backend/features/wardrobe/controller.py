@@ -12,9 +12,9 @@ from shared.storage import get_storage_service
 from features.wardrobe.extractors import BrandExtractorFactory
 from shared.garment_utils import categorize_garment
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
-from shared.validators import validate_url
+from shared.validators import validate_public_url as validate_url
 from shared.errors import ValidationError, NotFoundError
 from shared.logger import logger
 import base64
@@ -81,7 +81,7 @@ def get_wardrobe_options():
         
     except Exception as e:
         logger.exception(f"get_wardrobe_options: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== CATEGORY MANAGEMENT =====
@@ -146,7 +146,7 @@ def create_category():
         
     except Exception as e:
         logger.exception(f"create_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories', methods=['GET'])
@@ -212,7 +212,7 @@ def get_categories():
         
     except Exception as e:
         logger.exception(f"get_categories: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/category-sections', methods=['GET'])
@@ -233,7 +233,7 @@ def get_category_sections():
         
     except Exception as e:
         logger.exception(f"get_category_sections: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/category-sections', methods=['POST'])
@@ -290,7 +290,7 @@ def create_category_section():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_category_section: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['GET'])
@@ -315,7 +315,7 @@ def get_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"get_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['PUT'])
@@ -365,7 +365,7 @@ def update_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"update_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/categories/<int:category_id>', methods=['DELETE'])
@@ -392,7 +392,7 @@ def delete_category(category_id: int):
         
     except Exception as e:
         logger.exception(f"delete_category: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== GARMENT MANAGEMENT =====
@@ -438,19 +438,47 @@ def add_garment():
             )
             
             # Use brand-specific extractor
-            extractor = BrandExtractorFactory.get_extractor(garment_url)
-            product_info = extractor.extract_product_info(garment_url)
+            try:
+                extractor = BrandExtractorFactory.get_extractor(garment_url)
+                product_info = extractor.extract_product_info(garment_url)
+            except Exception as e:
+                logger.warning(f"add_garment: BrandExtractor failed for URL {garment_url}: {str(e)}")
+                product_info = None
+
+            provided_image_url = form_data.get('image_url') or data.get('image_url')
             
-            # Fetch first image from extracted images
-            if product_info.get('images'):
+            # Fetch first image from extracted images or fallback to provided image_url
+            if product_info and product_info.get('images'):
                 try:
                     garment_image = fetch_image_from_url(product_info['images'][0])
                     garment_image = preprocess_image(garment_image, resize=True, normalize=True)
                 except Exception as e:
-                    logger.warning(f"add_garment: Failed to fetch image from URL: {str(e)}")
-                    return error_response_from_string(f'Failed to fetch image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+                    logger.warning(f"add_garment: Failed to fetch image from extracted URL: {str(e)}")
+                    if provided_image_url:
+                        try:
+                            garment_image = fetch_image_from_url(provided_image_url)
+                            garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                        except Exception as ex:
+                            return error_response_from_string(f'Failed to fetch image from URL: {str(ex)}', 400, 'VALIDATION_ERROR')
+                    else:
+                        return error_response_from_string(f'Failed to fetch image from URL: {str(e)}', 400, 'VALIDATION_ERROR')
+            elif provided_image_url:
+                try:
+                    garment_image = fetch_image_from_url(provided_image_url)
+                    garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+                except Exception as e:
+                    return error_response_from_string(f'Failed to fetch provided image_url: {str(e)}', 400, 'VALIDATION_ERROR')
             else:
                 return error_response_from_string('No images found in product URL', 400, 'VALIDATION_ERROR')
+
+        # Method 3: Direct image URL
+        elif 'image_url' in form_data or data.get('image_url'):
+            provided_image_url = form_data.get('image_url') or data.get('image_url')
+            try:
+                garment_image = fetch_image_from_url(provided_image_url)
+                garment_image = preprocess_image(garment_image, resize=True, normalize=True)
+            except Exception as e:
+                return error_response_from_string(f'Failed to fetch image_url: {str(e)}', 400, 'VALIDATION_ERROR')
         
         if not garment_image:
             return error_response_from_string('garment_image or garment_url required', 400, 'VALIDATION_ERROR')
@@ -459,7 +487,13 @@ def add_garment():
         category_section = form_data.get('category_section') or data.get('category_section')
         category = form_data.get('category') or data.get('category')
         custom_category_name = form_data.get('custom_category_name') or data.get('custom_category_name')
-        category_id = form_data.get('category_id') or data.get('category_id')
+        category_id_raw = form_data.get('category_id') or data.get('category_id')
+        category_id = None
+        if category_id_raw is not None and str(category_id_raw).strip().lower() not in ('null', 'undefined', ''):
+            try:
+                category_id = int(category_id_raw)
+            except (ValueError, TypeError):
+                category_id = None
         
         # Validate category_section if provided
         if category_section:
@@ -495,15 +529,19 @@ def add_garment():
         # Validate category
         if custom_category_name:
             # Verify custom category exists
-            if category_id:
-                cat = WardrobeCategory.get_by_id(int(category_id), user_id)
+            if category_id is not None:
+                cat = WardrobeCategory.get_by_id(category_id, user_id)
                 if not cat:
                     return error_response_from_string('Category not found', 404, 'NOT_FOUND')
         elif category is not None and category not in ['upper', 'lower']:
             return error_response_from_string('Category must be "upper" or "lower" if not using custom category', 400, 'VALIDATION_ERROR')
         
         # Auto-categorize if not provided
-        title = product_info.get('title') if product_info else form_data.get('title') or data.get('title')
+        # User form_data takes priority over scraped product_info
+        form_title = (form_data.get('title') or data.get('title') or '').strip()
+        scraped_title = (product_info.get('title') or '').strip() if product_info else ''
+        title = form_title if form_title else (scraped_title if scraped_title else None)
+
         if not category or category == 'upper':  # Default categorization
             categorization = categorize_garment(title=title)
             category = categorization['category']
@@ -540,12 +578,29 @@ def add_garment():
                 if total_percentage != 100:
                     return error_response_from_string('Fabric percentages must sum to 100%', 400, 'VALIDATION_ERROR')
                 fabric = json.dumps(fabric_input)
+        elif product_info and product_info.get('fabric'):
+            import json
+            fabric = json.dumps(product_info.get('fabric'))
         
         # Get care_instructions, size, description, url
         care_instructions = form_data.get('care_instructions') or data.get('care_instructions')
         size = form_data.get('size') or data.get('size')
-        description = form_data.get('description') or data.get('description')
+        # User-entered description takes priority; fall back to the scraped
+        # description (same override pattern as title/brand/color above) -
+        # otherwise the scraped description is cached but never actually used.
+        description = (
+            form_data.get('description') or data.get('description')
+            or (product_info.get('description') if product_info else None)
+        )
         url = form_data.get('url') or data.get('url') or garment_url
+
+        form_brand = (form_data.get('brand') or data.get('brand') or '').strip()
+        scraped_brand = (product_info.get('brand') or '').strip() if product_info else ''
+        brand = form_brand if form_brand else (scraped_brand if scraped_brand else None)
+
+        form_color = (form_data.get('color') or data.get('color') or '').strip()
+        scraped_color = (product_info.get('colors', [None])[0] or '').strip() if product_info and product_info.get('colors') else ''
+        color = form_color if form_color else (scraped_color if scraped_color else None)
 
         # Check for duplicate URL in same category_section
         if url:
@@ -568,11 +623,11 @@ def add_garment():
             image_path=image_url,
             category=category if not custom_category_name else None,
             custom_category_name=custom_category_name,
-            category_id=int(category_id) if category_id else None,
+            category_id=category_id,
             category_section=category_section,
             garment_category_type=garment_type,
-            brand=product_info.get('brand') if product_info else form_data.get('brand') or data.get('brand'),
-            color=product_info.get('colors', [None])[0] if product_info and product_info.get('colors') else form_data.get('color') or data.get('color'),
+            brand=brand,
+            color=color,
             is_external=bool(garment_url),
             title=title,
             fabric=fabric,
@@ -601,7 +656,7 @@ def add_garment():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"add_garment: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items', methods=['GET'])
@@ -683,7 +738,7 @@ def get_wardrobe_items():
         
     except Exception as e:
         logger.exception(f"get_wardrobe_items: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['GET'])
@@ -714,7 +769,7 @@ def get_wardrobe_item(item_id: int):
         
     except Exception as e:
         logger.exception(f"get_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['PUT'])
@@ -866,7 +921,7 @@ def update_wardrobe_item(item_id: int):
         
     except Exception as e:
         logger.exception(f"update_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/items/<int:item_id>', methods=['DELETE'])
@@ -904,7 +959,7 @@ def delete_wardrobe_item(item_id: int):
 
     except Exception as e:
         logger.exception(f"delete_wardrobe_item: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/wishlist/<int:item_id>', methods=['DELETE'])
@@ -949,7 +1004,7 @@ def remove_from_wishlist(item_id: int):
 
     except Exception as e:
         logger.exception(f"remove_from_wishlist: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @wardrobe_bp.route('/wishlist/<int:item_id>/move-to-wardrobe', methods=['POST'])
@@ -1013,7 +1068,7 @@ def move_from_wishlist_to_wardrobe(item_id: int):
 
     except Exception as e:
         logger.exception(f"move_from_wishlist_to_wardrobe: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== GARMENT EXTRACTION FROM URL =====
@@ -1064,6 +1119,8 @@ def extract_garment_from_url():
                 cached_dict['sizes'] = json.loads(cached_dict['sizes'])
             if cached_dict.get('colors'):
                 cached_dict['colors'] = json.loads(cached_dict['colors'])
+            if cached_dict.get('fabric'):
+                cached_dict['fabric'] = json.loads(cached_dict['fabric'])
             logger.info(f"extract_garment_from_url: EXIT - Returning cached data")
             return success_response(data=cached_dict)
         
@@ -1080,13 +1137,14 @@ def extract_garment_from_url():
         # Cache the result
         try:
             db_manager.get_lastrowid(
-                """INSERT INTO garment_metadata (url, title, price, images, sizes, colors, brand)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO garment_metadata (url, title, price, images, sizes, colors, brand, fabric)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (url, product_info.get('title'), product_info.get('price'),
                  json.dumps(product_info.get('images', [])),
                  json.dumps(product_info.get('sizes', [])),
                  json.dumps(product_info.get('colors', [])),
-                 product_info.get('brand'))
+                 product_info.get('brand'),
+                 json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None)
             )
         except Exception as e:
             logger.warning(f"extract_garment_from_url: Failed to cache: {str(e)}")
@@ -1099,7 +1157,7 @@ def extract_garment_from_url():
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"extract_garment_from_url: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 # ===== EXTENSION SPECIFIC ENDPOINTS =====
@@ -1200,7 +1258,7 @@ def save_extracted_garment():
         
     except Exception as e:
         logger.exception(f"save_extracted_garment: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Failed to save garment: {str(e)}', 500)
+        return server_error_response(e, context='Failed to save garment', status_code=500)
 
 
 # ===== SEARCH =====
@@ -1234,7 +1292,7 @@ def search_garments():
 
         if url:
             # Extract product info from URL
-            from shared.validators import validate_url
+            from shared.validators import validate_public_url as validate_url
             validated_url = validate_url(url)
 
             extractor = BrandExtractorFactory.get_extractor(validated_url)
@@ -1255,6 +1313,7 @@ def search_garments():
                 'brand': product_info.get('brand'),
                 'imageURL': image_url,
                 'category': category,
+                'fabric': product_info.get('fabric'),
                 'isRecent': False
             })
 
@@ -1294,4 +1353,4 @@ def search_garments():
 
     except Exception as e:
         logger.exception(f"search_garments: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Search failed: {str(e)}', 500)
+        return server_error_response(e, context='Search failed', status_code=500)

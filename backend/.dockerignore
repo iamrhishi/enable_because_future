@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.env
+.env.bak
+*.env
+database.db
+logs/
+images/
+docs/
+tests/
+nohup.out
+*.log
+.DS_Store

@@ -383,14 +383,19 @@ class WardrobeCategory:
             'blazers': 'Blazer.jpeg',
             'jackets': 'Jackets.jpeg',
             'pullover_cardigans': 'Pullover.jpeg',
+            'pullover': 'Pullover.jpeg',
             'shirts': 'Shirts.jpeg',
             'tops': 'Tops.jpeg',
             't_shirts': 'Tshirt.jpeg',
+            'others': 'Other.jpeg',
             # Lower body
             'jeans': 'Jeans.jpeg',
             'trousers': 'Trousers.jpeg',
+            'long_trousers': 'Trousers.jpeg',
             'shorts': 'Shorts.jpeg',
+            'short_trousers': 'Shorts.jpeg',
             'skirts': 'Skirts.jpeg',
+            'leggings': 'Legging & Joggers.jpeg',
             'legging & joggers': 'Legging & Joggers.jpeg',
             # Accessories / footwear
             'sneakers': 'Sneakers.jpeg',
@@ -421,13 +426,18 @@ class WardrobeCategory:
                 'blazers',
                 'jackets',
                 'pullover_cardigans',
+                'pullover',
                 'shirts',
                 'tops',
                 't_shirts',
+                'others',
                 'jeans',
                 'trousers',
+                'long_trousers',
                 'shorts',
+                'short_trousers',
                 'skirts',
+                'leggings',
                 'legging & joggers',
                 'sneakers',
                 'sandals',
@@ -452,23 +462,26 @@ class WardrobeCategory:
             if not categories:
                 defaults = [
                     # Upper body
-                    ('upper_body', 'blazers', 'Blazers', 1),
-                    ('upper_body', 'jackets', 'Jackets', 2),
-                    ('upper_body', 'pullover_cardigans', 'Pullover', 3),
-                    ('upper_body', 'shirts', 'Shirts', 4),
-                    ('upper_body', 'tops', 'Tops', 5),
-                    ('upper_body', 't_shirts', 'T-shirts', 6),
+                    ('upper_body', 't_shirts', 'T-shirts', 1),
+                    ('upper_body', 'shirts', 'Shirts', 2),
+                    ('upper_body', 'tops', 'Tops', 3),
+                    ('upper_body', 'pullover_cardigans', 'Pullover', 4),
+                    ('upper_body', 'jackets', 'Jackets', 5),
+                    ('upper_body', 'blazers', 'Blazers', 6),
+                    ('upper_body', 'others', 'Others', 99),
                     # Lower body
-                    ('lower_body', 'jeans', 'Jeans', 1),
-                    ('lower_body', 'trousers', 'Trousers', 2),
-                    ('lower_body', 'shorts', 'Shorts', 3),
+                    ('lower_body', 'long_trousers', 'Long Trousers', 1),
+                    ('lower_body', 'short_trousers', 'Short Trousers', 2),
+                    ('lower_body', 'jeans', 'Jeans', 3),
                     ('lower_body', 'skirts', 'Skirts', 4),
-                    ('lower_body', 'legging & joggers', 'Legging & Joggers', 5),
+                    ('lower_body', 'leggings', 'Leggings', 5),
+                    ('lower_body', 'others', 'Others', 99),
                     # Accessories / footwear
                     ('accessoires', 'sneakers', 'Sneakers', 1),
                     ('accessoires', 'sandals', 'Sandals', 2),
                     ('accessoires', 'bags', 'Bags', 3),
                     ('accessoires', 'caps', 'Caps', 4),
+                    ('accessoires', 'others', 'Others', 99),
                     # Misc
                     ('wishlist', 'wishlist', 'Wishlist', 99),
                 ]
@@ -498,7 +511,7 @@ class WardrobeCategory:
                 cat['icon_name'] = computed_icon
                 cat['icon_url'] = cls._get_default_icon_url(computed_icon)
                 filtered.append(cat)
-            logger.info(f"WardrobeCategory.get_platform_categories: EXIT - Found {len(categories)} categories")
+            logger.info(f"WardrobeCategory.get_platform_categories: EXIT - Found {len(filtered)} categories")
             return filtered
         except Exception as e:
             logger.exception(f"WardrobeCategory.get_platform_categories: EXIT - Error: {str(e)}")

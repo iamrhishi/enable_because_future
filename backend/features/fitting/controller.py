@@ -8,7 +8,7 @@ from flask import Blueprint, request
 import json
 from features.body_measurements.model import BodyMeasurements
 from shared.database import db_manager
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.logger import logger
 
@@ -195,7 +195,7 @@ def check_fit():
         
     except Exception as e:
         logger.exception(f"check_fit: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @fitting_bp.route('/size-recommendation', methods=['GET'])
@@ -286,7 +286,7 @@ def get_size_recommendation():
         
     except Exception as e:
         logger.exception(f"get_size_recommendation: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 @fitting_bp.route('/analyze-fit', methods=['POST'])
@@ -595,7 +595,7 @@ def analyze_fit():
         
     except Exception as e:
         logger.exception(f"analyze_fit: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error', status_code=500)
 
 
 

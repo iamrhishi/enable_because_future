@@ -65,11 +65,23 @@ class Config:
     JOB_STATUS_POLL_INTERVAL_MS = max(250, min(_job_status_poll_interval_ms_raw, 30000))
 
     # CORS Configuration
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
+    # No safe wildcard default: require explicit origins in every environment.
+    CORS_ORIGINS = [o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()]
     
     # Local File Storage Configuration
     IMAGES_DIR = os.environ.get('IMAGES_DIR', 'images')  # Base directory for storing images
     IMAGES_BASE_URL = os.environ.get('IMAGES_BASE_URL', '/images')  # Base URL for serving images
+
+    # Cloud Storage (GCS) Configuration - when GCS_BUCKET_NAME is set, image
+    # storage uses this bucket instead of local disk (required on Cloud Run,
+    # whose filesystem is ephemeral). Unset by default for local dev.
+    GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', '')
+    GCS_SIGNED_URL_EXPIRATION_HOURS = int(os.environ.get('GCS_SIGNED_URL_EXPIRATION_HOURS', '24'))
+    # Fallback target for signed-URL self-impersonation, used only if the
+    # ambient runtime credentials don't already expose service_account_email.
+    GCS_SIGNING_SERVICE_ACCOUNT = os.environ.get(
+        'GCS_SIGNING_SERVICE_ACCOUNT', 'bcf-cloudrun@becausefuture.iam.gserviceaccount.com'
+    )
     
     # Scraping Configuration (optional)
     # Proxy support - set ENABLE_PROXY=true to enable
@@ -91,8 +103,9 @@ class Config:
 
     # Mixer-Service API Configuration (specialized virtual try-on model)
     MIXER_SERVICE_URL = os.environ.get('MIXER_SERVICE_URL', 'https://api.becausefuture.tech/mixer-service/tryon')
-    MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', 'becausefuture')
-    MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', 'becausefuture!2025')
+    # No hardcoded credential defaults: must be set via env/Secret Manager.
+    MIXER_SERVICE_USERNAME = os.environ.get('MIXER_SERVICE_USERNAME', '')
+    MIXER_SERVICE_PASSWORD = os.environ.get('MIXER_SERVICE_PASSWORD', '')
 
     # Lovable/Supabase API Configuration (for sizing/garment data)
     LOVABLE_API_BASE = os.environ.get('LOVABLE_API_BASE', 'https://ccjdxxgoahfsxnlthxmm.supabase.co/functions/v1')
@@ -113,11 +126,16 @@ class Config:
     def validate():
         """Validate that all required configuration is present"""
         required_vars = []
-        
-        if not Config.SECRET_KEY or Config.SECRET_KEY == 'dev-secret-key-change-in-production':
+
+        using_default_secret = not Config.SECRET_KEY or Config.SECRET_KEY == 'dev-secret-key-change-in-production'
+        if using_default_secret:
+            if Config.FLASK_ENV == 'production':
+                raise RuntimeError(
+                    "SECRET_KEY is unset or using the known default value. "
+                    "Refusing to start in production - set SECRET_KEY (and JWT_SECRET_KEY) via env/Secret Manager."
+                )
             required_vars.append('SECRET_KEY (using default - change in production)')
-        
-        
+
         if not Config.ENABLE_PROXY:
             msg = (
                 "Proxy support is disabled (ENABLE_PROXY=False). "

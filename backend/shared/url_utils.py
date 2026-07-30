@@ -22,8 +22,12 @@ def to_absolute_url(relative_url: str) -> str:
     if relative_url.startswith('http://') or relative_url.startswith('https://') or relative_url.startswith('data:'):
         return relative_url
     
-    # Get base URL from request
-    base_url = request.url_root.rstrip('/')
+    # Get base URL from request or fallback
+    try:
+        base_url = request.url_root.rstrip('/')
+    except (RuntimeError, AttributeError, Exception):
+        import os
+        base_url = os.getenv('BASE_URL', 'http://localhost:5001').rstrip('/')
     
     # Ensure relative_url starts with /
     if not relative_url.startswith('/'):

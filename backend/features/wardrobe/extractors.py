@@ -16,6 +16,95 @@ from shared.errors import ExternalServiceError
 from config import Config
 
 
+def extract_fabric_from_text(text: str) -> Optional[List[Dict]]:
+    if not text:
+        return None
+    
+    # Common material names mapping to standard names
+    material_mapping = {
+        'cotton': 'cotton',
+        'polyester': 'polyester',
+        'elastane': 'elasthan',
+        'elasthan': 'elasthan',
+        'spandex': 'elasthan',
+        'lycra': 'elasthan',
+        'wool': 'wool',
+        'cashmere': 'cashmere',
+        'viscose': 'viscose',
+        'rayon': 'viscose',
+        'lyocell': 'lyocell',
+        'tencel': 'lyocell',
+        'silk': 'silk',
+        'polyamide': 'other',
+        'nylon': 'other',
+        'linen': 'other',
+        'acrylic': 'other',
+        'polyurethane': 'other',
+        'leather': 'other',
+    }
+    
+    matches = []
+    text_lower = text.lower()
+    
+    # Pattern 1: <number>% <material>
+    p1 = re.findall(r'(\d+)\s*%\s*([a-z\s-]{3,30})', text_lower)
+    for pct_str, mat_str in p1:
+        try:
+            pct = int(pct_str)
+            mat_words = [w.strip() for w in re.split(r'[^a-z-]', mat_str) if w.strip()]
+            matched_material = None
+            for word in mat_words:
+                if word in material_mapping:
+                    matched_material = material_mapping[word]
+                    break
+            if matched_material:
+                matches.append((matched_material, pct))
+            elif mat_words:
+                matches.append((mat_words[0], pct))
+        except:
+            continue
+            
+    # Pattern 2: <material> <number>%
+    p2 = re.findall(r'([a-z\s-]{3,30})\s*(\d+)\s*%', text_lower)
+    for mat_str, pct_str in p2:
+        try:
+            pct = int(pct_str)
+            mat_words = [w.strip() for w in re.split(r'[^a-z-]', mat_str) if w.strip()]
+            matched_material = None
+            for word in mat_words:
+                if word in material_mapping:
+                    matched_material = material_mapping[word]
+                    break
+            if matched_material:
+                matches.append((matched_material, pct))
+            elif mat_words:
+                matches.append((mat_words[-1], pct))
+        except:
+            continue
+                
+    if not matches:
+        return None
+        
+    unique_matches = {}
+    for mat, pct in matches:
+        if mat not in unique_matches or pct > unique_matches[mat]:
+            unique_matches[mat] = pct
+            
+    result = [{"name": mat, "percentage": pct} for mat, pct in unique_matches.items()]
+    
+    total = sum(item["percentage"] for item in result)
+    if total > 0:
+        if total != 100:
+            for item in result:
+                item["percentage"] = round((item["percentage"] / total) * 100)
+            new_total = sum(item["percentage"] for item in result)
+            if new_total != 100 and len(result) > 0:
+                result[0]["percentage"] += (100 - new_total)
+        return result
+        
+    return None
+
+
 class BrandExtractor(ABC):
     """Abstract base class for brand-specific product extractors"""
     
@@ -109,6 +198,9 @@ class DefaultExtractor(BrandExtractor):
                 if opt.get('name', '').lower() in ('color', 'colour', 'farbe'):
                     colors = opt.get('values', [])
 
+            desc_html = product.get('body_html') or ''
+            desc_text = BeautifulSoup(desc_html, 'html.parser').get_text() if desc_html else ''
+            fabric = extract_fabric_from_text(desc_text)
             logger.info(f"DefaultExtractor._try_shopify_json: Success - {title}")
             return {
                 'title': title,
@@ -118,6 +210,7 @@ class DefaultExtractor(BrandExtractor):
                 'colors': colors,
                 'brand': vendor,
                 'description': product.get('body_html'),
+                'fabric': fabric
             }
         except Exception as e:
             logger.debug(f"DefaultExtractor._try_shopify_json: Not a Shopify store or failed - {str(e)}")
@@ -227,6 +320,16 @@ class DefaultExtractor(BrandExtractor):
                 domain = domain.replace('www.', '').split('.')[0]
                 brand = domain.title()
 
+            # Try to extract description and fabric
+            description_elem = soup.find(class_=re.compile('description|details|composition|materials|content', re.I)) or \
+                               soup.find(id=re.compile('description|details|composition|materials|content', re.I))
+            description_text = description_elem.get_text().strip() if description_elem else ''
+            if not description_text:
+                meta_desc = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
+                description_text = meta_desc.get('content', '') if meta_desc else ''
+            
+            fabric = extract_fabric_from_text(description_text) if description_text else None
+
             result = {
                 'title': title,
                 'price': price,
@@ -234,7 +337,8 @@ class DefaultExtractor(BrandExtractor):
                 'sizes': sizes,
                 'colors': colors,
                 'brand': brand,
-                'description': None
+                'description': description_text if description_text else None,
+                'fabric': fabric
             }
             
             logger.info(f"DefaultExtractor.extract_product_info: EXIT - Success, found {len(images)} images")
@@ -395,6 +499,9 @@ class ZaraExtractor(BrandExtractor):
             elif isinstance(offers, list) and len(offers) > 0 and 'price' in offers[0]:
                 price = str(offers[0]['price'])
         
+        desc = data.get('description', '')
+        fabric = extract_fabric_from_text(desc) if desc else None
+        
         return {
             'title': data.get('name', ''),
             'price': price,
@@ -402,7 +509,8 @@ class ZaraExtractor(BrandExtractor):
             'sizes': [],
             'colors': [],
             'brand': 'Zara',
-            'description': data.get('description', '')
+            'description': desc,
+            'fabric': fabric
         }
     
     def _normalize_image_url(self, img_url: Optional[str], base_url: str) -> Optional[str]:
@@ -514,6 +622,9 @@ class ZaraExtractor(BrandExtractor):
             if 'images' in product:
                 images = product['images'] if isinstance(product['images'], list) else [product['images']]
         
+        desc = data.get('description', '')
+        fabric = extract_fabric_from_text(desc) if desc else None
+        
         return {
             'title': data.get('name') or data.get('title') or (data.get('product', {}).get('name') if isinstance(data.get('product'), dict) else None),
             'price': data.get('price') or (data.get('product', {}).get('price') if isinstance(data.get('product'), dict) else None),
@@ -521,7 +632,8 @@ class ZaraExtractor(BrandExtractor):
             'sizes': data.get('sizes', []),
             'colors': data.get('colors', []),
             'brand': 'Zara',
-            'description': data.get('description', '')
+            'description': desc,
+            'fabric': fabric
         }
     
     def _extract_with_scrapy(self, selector: Selector, soup: BeautifulSoup, html_content: str, url: str) -> Dict:
@@ -672,6 +784,28 @@ class ZaraExtractor(BrandExtractor):
             except:
                 continue
         
+        # Try to find materials / composition text
+        materials_text = ""
+        materials_selectors = [
+            '.product-detail-extra-detail__materials::text',
+            '.product-detail-extra-detail__materials-container::text',
+            '.product-detail-extra-detail__materials-container *::text',
+            '.product-detail-info__materials::text',
+            '.product-detail-info__materials *::text',
+            'div.materials::text',
+            'span.materials::text',
+        ]
+        for sel in materials_selectors:
+            try:
+                text_list = selector.css(sel).getall()
+                if text_list:
+                    materials_text += " " + " ".join([t.strip() for t in text_list if t.strip()])
+            except:
+                continue
+                
+        fabric_text = (materials_text + " " + (description or "")).strip()
+        fabric = extract_fabric_from_text(fabric_text) if fabric_text else None
+        
         result = {
             'title': title,
             'price': price,
@@ -679,7 +813,8 @@ class ZaraExtractor(BrandExtractor):
             'sizes': sizes[:10],
             'colors': colors[:10],
             'brand': 'Zara',
-            'description': description
+            'description': description,
+            'fabric': fabric
         }
         
         logger.info(f"ZaraExtractor._extract_with_scrapy: EXIT - Found {len(images)} images, title={title[:50] if title else 'None'}")
@@ -789,6 +924,17 @@ class ZaraExtractor(BrandExtractor):
             if color_text and len(color_text) < 50 and color_text.lower() not in ['select', 'choose', 'color']:
                 if color_text not in colors:
                     colors.append(color_text)
+        # Extract description and materials
+        description = None
+        desc_elem = soup.find(class_=re.compile('description|details|composition|materials|content', re.I)) or \
+                    soup.find(id=re.compile('description|details|composition|materials|content', re.I))
+        if desc_elem:
+            description = desc_elem.get_text().strip()
+            
+        materials_elems = soup.find_all(class_=re.compile('materials|composition|extra-detail', re.I))
+        materials_text = " ".join([elem.get_text() for elem in materials_elems])
+        fabric_text = (materials_text + " " + (description or "")).strip()
+        fabric = extract_fabric_from_text(fabric_text) if fabric_text else None
         
         result = {
             'title': title,
@@ -797,7 +943,8 @@ class ZaraExtractor(BrandExtractor):
             'sizes': sizes[:10],
             'colors': colors[:10],
             'brand': 'Zara',
-            'description': None
+            'description': description,
+            'fabric': fabric
         }
         
         logger.info(f"ZaraExtractor._extract_from_html: EXIT - Found {len(images)} images")

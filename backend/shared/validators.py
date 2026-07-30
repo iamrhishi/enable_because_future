@@ -2,7 +2,11 @@
 Input validation utilities
 """
 
+import ipaddress
 import re
+import socket
+from urllib.parse import urlparse
+
 from shared.errors import ValidationError
 
 
@@ -66,10 +70,42 @@ def validate_url(url: str) -> str:
     """Validate URL format"""
     if not url:
         raise ValidationError("URL is required", field='url')
-    
+
     pattern = r'^https?://.+'
     if not re.match(pattern, url):
         raise ValidationError("Invalid URL format", field='url')
-    
+
     return url.strip()
+
+
+def validate_public_url(url: str) -> str:
+    """
+    Validate URL format and ensure it does not resolve to a private/internal/
+    loopback/link-local address (e.g. cloud metadata, localhost, internal
+    services). Use this instead of validate_url for any URL the server will
+    fetch on the caller's behalf, to prevent SSRF.
+    """
+    url = validate_url(url)
+
+    hostname = urlparse(url).hostname
+    if not hostname:
+        raise ValidationError("Invalid URL: missing host", field='url')
+
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise ValidationError("Could not resolve URL host", field='url')
+
+    for _, _, _, _, sockaddr in addr_infos:
+        try:
+            ip = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            raise ValidationError("URL resolves to a disallowed address", field='url')
+        if (
+            ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+        ):
+            raise ValidationError("URL resolves to a disallowed address", field='url')
+
+    return url
 

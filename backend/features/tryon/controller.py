@@ -6,6 +6,7 @@ JWT authentication via @require_auth decorator extracts user_id from token
 
 from flask import Blueprint, request, send_file, Response
 from io import BytesIO
+from datetime import datetime, timedelta
 import base64
 import json
 import requests
@@ -15,11 +16,12 @@ from shared.database import db_manager
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
 from shared.garment_utils import categorize_garment
 from shared.models.user import User
-from shared.response import success_response, error_response_from_string
+from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.analytics import track_event, EventType
 from shared.logger import logger
 from shared.validators import validate_url
+from shared.errors import ValidationError
 
 tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 
@@ -68,6 +70,14 @@ def create_tryon_job():
         if not person_image:
             return error_response_from_string('selfie/person_image required or save avatar first', 400, 'VALIDATION_ERROR')
         
+        # If new selfie/person_image file was uploaded, validate single-person / single-face requirement
+        if 'selfie' in request.files or 'person_image' in request.files:
+            from shared.avatar_person_check import reject_message_if_avatar_not_person
+            rejection = reject_message_if_avatar_not_person(person_image)
+            if rejection:
+                logger.warning(f"create_tryon_job: Uploaded person image rejected for user_id={user_id}: {rejection}")
+                return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
+
         # Preprocess person image
         try:
             person_image = preprocess_image(person_image, resize=True, normalize=True)
@@ -80,6 +90,8 @@ def create_tryon_job():
         garment_type = 'upper'  # Default
         garment_details = None  # Will be populated from scraping or request
         source_garment_url = None  # Track the source URL for saving with try-on result
+        skip_bg_removal = False  # True when garment_image is already background-removed (cached)
+        wardrobe_item_for_bg_cache = None  # (item_id, user_id) to cache bg-removal result against, if applicable
         
         # Method 1: Wardrobe item ID (most efficient - uses already stored images)
         if 'wardrobe_item_id' in request.form or 'item_id' in request.form:
@@ -101,21 +113,37 @@ def create_tryon_job():
                 # Load image from storage
                 if wardrobe_item.image_path:
                     storage_service = get_storage_service()
-                    # Extract path from image_path (remove /images/ prefix if present)
-                    image_path = wardrobe_item.image_path
-                    if image_path.startswith('/images/'):
-                        image_path = image_path.replace('/images/', '')
-                    
-                    try:
-                        garment_image = storage_service.get_image(image_path)
-                        logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id} image from storage")
-                    except Exception as storage_error:
-                        logger.warning(f"create_tryon_job: Failed to load image from storage: {str(storage_error)}")
-                        return error_response_from_string(
-                            f'Failed to load image for wardrobe item {wardrobe_item_id}: {str(storage_error)}',
-                            404,
-                            'NOT_FOUND'
-                        )
+
+                    # Prefer the cached background-removed version if this item has
+                    # already been used in a try-on before - skips rembg entirely.
+                    if wardrobe_item.image_path_no_bg:
+                        no_bg_path = wardrobe_item.image_path_no_bg
+                        if no_bg_path.startswith('/images/'):
+                            no_bg_path = no_bg_path.replace('/images/', '')
+                        try:
+                            garment_image = storage_service.get_image(no_bg_path)
+                            skip_bg_removal = True
+                            logger.info(f"create_tryon_job: Using cached background-removed image for wardrobe item {wardrobe_item_id}")
+                        except Exception as cache_error:
+                            logger.warning(f"create_tryon_job: Failed to load cached bg-removed image, falling back to original: {str(cache_error)}")
+
+                    if garment_image is None:
+                        # Extract path from image_path (remove /images/ prefix if present)
+                        image_path = wardrobe_item.image_path
+                        if image_path.startswith('/images/'):
+                            image_path = image_path.replace('/images/', '')
+
+                        try:
+                            garment_image = storage_service.get_image(image_path)
+                            wardrobe_item_for_bg_cache = (wardrobe_item_id, user_id)
+                            logger.info(f"create_tryon_job: Using wardrobe item {wardrobe_item_id} image from storage")
+                        except Exception as storage_error:
+                            logger.warning(f"create_tryon_job: Failed to load image from storage: {str(storage_error)}")
+                            return error_response_from_string(
+                                f'Failed to load image for wardrobe item {wardrobe_item_id}: {str(storage_error)}',
+                                404,
+                                'NOT_FOUND'
+                            )
                 else:
                     return error_response_from_string(
                         f'Wardrobe item {wardrobe_item_id} has no image',
@@ -216,7 +244,7 @@ def create_tryon_job():
                         options = {}
                 
                 garment_index = options.get('garment_index', 0)
-                if garment_index >= len(item_urls):
+                if not isinstance(garment_index, int) or garment_index < 0 or garment_index >= len(item_urls):
                     garment_index = 0
                 
                 item_url = item_urls[garment_index]
@@ -551,10 +579,19 @@ def create_tryon_job():
                                     all_images = product_info.get('images', [])
                                     images_to_cache = all_images[:2]  # Only cache first 2 images
                                     db_manager.execute_query(
-                                        """INSERT OR REPLACE INTO garment_metadata 
+                                        """INSERT INTO garment_metadata
                                            (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                                        (item_url, 
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                           ON CONFLICT (url) DO UPDATE SET
+                                               title = EXCLUDED.title,
+                                               price = EXCLUDED.price,
+                                               images = EXCLUDED.images,
+                                               sizes = EXCLUDED.sizes,
+                                               colors = EXCLUDED.colors,
+                                               brand = EXCLUDED.brand,
+                                               updated_at = CURRENT_TIMESTAMP,
+                                               last_accessed_at = CURRENT_TIMESTAMP""",
+                                        (item_url,
                                          product_info.get('title'), 
                                          product_info.get('price'),
                                          json_module.dumps(images_to_cache),  # Only cache 1-2 images, not all
@@ -568,10 +605,19 @@ def create_tryon_job():
                                     if base_url != item_url:
                                         try:
                                             db_manager.execute_query(
-                                                """INSERT OR REPLACE INTO garment_metadata 
+                                                """INSERT INTO garment_metadata
                                                    (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
-                                                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                                                (base_url, 
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                                   ON CONFLICT (url) DO UPDATE SET
+                                                       title = EXCLUDED.title,
+                                                       price = EXCLUDED.price,
+                                                       images = EXCLUDED.images,
+                                                       sizes = EXCLUDED.sizes,
+                                                       colors = EXCLUDED.colors,
+                                                       brand = EXCLUDED.brand,
+                                                       updated_at = CURRENT_TIMESTAMP,
+                                                       last_accessed_at = CURRENT_TIMESTAMP""",
+                                                (base_url,
                                                  product_info.get('title'), 
                                                  product_info.get('price'),
                                                  json_module.dumps(images_to_cache),  # Only cache 1-2 images
@@ -585,14 +631,15 @@ def create_tryon_job():
                                     
                                     # Cleanup old cached images (TTL: 1 day of inactivity)
                                     try:
+                                        cache_cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
                                         db_manager.execute_query(
-                                            """UPDATE garment_metadata 
+                                            """UPDATE garment_metadata
                                                SET cached_image_1 = NULL, cached_image_1_url = NULL,
                                                    cached_image_2 = NULL, cached_image_2_url = NULL,
                                                    cached_images_at = NULL
-                                               WHERE last_accessed_at < datetime('now', '-1 day') 
+                                               WHERE last_accessed_at < ?
                                                  AND cached_images_at IS NOT NULL""",
-                                            ()
+                                            (cache_cutoff,)
                                         )
                                         logger.debug(f"create_tryon_job: Cleaned up cached images older than 1 day")
                                     except Exception as cleanup_error:
@@ -663,10 +710,10 @@ def create_tryon_job():
                                             import traceback
                                             logger.debug(traceback.format_exc())
                                     
-                                    # Get categorization from product title
+                                    # Get categorization from product info & URL
                                     categorization = None
-                                    if product_info.get('title'):
-                                        categorization = categorize_garment(title=product_info.get('title'))
+                                    first_img = product_info.get('images', [None])[0] if product_info and product_info.get('images') else None
+                                    categorization = categorize_garment(title=product_info.get('title'), url=item_url, image_url=first_img)
                                     
                                     # Build garment_details from product_info for Gemini
                                     garment_details = {
@@ -746,27 +793,20 @@ def create_tryon_job():
         if not garment_image:
             return error_response_from_string('garment_image, wardrobe_item_id, garment_url, or item_urls required', 400, 'VALIDATION_ERROR')
         
-        # Preprocess garment image(s) and remove background using rembg
+        # Preprocess (validate/resize/normalize) garment image(s). Background removal
+        # (rembg) is deliberately NOT done here - it's the slow, variable-latency step
+        # (can take 1-50+s) and belongs in the async worker (job_queue._process_job),
+        # not in the request handler the client is waiting on for job_id/status=queued.
         try:
-            from features.tryon.service import _remove_background_local
             if isinstance(garment_image, list):
                 garment_image = [preprocess_image(img, resize=True, normalize=True) for img in garment_image]
-                garment_image = [_remove_background_local(img) for img in garment_image]
-                logger.info(f"create_tryon_job: Preprocessed and background removed for {len(garment_image)} garment images")
+                logger.info(f"create_tryon_job: Preprocessed {len(garment_image)} garment images")
             else:
                 garment_image = preprocess_image(garment_image, resize=True, normalize=True)
-                garment_image = _remove_background_local(garment_image)
-                logger.info("create_tryon_job: Preprocessed and background removed for garment image")
-            # Add detailed logging for garment image after preprocessing
-            if garment_image is None or (isinstance(garment_image, bytes) and len(garment_image) == 0):
-                logger.error("create_tryon_job: ERROR - Garment image is None or empty after preprocessing/background removal")
-            elif isinstance(garment_image, bytes):
-                logger.info(f"create_tryon_job: Garment image bytes length after preprocessing: {len(garment_image)}")
-            elif isinstance(garment_image, list):
-                logger.info(f"create_tryon_job: Garment image list length after preprocessing: {len(garment_image)}")
+                logger.info(f"create_tryon_job: Preprocessed garment image, {len(garment_image)} bytes")
         except Exception as e:
-            logger.exception(f"create_tryon_job: Garment image preprocessing or background removal failed: {str(e)}")
-            return error_response_from_string(f'Garment image validation or background removal failed: {str(e)}', 400, 'VALIDATION_ERROR')
+            logger.exception(f"create_tryon_job: Garment image preprocessing failed: {str(e)}")
+            return error_response_from_string(f'Garment image validation failed: {str(e)}', 400, 'VALIDATION_ERROR')
         
         # Get garment_type from form or options, or use detected type
         if 'garment_type' in request.form:
@@ -796,7 +836,14 @@ def create_tryon_job():
         
         if 'num_inference_steps' in request.form:
             options['num_inference_steps'] = request.form.get('num_inference_steps')
-        
+
+        # Client's device display aspect ratio (width/height, e.g. "0.46" for a
+        # typical tall phone screen) - used to size the output canvas so it fills
+        # the device's screen better than a fixed 3:4 canvas would. Optional -
+        # falls back to the default 3:4 canvas if not provided or invalid.
+        if 'aspect_ratio' in request.form:
+            options['aspect_ratio'] = request.form.get('aspect_ratio')
+
         # Get garment_details from options if not already set from scraping
         if not garment_details and 'garment_details' in options:
             garment_details = options.get('garment_details')
@@ -816,7 +863,9 @@ def create_tryon_job():
             garment_type=garment_type,
             garment_details=garment_details,  # Pass garment details to Gemini
             options=options,
-            garment_url=source_garment_url  # Save source URL with try-on result
+            garment_url=source_garment_url,  # Save source URL with try-on result
+            skip_bg_removal=skip_bg_removal,
+            wardrobe_item_for_bg_cache=wardrobe_item_for_bg_cache
         )
 
         # Track try-on start (get user email for reporting)
@@ -998,18 +1047,12 @@ def create_multi_tryon_job():
         if 'top_garment_image' in request.files:
             top_image = request.files['top_garment_image'].read()
         elif 'top_garment_url' in request.form:
-            import requests
-            response = requests.get(request.form.get('top_garment_url'), timeout=10)
-            if response.status_code == 200:
-                top_image = response.content
-        
+            top_image = fetch_image_from_url(request.form.get('top_garment_url'))
+
         if 'bottom_garment_image' in request.files:
             bottom_image = request.files['bottom_garment_image'].read()
         elif 'bottom_garment_url' in request.form:
-            import requests
-            response = requests.get(request.form.get('bottom_garment_url'), timeout=10)
-            if response.status_code == 200:
-                bottom_image = response.content
+            bottom_image = fetch_image_from_url(request.form.get('bottom_garment_url'))
         
         if not top_image or not bottom_image:
             return error_response_from_string('Both top and bottom garments required', 400, 'VALIDATION_ERROR')
@@ -1035,9 +1078,12 @@ def create_multi_tryon_job():
             status_code=202
         )
         
+    except ValidationError as e:
+        logger.warning(f"create_multi_tryon_job: EXIT - ValidationError: {str(e)}")
+        return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
     except Exception as e:
         logger.exception(f"create_multi_tryon_job: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 @tryon_bp.route('/tryon/layered', methods=['POST'])

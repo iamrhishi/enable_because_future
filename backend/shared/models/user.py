@@ -17,8 +17,8 @@ class User:
                  first_name: str = None, last_name: str = None,
                  password: str = None, gender: str = None,
                  birthday: str = None, street: str = None, city: str = None,
-                 postal_code: str = None, avatar: bytes = None, avatar_path: str = None, 
-                 is_active: bool = True,
+                 postal_code: str = None, country: str = None, avatar: bytes = None, avatar_path: str = None,
+                 is_active: bool = True, is_deleted: bool = False, deleted_at: str = None,
                  id: int = None, created_at: str = None, updated_at: str = None,
                  **kwargs):
         self.id = id
@@ -32,9 +32,12 @@ class User:
         self.street = street
         self.city = city
         self.postal_code = postal_code
+        self.country = country
         self.avatar = avatar  # Legacy BLOB field (for backward compatibility)
         self.avatar_path = avatar_path  # New file path field
         self.is_active = is_active
+        self.is_deleted = is_deleted
+        self.deleted_at = deleted_at
         self.created_at = created_at
         self.updated_at = updated_at
         self._data = kwargs
@@ -99,13 +102,13 @@ class User:
             if existing:
                 # Update existing user
                 db_manager.execute_query(
-                    """UPDATE users SET email = ?, first_name = ?, last_name = ?, 
-                       gender = ?, birthday = ?, street = ?, city = ?, postal_code = ?, avatar = ?,
-                       avatar_path = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                    """UPDATE users SET email = ?, first_name = ?, last_name = ?,
+                       gender = ?, birthday = ?, street = ?, city = ?, postal_code = ?, country = ?, avatar = ?,
+                       avatar_path = ?, is_active = ?, is_deleted = ?, deleted_at = ?, updated_at = CURRENT_TIMESTAMP
                        WHERE userid = ?""",
                     (self.email, self.first_name, self.last_name, self.gender,
-                     self.birthday, self.street, self.city, self.postal_code, self.avatar,
-                     self.avatar_path, self.is_active, self.userid)
+                     self.birthday, self.street, self.city, self.postal_code, self.country, self.avatar,
+                     self.avatar_path, bool(self.is_active), bool(self.is_deleted), self.deleted_at, self.userid)
                 )
                 # Update password if provided
                 if hashed_password:
@@ -122,10 +125,10 @@ class User:
                 
                 user_id = db_manager.get_lastrowid(
                     """INSERT INTO users (userid, email, first_name, last_name, password,
-                       gender, birthday, street, city, postal_code, avatar, avatar_path, is_active)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       gender, birthday, street, city, postal_code, country, avatar, avatar_path, is_active)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.userid, self.email, self.first_name, self.last_name, hashed_password,
-                     self.gender, self.birthday, self.street, self.city, self.postal_code, self.avatar, self.avatar_path, self.is_active)
+                     self.gender, self.birthday, self.street, self.city, self.postal_code, self.country, self.avatar, self.avatar_path, bool(self.is_active))
                 )
                 self.id = user_id
                 self.password = hashed_password  # Store hashed version
@@ -140,7 +143,7 @@ class User:
         try:
             allowed_fields = [
                 'email', 'first_name', 'last_name', 'gender', 'birthday',
-                'street', 'city', 'postal_code', 'avatar', 'avatar_path', 'is_active'
+                'street', 'city', 'postal_code', 'country', 'avatar', 'avatar_path', 'is_active'
             ]
             
             for field in allowed_fields:
@@ -164,8 +167,14 @@ class User:
 
     def deactivate_account(self) -> None:
         """
-        Soft-delete account: disable login and scrub personal data.
-        Keeps the user row for referential integrity with related records.
+        Delete account: disable login and erase all personal data associated
+        with this user, for GDPR Article 17 (Right to Erasure) / Apple App
+        Store 5.1.1(v) compliance. The user row itself is kept (scrubbed) so
+        other tables' foreign keys and historical references stay valid, but
+        every piece of the user's actual personal data - profile fields,
+        body measurements, wardrobe items and their images, try-on jobs and
+        results (including body/avatar photos), and their identifying fields
+        in analytics - is erased or anonymized, not merely hidden.
         """
         logger.info(f"User.deactivate_account: ENTRY - userid={self.userid}")
         if not self.is_active:
@@ -174,20 +183,44 @@ class User:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
         deleted_email = f"deleted_{self.userid}_{timestamp}@account-deleted.invalid"
 
-        if self.avatar_path:
-            try:
-                from shared.storage import get_storage_service
-                get_storage_service().delete_image(self.avatar_path)
-            except Exception as e:
-                logger.warning(f"User.deactivate_account: Failed to delete avatar file: {e}")
-
+        # Erase all stored files for this user (avatars, wardrobe images,
+        # try-on result photos) regardless of how many items exist.
         try:
-            db_manager.execute_query(
-                "DELETE FROM body_measurements WHERE user_id = ?",
-                (self.userid,)
-            )
+            from shared.storage import get_storage_service
+            storage_service = get_storage_service()
+            for prefix in (f"avatars/{self.userid}/", f"wardrobe/{self.userid}/", f"tryon-results/{self.userid}/"):
+                storage_service.delete_prefix(prefix)
         except Exception as e:
-            logger.warning(f"User.deactivate_account: Failed to delete body measurements: {e}")
+            logger.warning(f"User.deactivate_account: Failed to delete stored files: {e}")
+
+        # Erase rows in every table holding this user's personal data.
+        # tryon_results/wardrobe hold actual body/garment photos as BLOBs -
+        # deleting the rows erases that data directly (no separate storage
+        # cleanup needed for those specific columns).
+        for query in (
+            "DELETE FROM body_measurements WHERE user_id = ?",
+            "DELETE FROM tryon_results WHERE user_id = ?",
+            "DELETE FROM tryon_jobs WHERE user_id = ?",
+            "DELETE FROM wardrobe WHERE user_id = ?",
+            "DELETE FROM wardrobe_categories WHERE user_id = ?",
+        ):
+            try:
+                db_manager.execute_query(query, (self.userid,))
+            except Exception as e:
+                logger.warning(f"User.deactivate_account: Failed running '{query}': {e}")
+
+        # Anonymize (rather than delete) analytics rows: strip identifying
+        # fields but keep event_type/created_at so aggregate dashboards stay
+        # accurate without retaining this user's personal data.
+        for table in ("analytics_events", "analytics_events_archive"):
+            try:
+                db_manager.execute_query(
+                    f"UPDATE {table} SET user_id = NULL, user_email = NULL, "
+                    f"ip_address = NULL, user_agent = NULL WHERE user_id = ?",
+                    (self.userid,)
+                )
+            except Exception as e:
+                logger.warning(f"User.deactivate_account: Failed anonymizing {table}: {e}")
 
         self.email = deleted_email
         self.first_name = None
@@ -197,12 +230,15 @@ class User:
         self.street = None
         self.city = None
         self.postal_code = None
+        self.country = None
         self.avatar = None
         self.avatar_path = None
         self.is_active = False
+        self.is_deleted = True
+        self.deleted_at = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         self.password = secrets.token_urlsafe(32)
         self.save()
-        logger.info(f"User.deactivate_account: EXIT - Account deactivated for userid={self.userid}")
+        logger.info(f"User.deactivate_account: EXIT - Account and all personal data erased for userid={self.userid}")
     
     def to_dict(self, include_avatar: bool = False, include_password: bool = False) -> dict:
         """Convert user to dictionary"""
@@ -239,7 +275,10 @@ class User:
             'street': self.street,
             'city': self.city,
             'postal_code': self.postal_code,
+            'country': self.country,
             'is_active': self.is_active,
+            'is_deleted': self.is_deleted,
+            'deleted_at': self.deleted_at,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             **filtered_data

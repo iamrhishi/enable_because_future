@@ -148,6 +148,46 @@ class StorageService:
             logger.exception(f"StorageService.get_image: EXIT - Error: {str(e)}")
             raise ExternalServiceError(f"Failed to read image: {str(e)}", service='storage')
     
+    def delete_prefix(self, prefix: str) -> int:
+        """
+        Delete every object under a path prefix (e.g. 'wardrobe/user123/').
+        Used for GDPR erasure - removes all of a user's files across
+        avatars/wardrobe/tryon-results in one call, regardless of how many
+        individual items exist.
+
+        Returns:
+            Number of files deleted
+        """
+        prefix = prefix.lstrip('/')
+        full_path = self.images_dir / prefix
+        if not full_path.exists():
+            return 0
+
+        count = 0
+        for f in full_path.rglob('*'):
+            if f.is_file():
+                f.unlink()
+                count += 1
+        import shutil
+        shutil.rmtree(full_path, ignore_errors=True)
+        logger.info(f"StorageService.delete_prefix: Deleted {count} files under {prefix}")
+        return count
+
+    def save_garment_image(self, image_data: bytes, user_id: str, garment_id: str) -> str:
+        """
+        Save a garment image using the standard wardrobe storage convention.
+
+        Args:
+            image_data: Image bytes
+            user_id: Owning user's id
+            garment_id: Garment id
+
+        Returns:
+            URL string (same as upload_image)
+        """
+        file_path = f"wardrobe/{user_id}/{garment_id}.png"
+        return self.upload_image(image_data, file_path, content_type='image/png')
+
     def get_image_path(self, file_path: str) -> Optional[Path]:
         """
         Get full file system path for an image
@@ -173,9 +213,19 @@ class StorageService:
 _storage_service = None
 
 
-def get_storage_service() -> StorageService:
-    """Get or create storage service instance"""
+def get_storage_service():
+    """
+    Get or create the storage service instance.
+
+    Returns a GCS-backed service when Config.GCS_BUCKET_NAME is set (required
+    on Cloud Run - its filesystem is ephemeral and not shared across
+    instances), otherwise the local-disk service used for local dev.
+    """
     global _storage_service
     if _storage_service is None:
-        _storage_service = StorageService()
+        if Config.GCS_BUCKET_NAME:
+            from shared.gcs_storage import GCSStorageService
+            _storage_service = GCSStorageService()
+        else:
+            _storage_service = StorageService()
     return _storage_service
