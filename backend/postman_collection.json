@@ -4183,6 +4183,122 @@
 			]
 		},
 		{
+			"name": "Garment Discovery",
+			"item": [
+				{
+					"name": "Create Discovery Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"user_demo_1\",\n  \"title\": \"Summer Outfit Search\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/sessions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "sessions"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Chat (NLU Discovery Turn)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"session_id\": \"\",\n  \"message\": \"show me some green shirts from Zara or H&M\",\n  \"user_id\": \"user_demo_1\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/chat",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "chat"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refine Discovery Search",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"session_id\": \"\",\n  \"refinement_type\": \"cheaper\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/refine",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "refine"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Session State & History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/sessions/YOUR_SESSION_ID",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "sessions", "YOUR_SESSION_ID"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List User Discovery Sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/sessions?user_id=user_demo_1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "sessions"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "user_demo_1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Discovery Session",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/garment-discovery/sessions/YOUR_SESSION_ID",
+							"host": ["{{base_url}}"],
+							"path": ["api", "garment-discovery", "sessions", "YOUR_SESSION_ID"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Utilities",
 			"item": [
 				{

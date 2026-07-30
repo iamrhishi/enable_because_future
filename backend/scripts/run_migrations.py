@@ -57,6 +57,7 @@ def main():
         (26, 'add_garment_url_to_tryon_jobs', load_migration(26, 'add_garment_url_to_tryon_jobs')),
         (27, 'body_measurements_complete_schema', load_migration(27, 'body_measurements_complete_schema')),
         (28, 'create_analytics_events', load_migration(28, 'create_analytics_events')),
+        (29, 'create_garment_discovery_tables', load_migration(29, 'create_garment_discovery_tables')),
         (30, 'add_country_to_users', load_migration(30, 'add_country_to_users')),
         (31, 'add_fabric_to_garment_metadata', load_migration(31, 'add_fabric_to_garment_metadata')),
         (32, 'seed_all_platform_categories', load_migration(31, 'seed_all_platform_categories')),

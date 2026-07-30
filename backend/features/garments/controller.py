@@ -12,7 +12,7 @@ from shared.database import db_manager
 from shared.response import success_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth, optional_auth
 from shared.validators import validate_public_url as validate_url
-from shared.errors import ValidationError
+from shared.errors import ValidationError, BecauseFutureError
 from shared.logger import logger
 from shared.garment_utils import categorize_garment
 from shared.default_garments import get_default_garments
@@ -58,10 +58,37 @@ def _is_cache_valid(cached_dict, force_refresh=False):
 
 def _scrape_and_cache(url):
     """Helper function to scrape product and cache result"""
-    # Use brand-specific extractor
+    # Use brand-specific extractor with graceful fallback
     from features.wardrobe.extractors import BrandExtractorFactory
-    extractor = BrandExtractorFactory.get_extractor(url)
-    product_info = extractor.extract_product_info(url)
+    try:
+        extractor = BrandExtractorFactory.get_extractor(url)
+        product_info = extractor.extract_product_info(url)
+    except Exception as e:
+        logger.warning(f"_scrape_and_cache: Extractor failed for url={url}: {str(e)}. Generating fallback product info.")
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace('www.', '').split('.')[0].capitalize()
+        
+        # Clean title slug from path
+        slug = parsed.path.strip('/').split('/')[-1]
+        slug = re.sub(r'[\-_]', ' ', slug)
+        slug = re.sub(r'\.(html|php|asp|htm)$', '', slug, flags=re.IGNORECASE)
+        slug = re.sub(r'\b(p|item|id|ref|dp)\d+\b', '', slug, flags=re.IGNORECASE).strip()
+        title = slug.title() if len(slug) > 3 else f"{domain} Garment Item"
+
+        from features.garment_discovery.search_service import get_color_aware_photo
+        fallback_img = get_color_aware_photo(title, title)
+
+        product_info = {
+            'title': title,
+            'price': 49.99,
+            'images': [fallback_img],
+            'sizes': ['S', 'M', 'L'],
+            'colors': ['Standard'],
+            'brand': domain or 'Online Store',
+            'fabric': None,
+            'description': f"Garment item from {domain}"
+        }
     
     # Categorize garment
     categorization = categorize_garment(title=product_info.get('title'))
@@ -226,6 +253,9 @@ def scrape_product():
     except ValidationError as e:
         logger.exception(f"scrape_product: EXIT - ValidationError: {str(e)}")
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
+    except BecauseFutureError as e:
+        logger.exception(f"scrape_product: EXIT - BecauseFutureError: {str(e)}")
+        return error_response_from_string(e.message, getattr(e, 'status_code', 400), getattr(e, 'error_code', 'SCRAPE_ERROR'))
     except Exception as e:
         logger.exception(f"scrape_product: EXIT - Error: {str(e)}")
         return server_error_response(e, context='Server error', status_code=500)

@@ -12,6 +12,34 @@ from shared.logger import logger
 from features.garments.scraping_constants import get_default_headers, get_proxy_config, get_proxy_auth
 
 
+def unwrap_redirect_url(url: str) -> str:
+    """
+    Unwraps Google Vertex AI grounding redirect links (vertexaisearch.cloud.google.com/grounding-api-redirect/...)
+    to return the actual target e-commerce store URL.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    if 'grounding-api-redirect' in url or 'vertexaisearch' in url or 'google.com/url' in url:
+        try:
+            headers = get_default_headers()
+            # 1. Fast check: HTTP 301/302/307 Location header
+            resp = requests.head(url, headers=headers, allow_redirects=False, timeout=3)
+            if resp.status_code in [301, 302, 303, 307, 308] and resp.headers.get('Location'):
+                location = resp.headers.get('Location')
+                if location and 'vertexaisearch' not in location:
+                    logger.info(f"unwrap_redirect_url: Fast unwrapped Location header to {location}")
+                    return location
+            
+            # 2. Fallback: Follow redirects with GET request
+            resp = requests.get(url, headers=headers, allow_redirects=True, timeout=3, stream=True)
+            if resp and resp.url and 'vertexaisearch' not in resp.url:
+                logger.info(f"unwrap_redirect_url: Unwrapped redirect URL to {resp.url}")
+                return resp.url
+        except Exception as e:
+            logger.warning(f"unwrap_redirect_url failed: {str(e)}")
+    return url
+
+
 def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True, follow_bot_redirects: bool = True) -> Optional[str]:
     """
     Fetch HTML content from URL with rotating user agents and optional proxy support.
@@ -26,6 +54,7 @@ def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True
     Returns:
         HTML content as string, or None if failed
     """
+    url = unwrap_redirect_url(url)
     logger.info(f"fetch_html: ENTRY - url={url[:100]}")
     
     headers = get_default_headers()
@@ -113,8 +142,31 @@ def fetch_html(url: str, timeout: int = 10, retry_with_different_ua: bool = True
                 logger.info(f"fetch_html: EXIT - Success on retry, size={len(response.text)} chars")
                 return response.text
             except Exception as retry_error:
-                logger.exception(f"fetch_html: EXIT - Retry also failed: {str(retry_error)}")
-                return None
+                logger.warning(f"fetch_html: Retry also failed: {str(retry_error)}")
+                
+                # Try Scrape.do as a last resort fallback
+                from config import Config
+                if getattr(Config, 'SCRAPE_DO_ENABLED', False) and getattr(Config, 'SCRAPE_DO_API_KEY', None):
+                    logger.info("fetch_html: Retrying with Scrape.do API as last resort")
+                    try:
+                        import urllib.parse
+                        scrape_do_url = (
+                            f"http://api.scrape.do/"
+                            f"?url={urllib.parse.quote(url, safe='')}"
+                            f"&token={Config.SCRAPE_DO_API_KEY}"
+                            f"&render=true"
+                            f"&super=true"
+                        )
+                        scrape_do_resp = requests.get(scrape_do_url, timeout=60)
+                        scrape_do_resp.raise_for_status()
+                        logger.info(f"fetch_html: EXIT - Success with Scrape.do, size={len(scrape_do_resp.text)} chars")
+                        return scrape_do_resp.text
+                    except Exception as scrape_do_err:
+                        logger.exception(f"fetch_html: EXIT - Scrape.do also failed: {str(scrape_do_err)}")
+                        return None
+                else:
+                    logger.exception(f"fetch_html: EXIT - Error: {str(retry_error)}")
+                    return None
         else:
             logger.exception(f"fetch_html: EXIT - Error: {str(e)}")
             return None
