@@ -186,15 +186,15 @@ class DiscoveryMessage:
     ) -> 'DiscoveryMessage':
         garments_json = json.dumps(garments or [])
         metadata_json = json.dumps(metadata or {})
-        
-        db_manager.execute_query(
+
+        message_id = db_manager.get_lastrowid(
             """
             INSERT INTO discovery_messages (session_id, sender, content, garments_json, metadata_json, created_at)
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
             (session_id, sender, content, garments_json, metadata_json)
         )
-        
+
         # Touch session updated_at
         db_manager.execute_query(
             "UPDATE discovery_sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
@@ -202,6 +202,7 @@ class DiscoveryMessage:
         )
 
         return cls(
+            id=message_id,
             session_id=session_id,
             sender=sender,
             content=content,

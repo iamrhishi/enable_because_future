@@ -392,7 +392,7 @@ def estimate_measurements():
                     )
         except Exception as e:
             logger.exception(f"Estimation pipeline failed for user_id={user_id}: {str(e)}")
-            return error_response_from_string(f"Estimation pipeline failed: {str(e)}", 500)
+            return server_error_response(e, context='Estimation pipeline failed')
             
         # 4. Map camelCase estimation results to database snake_case fields
         est_measurements = result["measurements"]
@@ -453,7 +453,7 @@ def estimate_measurements():
         
     except Exception as e:
         logger.exception(f"estimate_measurements: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 @body_measurements_bp.route('/estimate-with-avatar', methods=['POST'])
@@ -612,7 +612,7 @@ def estimate_measurements_with_avatar():
                     )
         except Exception as e:
             logger.exception(f"Estimation pipeline failed for user_id={user_id}: {str(e)}")
-            return error_response_from_string(f"Estimation pipeline failed: {str(e)}", 500)
+            return server_error_response(e, context='Estimation pipeline failed')
             
         # 4. Map camelCase estimation results to database snake_case fields
         est_measurements = result["measurements"]
@@ -673,7 +673,7 @@ def estimate_measurements_with_avatar():
         
     except Exception as e:
         logger.exception(f"estimate_measurements_with_avatar: EXIT - Error: {str(e)}")
-        return error_response_from_string(f'Server error: {str(e)}', 500)
+        return server_error_response(e, context='Server error')
 
 
 

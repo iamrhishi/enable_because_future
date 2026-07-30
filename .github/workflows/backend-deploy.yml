@@ -50,6 +50,10 @@ jobs:
           python -m py_compile app.py
           find shared features scripts -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
 
+      - name: Set up test database
+        working-directory: backend
+        run: python scripts/run_migrations.py
+
       - name: Run tests
         working-directory: backend
         run: |

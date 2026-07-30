@@ -7,6 +7,7 @@ import os
 import json
 import re
 from typing import Dict, Any, List, Optional, Tuple
+from shared.logger import logger
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
@@ -39,7 +40,7 @@ class ConversationalAIEngine:
                 if result:
                     return result
             except Exception as e:
-                print(f"[GarmentDiscovery][AIEngine] Gemini LLM warning: {e}. Using fallback rule engine.")
+                logger.warning(f"ConversationalAIEngine: Gemini LLM warning: {e}. Using fallback rule engine.")
 
         # Enhanced Context-Aware Fashion Assistant Engine
         return ConversationalAIEngine._fallback_rule_engine(
@@ -175,7 +176,7 @@ NEVER phrase suggested_followups as assistant questions (NEVER use "Are you look
                     
                 return res_json
         except Exception as e:
-            print(f"[GarmentDiscovery][Gemini] Warning: {e}")
+            logger.warning(f"ConversationalAIEngine._call_gemini_llm: Warning: {e}")
             return None
 
     @staticmethod

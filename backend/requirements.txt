@@ -8,15 +8,22 @@ python-dotenv==1.2.1
 PyJWT==2.10.1
 google-auth==2.43.0
 google-generativeai==0.8.5
-google-genai
-rembg>=2.0.61
+google-genai==1.55.0
+rembg==2.0.61
 onnxruntime==1.19.2
 opencv-python-headless==4.12.0.88
+# mediapipe pulls in opencv-contrib-python as a transitive dependency, which
+# installs into the same cv2 namespace as opencv-python-headless above - left
+# unpinned it resolved to 5.0.0.93 (installed after, so it wins), silently
+# reintroducing the exact cv2.CascadeClassifier removal that broke avatar
+# person-detection earlier. Pinned to match opencv-python-headless's version
+# exactly (this project always releases all opencv-python variants in lockstep).
+opencv-contrib-python==4.12.0.88
 beautifulsoup4==4.14.3
 boto3==1.42.4
 google-cloud-storage==3.6.0
 scrapy==2.13.4
 openpyxl==3.1.5
-ddgs
-mediapipe
+ddgs==9.14.4
+mediapipe==0.10.31
 pytest>=7.0.0

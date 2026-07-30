@@ -22,6 +22,13 @@ class TestEstimateWithAvatar(unittest.TestCase):
             'Content-Type': 'application/json'
         }
 
+    @unittest.skip(
+        "Integration test, not CI-safe: assumes user '3921f2fb' already exists "
+        "with a real saved avatar photo a person can actually be detected in - "
+        "that's real seeded data from a developer's local database, not "
+        "something a schema migration alone can reproduce in a clean CI runner. "
+        "Run manually against a local dev DB with that user/avatar present."
+    )
     def test_estimate_with_avatar_success(self):
         # We know user '3921f2fb' has a saved avatar. Let's call the endpoint.
         payload = {
@@ -82,6 +89,10 @@ class TestEstimateWithAvatar(unittest.TestCase):
         self.assertFalse(data['success'])
         self.assertIn('Height must be between 50 and 250 cm', data['error'])
 
+    @unittest.skip(
+        "Integration test, not CI-safe: same real-seeded-avatar dependency as "
+        "test_estimate_with_avatar_success above."
+    )
     def test_estimate_with_avatar_explicit_save(self):
         # 1. Fetch current measurements from database to compare
         old_measurements = BodyMeasurements.get_by_user(self.user_id)

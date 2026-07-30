@@ -12,26 +12,33 @@ Endpoints:
 import json
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from shared.models.discovery import DiscoverySession, DiscoveryMessage
+from shared.middleware import optional_auth
+from shared.response import server_error_response
+from shared.logger import logger
 from features.garment_discovery.ai_engine import ConversationalAIEngine
 from features.garment_discovery.search_service import GarmentSearchService
 
 garment_discovery_bp = Blueprint('garment_discovery', __name__, url_prefix='/api/garment-discovery')
 
 def _get_request_user_id() -> str:
-    """Extract user_id from request JSON, headers, or default to guest."""
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        token = auth_header.split(' ')[1]
-        # In simple setup or mock token, use token if format is user_id
-        if token and len(token) < 64:
-            return token
+    """
+    Resolve the effective user_id for this request. A verified JWT (set by
+    @optional_auth on request.user_id) always wins over anything client-
+    supplied - otherwise a logged-in caller could pass someone else's
+    user_id in the body/header and read or delete their discovery sessions.
+    Falls back to a client-supplied id (for guest/pre-signup usage) or
+    'guest' if nothing is present at all.
+    """
+    verified_user_id = getattr(request, 'user_id', None)
+    if verified_user_id:
+        return verified_user_id
 
     user_id = request.headers.get('X-User-ID')
     if user_id:
         return user_id
 
-    if request.is_json and request.get_json():
-        user_id = request.get_json().get('user_id')
+    if request.is_json and request.get_json(silent=True):
+        user_id = request.get_json(silent=True).get('user_id')
         if user_id:
             return user_id
 
@@ -39,11 +46,12 @@ def _get_request_user_id() -> str:
 
 
 @garment_discovery_bp.route('/sessions', methods=['POST'])
+@optional_auth
 def create_session():
     """Start a new conversational discovery session."""
     try:
         data = request.get_json() or {}
-        user_id = data.get('user_id') or _get_request_user_id()
+        user_id = _get_request_user_id()
         title = data.get('title', 'New Garment Discovery')
         initial_preferences = data.get('initial_preferences', {})
 
@@ -68,24 +76,28 @@ def create_session():
             "welcome_message": welcome_msg
         }), 201
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/sessions', methods=['GET'])
+@optional_auth
 def list_sessions():
     """List active and past sessions for user."""
     try:
-        user_id = request.args.get('user_id') or _get_request_user_id()
+        user_id = _get_request_user_id()
         sessions = DiscoverySession.get_user_sessions(user_id=user_id)
         return jsonify({
             "success": True,
             "sessions": [s.to_dict() for s in sessions]
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/sessions/<session_id>', methods=['GET'])
+@optional_auth
 def get_session(session_id):
     """Fetch session context, preference slots, and message history."""
     try:
@@ -100,10 +112,12 @@ def get_session(session_id):
             "history": [m.to_dict() for m in history]
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/sessions/<session_id>', methods=['DELETE'])
+@optional_auth
 def delete_session(session_id):
     """Delete a discovery session and its history."""
     try:
@@ -117,11 +131,13 @@ def delete_session(session_id):
             "message": "Session deleted successfully"
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/chat/stream', methods=['POST'])
 @garment_discovery_bp.route('/chat', methods=['POST'])
+@optional_auth
 def chat():
     """
     Conversational turn endpoint with optional SSE streaming.
@@ -132,7 +148,7 @@ def chat():
         data = request.get_json() or {}
         user_message = data.get('message', '').strip()
         session_id = data.get('session_id')
-        user_id = data.get('user_id') or _get_request_user_id()
+        user_id = _get_request_user_id()
         is_stream = request.args.get('stream') == 'true' or request.path.endswith('/stream') or data.get('stream') == True
 
         if not user_message:
@@ -212,6 +228,14 @@ def chat():
             return Response(stream_with_context(generate_sse()), mimetype='text/event-stream')
 
         # Standard non-streaming REST Response
+        ai_result = ConversationalAIEngine.process_message(
+            user_message=user_message,
+            history=history_dicts,
+            current_preferences=session.preferences,
+            user_profile={"user_id": user_id}
+        )
+        session.update_preferences(ai_result.get('extracted_preferences', {}))
+
         discovered_garments = []
         if ai_result.get('ready_to_search') or ai_result.get('intent') in ['search_garments', 'refine_search']:
             flash_garments = ai_result.get('live_garments', [])
@@ -241,10 +265,12 @@ def chat():
         }), 200
 
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/refine', methods=['POST'])
+@optional_auth
 def refine():
     """
     Refinement endpoint for quick preference tweaks:
@@ -327,10 +353,12 @@ def refine():
         }), 200
 
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
 
 
 @garment_discovery_bp.route('/resolve-image', methods=['POST'])
+@optional_auth
 def resolve_image():
     """
     Lazy-load image resolution endpoint.
@@ -364,4 +392,5 @@ def resolve_image():
             "image_url": img_url
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception(f"garment_discovery: Request failed: {str(e)}")
+        return server_error_response(e, context="Garment discovery request failed")
