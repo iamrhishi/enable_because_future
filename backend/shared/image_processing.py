@@ -598,7 +598,7 @@ def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_m
         return False
 
 
-def is_result_full_body(image_bytes: bytes, min_height_ratio: float = 0.75) -> bool:
+def is_result_full_body(image_bytes: bytes, min_height_ratio: float = 0.75, alpha_threshold: int = 30) -> bool:
     """
     Check whether the subject in image_bytes spans at least min_height_ratio of
     the full image height. Used to catch Gemini generations that technically
@@ -607,18 +607,25 @@ def is_result_full_body(image_bytes: bytes, min_height_ratio: float = 0.75) -> b
     reposition whatever bbox is actually present, it can't recover missing
     lower-body content, so this needs to be caught before that step, while a
     retry with a different seed is still possible.
+
+    Uses an explicit alpha threshold (same approach as clean_and_solidify_alpha_mask)
+    rather than PIL's getbbox(), which treats ANY non-zero pixel across any channel
+    as part of the subject - faint noise/artifacts near the frame edges (which
+    Gemini's raw output isn't guaranteed to be free of) can make getbbox() span
+    the full canvas even when the actual visible figure only fills the top portion.
     """
     try:
+        import numpy as np
         img = Image.open(BytesIO(image_bytes))
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        bbox = img.getbbox()
-        if not bbox:
+        alpha = np.array(img)[:, :, 3]
+        fg_rows = np.where(np.any(alpha > alpha_threshold, axis=1))[0]
+        if fg_rows.size == 0:
             return False
 
-        _, top, _, bottom = bbox
-        bbox_height = bottom - top
+        bbox_height = int(fg_rows[-1] - fg_rows[0] + 1)
         img_height = img.size[1]
         ratio = bbox_height / float(img_height) if img_height else 0.0
         is_full = ratio >= min_height_ratio

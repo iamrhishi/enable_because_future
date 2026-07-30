@@ -947,11 +947,21 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 # catch a half-body/waist-up result here (before normalize_avatar_framing,
                 # which can't recover missing lower-body content) and retry instead of
                 # accepting a bad crop as success.
-                if (
-                    pad_left > 0
-                    and attempt_idx < len(generation_attempts) - 1
-                    and not is_result_full_body(candidate_image_bytes)
-                ):
+                #
+                # Gemini's raw output isn't guaranteed to have a transparent
+                # background (often comes back fully opaque), so alpha-thresholding
+                # the raw bytes directly would always see the whole canvas as
+                # "foreground" and never catch anything. Run background removal
+                # first to get a real foreground mask to check against.
+                is_full_body_result = True
+                if pad_left > 0 and attempt_idx < len(generation_attempts) - 1:
+                    try:
+                        preview_no_bg = _remove_background_local(candidate_image_bytes)
+                        is_full_body_result = is_result_full_body(preview_no_bg)
+                    except Exception as check_error:
+                        logger.warning(f"process_tryon: Full-body check failed: {check_error}, skipping check")
+
+                if not is_full_body_result:
                     logger.warning(
                         "process_tryon: Gemini result isn't full-body on %s (%s/%s); retrying",
                         attempt_name,
