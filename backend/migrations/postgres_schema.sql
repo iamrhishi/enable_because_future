@@ -218,6 +218,32 @@ CREATE TABLE schema_migrations (
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE discovery_sessions (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT UNIQUE NOT NULL,
+    user_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    title TEXT,
+    preferences_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE discovery_messages (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    content TEXT NOT NULL,
+    garments_json TEXT,
+    metadata_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES discovery_sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_discovery_sessions_user_id ON discovery_sessions(user_id);
+CREATE INDEX idx_discovery_sessions_status ON discovery_sessions(status);
+CREATE INDEX idx_discovery_messages_session_id ON discovery_messages(session_id);
+
 -- Single source for the analytics dashboard (Looker Studio): full event
 -- history (archive) plus whatever hasn't been archived/wiped yet (today's
 -- live events), so the dashboard is always current without querying two tables.
