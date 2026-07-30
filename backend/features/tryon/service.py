@@ -930,13 +930,30 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             parsed = _parse_gemini_tryon_image_response(result)
             if parsed[0] == "ok":
                 candidate_image_bytes = parsed[1]
-                from shared.image_processing import is_image_substantially_unchanged
+                from shared.image_processing import is_image_substantially_unchanged, is_result_full_body
                 if (
                     attempt_idx < len(generation_attempts) - 1
                     and is_image_substantially_unchanged(padded_person_image, candidate_image_bytes)
                 ):
                     logger.warning(
                         "process_tryon: Gemini returned an unchanged image on %s (%s/%s); retrying",
+                        attempt_name,
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                    )
+                    continue
+                # If the input was itself a full-body photo (narrow enough to need
+                # padding), Gemini's output should be too. It doesn't always comply -
+                # catch a half-body/waist-up result here (before normalize_avatar_framing,
+                # which can't recover missing lower-body content) and retry instead of
+                # accepting a bad crop as success.
+                if (
+                    pad_left > 0
+                    and attempt_idx < len(generation_attempts) - 1
+                    and not is_result_full_body(candidate_image_bytes)
+                ):
+                    logger.warning(
+                        "process_tryon: Gemini result isn't full-body on %s (%s/%s); retrying",
                         attempt_name,
                         attempt_idx + 1,
                         len(generation_attempts),

@@ -598,5 +598,36 @@ def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_m
         return False
 
 
+def is_result_full_body(image_bytes: bytes, min_height_ratio: float = 0.75) -> bool:
+    """
+    Check whether the subject in image_bytes spans at least min_height_ratio of
+    the full image height. Used to catch Gemini generations that technically
+    succeed (no IMAGE_OTHER error) but render a half-body/waist-up figure when
+    a full-body result was expected - normalize_avatar_framing can only scale/
+    reposition whatever bbox is actually present, it can't recover missing
+    lower-body content, so this needs to be caught before that step, while a
+    retry with a different seed is still possible.
+    """
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        bbox = img.getbbox()
+        if not bbox:
+            return False
+
+        _, top, _, bottom = bbox
+        bbox_height = bottom - top
+        img_height = img.size[1]
+        ratio = bbox_height / float(img_height) if img_height else 0.0
+        is_full = ratio >= min_height_ratio
+        logger.info(f"is_result_full_body: bbox_height_ratio={ratio:.3f}, is_full_body={is_full}")
+        return is_full
+    except Exception as e:
+        logger.warning(f"is_result_full_body error: {e}")
+        return True  # Fail open - don't block a result over a broken check
+
+
 
 
