@@ -19,3 +19,4 @@ scrapy==2.13.4
 openpyxl==3.1.5
 ddgs
 mediapipe
+pytest>=7.0.0
