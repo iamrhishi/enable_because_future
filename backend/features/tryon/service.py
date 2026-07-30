@@ -745,7 +745,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             "- If Image 1 shows a full-body person (head to toe including legs, pants, and shoes), you MUST preserve the full-body framing.\n",
             "- You MUST generate the FULL-BODY of the person from head to toe.\n",
             "- Do NOT crop at the waist, do NOT zoom in, and do NOT generate a half-body or waist-up portrait.\n",
-            "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n\n"
+            "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n",
+            "- Keep BOTH ARMS AND HANDS fully visible within the frame, at the same width/position as Image 1. "
+            "Do NOT crop, cut off, or extend the arms beyond the sides of the frame.\n\n"
         ]
 
         # Add garment details if available
@@ -794,7 +796,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             f"Image 1 shows a person. Image 2 shows a garment.\n"
             f"Edit image 1 so the person wears the garment from image 2 on their {body_location}. "
             "Keep the exact same full-body framing (head to toe including legs, pants, and shoes), pose, face, hair, skin tone, and camera framing as image 1.\n",
-            "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n\n",
+            "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n",
+            "Keep both arms and hands fully visible within the frame, at the same width as image 1 - do not crop them at the sides.\n\n",
             "Match the garment's colors, patterns, cut, neckline, sleeves, hem, and silhouette from image 2 as faithfully as reasonable.\n",
             "Output one photorealistic full image only. No collage, no before/after split, no text, no labels.\n\n",
         ]
@@ -1032,13 +1035,31 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = canvas
                             logger.info(f"process_tryon: Scaled to fit padded canvas: {padded_width}x{padded_height}")
 
-                    # Now crop to extract the original (unpadded) region
+                    # Crop to extract the original (unpadded) region - but only as a
+                    # starting point. Gemini isn't guaranteed to keep the subject
+                    # within that exact window (e.g. it may draw arms/hands wider
+                    # than the source photo); blindly cropping to it would clip
+                    # them. Widen the crop to the actual subject bbox if it extends
+                    # beyond the intended window, same "never crop off body parts"
+                    # principle already used in the non-padded branch below.
                     crop_left = pad_left
                     crop_top = pad_top
                     crop_right = crop_left + original_width
                     crop_bottom = crop_top + original_height
+
+                    subject_bbox = result_img.getbbox()
+                    if subject_bbox:
+                        bbox_left, bbox_top, bbox_right, bbox_bottom = subject_bbox
+                        crop_left = min(crop_left, bbox_left)
+                        crop_top = min(crop_top, bbox_top)
+                        crop_right = max(crop_right, bbox_right)
+                        crop_bottom = max(crop_bottom, bbox_bottom)
+
                     result_img = result_img.crop((crop_left, crop_top, crop_right, crop_bottom))
-                    logger.info(f"process_tryon: Cropped to original dimensions: {original_width}x{original_height}")
+                    logger.info(
+                        f"process_tryon: Cropped to {crop_right - crop_left}x{crop_bottom - crop_top} "
+                        f"(target was {original_width}x{original_height})"
+                    )
 
                 else:
                     # No padding was applied - use original dimension matching logic
