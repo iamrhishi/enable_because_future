@@ -597,7 +597,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         ExternalServiceError: If processing fails
     """
     logger.info(f"process_tryon: ENTRY - garment_type={garment_type}, garment_details={garment_details}")
-    
+
+    from shared.image_processing import canvas_size_from_aspect_ratio
+    target_canvas_size = canvas_size_from_aspect_ratio((options or {}).get('aspect_ratio'))
+
     try:
         if not Config.GEMINI_API_KEY:
             raise ExternalServiceError("Gemini API key not configured", service='gemini')
@@ -1149,9 +1152,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 result_img.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
                 
-                # Apply normalize_avatar_framing to format final canvas framing nicely
+                # Apply normalize_avatar_framing to format final canvas framing nicely,
+                # matching the client device's aspect ratio if one was supplied
                 from shared.image_processing import normalize_avatar_framing
-                result_image_bytes = normalize_avatar_framing(result_image_bytes)
+                result_image_bytes = normalize_avatar_framing(result_image_bytes, target_canvas_size=target_canvas_size)
                 logger.info(f"process_tryon: Final output dimensions after framing: {result_img.size[0]}x{result_img.size[1]}")
             except Exception as resize_error:
                 logger.warning(f"process_tryon: Dimension matching failed: {str(resize_error)}, using result as-is")

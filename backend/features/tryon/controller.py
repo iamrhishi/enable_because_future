@@ -836,7 +836,14 @@ def create_tryon_job():
         
         if 'num_inference_steps' in request.form:
             options['num_inference_steps'] = request.form.get('num_inference_steps')
-        
+
+        # Client's device display aspect ratio (width/height, e.g. "0.46" for a
+        # typical tall phone screen) - used to size the output canvas so it fills
+        # the device's screen better than a fixed 3:4 canvas would. Optional -
+        # falls back to the default 3:4 canvas if not provided or invalid.
+        if 'aspect_ratio' in request.form:
+            options['aspect_ratio'] = request.form.get('aspect_ratio')
+
         # Get garment_details from options if not already set from scraping
         if not garment_details and 'garment_details' in options:
             garment_details = options.get('garment_details')
