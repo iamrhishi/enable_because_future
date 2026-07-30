@@ -167,15 +167,33 @@ def reject_message_if_avatar_not_person(
                 merged.append(box)
         return merged
 
-    # Detect faces
-    raw_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
-    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=min_size)
+    # Detect faces. minNeighbors=5 (was 4) - confirmed via a real false-positive
+    # report that 4 lets weak single-window detections through on background
+    # clutter (e.g. a shelving unit's grid pattern triggered a spurious profile-
+    # face hit); 5 requires more agreeing detection windows and eliminated it
+    # without affecting the real face, which both cascades detect confidently.
+    raw_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=min_size)
+    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=min_size)
 
     all_raw_faces = []
     if raw_faces_f is not None and len(raw_faces_f) > 0:
         all_raw_faces.extend(raw_faces_f)
     if raw_faces_p is not None and len(raw_faces_p) > 0:
         all_raw_faces.extend(raw_faces_p)
+
+    # A real human face cannot appear in the bottom ~20% of a photo of a
+    # standing person (that's floor/shoe territory) - the same real-world
+    # report also showed a false-positive detection there (confirmed via the
+    # actual reported image: a confident false hit at floor level survived
+    # even minNeighbors=8, so raising the threshold alone wasn't enough).
+    # A second real person's face in an actual group photo would be at
+    # roughly the same height as the first, never down at floor level, so
+    # this doesn't weaken the multi-person check itself.
+    max_face_center_y = h * 0.80
+    all_raw_faces = [
+        (x, y, fw, fh) for (x, y, fw, fh) in all_raw_faces
+        if (y + fh / 2.0) < max_face_center_y
+    ]
 
     unique_faces = _merge_overlapping_boxes(all_raw_faces, iou_threshold=0.3)
     total_faces = len(unique_faces)
