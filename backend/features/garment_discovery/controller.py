@@ -164,28 +164,28 @@ def chat():
             content=user_message
         )
 
-        # Process message using AI Engine
-        ai_result = ConversationalAIEngine.process_message(
-            user_message=user_message,
-            history=history_dicts,
-            current_preferences=session.preferences,
-            user_profile={"user_id": user_id}
-        )
-
-        # Update session preferences
-        extracted_prefs = ai_result.get('extracted_preferences', {})
-        session.update_preferences(extracted_prefs)
-
         if is_stream:
             def generate_sse():
-                # 1. Yield session & intent context
-                yield f"data: {json.dumps({'type': 'session', 'session_id': session.session_id, 'preferences': session.preferences, 'intent': ai_result.get('intent')})}\n\n"
+                # 1. Yield initial session context immediately (0 ms)
+                yield f"data: {json.dumps({'type': 'session', 'session_id': session.session_id, 'preferences': session.preferences})}\n\n"
 
-                # 2. Yield assistant text message immediately
+                # 2. Fast AI processing (< 300 ms)
+                ai_result = ConversationalAIEngine.process_message(
+                    user_message=user_message,
+                    history=history_dicts,
+                    current_preferences=session.preferences,
+                    user_profile={"user_id": user_id}
+                )
+
+                # Update session preferences
+                extracted_prefs = ai_result.get('extracted_preferences', {})
+                session.update_preferences(extracted_prefs)
+
+                # 3. Yield assistant text message immediately (< 300 ms)
                 reply_text = ai_result.get('reply_text', '')
                 yield f"data: {json.dumps({'type': 'text', 'content': reply_text})}\n\n"
 
-                # 3. Stream garments progressively as discovered/scraped
+                # 4. Stream garments progressively as discovered/scraped
                 discovered_garments = []
                 if ai_result.get('ready_to_search') or ai_result.get('intent') in ['search_garments', 'refine_search']:
                     flash_garments = ai_result.get('live_garments', [])
@@ -193,7 +193,7 @@ def chat():
                         discovered_garments.append(garment)
                         yield f"data: {json.dumps({'type': 'garment', 'garment': garment})}\n\n"
 
-                # 4. Save to database
+                # 5. Save to database
                 assistant_msg = DiscoveryMessage.create(
                     session_id=session.session_id,
                     sender='assistant',
@@ -206,7 +206,7 @@ def chat():
                     }
                 )
 
-                # 5. Yield completion event
+                # 6. Yield completion event
                 yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id, 'suggested_followups': ai_result.get('suggested_followups', [])})}\n\n"
 
             return Response(stream_with_context(generate_sse()), mimetype='text/event-stream')

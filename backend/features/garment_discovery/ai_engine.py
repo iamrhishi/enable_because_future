@@ -133,7 +133,7 @@ Respond in STRICT JSON format with the following keys:
             prompt = f"{system_instruction}\n\nRecent History:\n{history_str}\n\nUSER LATEST MESSAGE: {user_message}"
 
             config = types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())]
+                temperature=0.7,
             )
 
             response = client.models.generate_content(
