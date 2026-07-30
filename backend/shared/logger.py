@@ -19,6 +19,13 @@ class JSONFormatter(logging.Formatter):
         """Format log record as JSON"""
         log_data = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
+            # Cloud Logging only auto-populates its native severity field (used
+            # for severity-based filtering, alerting, and log-based metrics) from
+            # a JSON key literally named "severity" - https://cloud.google.com/logging/docs/structured-logging
+            # 'level' alone (kept for backward compat) is invisible to all of that;
+            # every logger.error()/exception() call was silently landing as
+            # unclassified "DEFAULT" severity in Cloud Logging until this was added.
+            'severity': record.levelname,
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
