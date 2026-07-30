@@ -692,10 +692,18 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             logger.info(f"process_tryon: Original person image: {original_width}x{original_height}, ratio={input_ratio:.3f}")
             api_canvas_width, api_canvas_height = original_width, original_height
 
-            # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing
+            # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing.
+            # Previously always padded to a fixed 0.75 (3:4) - for very narrow inputs
+            # (e.g. ~0.35) that more than doubled the canvas width, and Gemini appeared
+            # to respond to that extreme a transformation by rendering the person
+            # notably shorter than full-frame (feet/shoes cut off), even with explicit
+            # prompt instructions to preserve them. Capping how much ratio we add (+0.2)
+            # rather than jumping straight to a fixed target keeps the transformation
+            # proportionally gentler for very narrow inputs, while still adding enough
+            # width to discourage reframing/zoom. (Must stay > input_ratio or the
+            # "padding" would compute a narrower width than the original.)
             if input_ratio < 0.6:
-                # Pad to 3:4 aspect ratio (0.75) which is more standard
-                target_ratio = 0.75
+                target_ratio = min(0.75, input_ratio + 0.2)
                 new_width = int(original_height * target_ratio)
 
                 # Create padded canvas with transparent background
@@ -742,9 +750,12 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         prompt_parts = [
             "TASK: Virtual try-on - dress the person in image 1 with the garment from image 2.\n\n",
             "CRITICAL FULL-BODY PRESERVATION:\n",
+            "- The person's SHOES/FEET touching the ground MUST be visible at the very bottom of the frame, exactly as in Image 1. "
+            "Do NOT stop at the ankle, calf, or knee - the legs must extend all the way down to the shoes.\n",
             "- If Image 1 shows a full-body person (head to toe including legs, pants, and shoes), you MUST preserve the full-body framing.\n",
             "- You MUST generate the FULL-BODY of the person from head to toe.\n",
             "- Do NOT crop at the waist, do NOT zoom in, and do NOT generate a half-body or waist-up portrait.\n",
+            "- Do NOT render the person shorter or smaller than in Image 1 - the full height from head to shoes must be preserved.\n",
             "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n",
             "- Keep BOTH ARMS AND HANDS fully visible within the frame, at the same width/position as Image 1. "
             "Do NOT crop, cut off, or extend the arms beyond the sides of the frame.\n\n"
@@ -797,6 +808,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             f"Edit image 1 so the person wears the garment from image 2 on their {body_location}. "
             "Keep the exact same full-body framing (head to toe including legs, pants, and shoes), pose, face, hair, skin tone, and camera framing as image 1.\n",
             "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n",
+            "The shoes/feet touching the ground must be visible at the bottom of the frame - do not stop at the ankle or calf, and do not render the person shorter than in image 1.\n",
             "Keep both arms and hands fully visible within the frame, at the same width as image 1 - do not crop them at the sides.\n\n",
             "Match the garment's colors, patterns, cut, neckline, sleeves, hem, and silhouette from image 2 as faithfully as reasonable.\n",
             "Output one photorealistic full image only. No collage, no before/after split, no text, no labels.\n\n",
