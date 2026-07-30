@@ -127,8 +127,11 @@ Respond in STRICT JSON format with the following keys:
       "color": "Color of garment"
     }}
   ],
-  "suggested_followups": ["Option 1", "Option 2", "Option 3"]
+  "suggested_followups": ["Show men's jackets", "Slim fit options", "Under $50"]
 }}
+CRITICAL INSTRUCTION FOR `suggested_followups`:
+Always format every item in `suggested_followups` strictly as a direct user statement or query from the USER's perspective (e.g. "Show men's jackets", "Slim fit options", "Under $50", "Try navy blue instead").
+NEVER phrase suggested_followups as assistant questions (NEVER use "Are you looking for...", "Do you prefer...", or "Is there...").
 """
 
             prompt = f"{system_instruction}\n\nRecent History:\n{history_str}\n\nUSER LATEST MESSAGE: {user_message}"
@@ -163,11 +166,44 @@ Respond in STRICT JSON format with the following keys:
                         res_json['ready_to_search'] = True
                 except Exception:
                     pass
+
+                if isinstance(res_json.get('suggested_followups'), list):
+                    res_json['suggested_followups'] = [
+                        ConversationalAIEngine._sanitize_followup(item)
+                        for item in res_json['suggested_followups']
+                    ]
                     
                 return res_json
         except Exception as e:
             print(f"[GarmentDiscovery][Gemini] Warning: {e}")
             return None
+
+    @staticmethod
+    def _sanitize_followup(text: str) -> str:
+        """Ensure follow-up chip text is phrased as a user action statement, not a chatbot question."""
+        if not isinstance(text, str):
+            return str(text)
+        t = text.strip()
+        if t.endswith('?'):
+            lower = t.lower()
+            if "men's or women's" in lower or "gender" in lower:
+                return "Show men's clothing"
+            elif "slim" in lower or "relaxed" in lower or "regular" in lower or "fit" in lower:
+                return "Slim fit options"
+            elif "price" in lower or "budget" in lower or "cost" in lower:
+                return "Show options under $50"
+            elif "color" in lower or "shade" in lower:
+                return "Try a different color"
+            elif "occasion" in lower or "event" in lower:
+                return "Casual style"
+            elif "material" in lower or "fabric" in lower:
+                return "Linen or cotton"
+            elif "brand" in lower:
+                return "Show top brands"
+            else:
+                cleaned = t.rstrip('?').strip()
+                return cleaned
+        return t
 
     @staticmethod
     def _fallback_rule_engine(
