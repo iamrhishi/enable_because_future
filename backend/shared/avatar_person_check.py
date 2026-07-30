@@ -183,28 +183,30 @@ def reject_message_if_avatar_not_person(
         f'bodies={valid_bodies}'
     )
 
-    # For full-body shots (small face = person far from camera), accept regardless of body/face count
-    # Small face means person is far from camera = full body visible
-    # HOG body detector fails on crossed-arms, white backgrounds, etc.
-    # Haar cascade has false positives on patterns/shadows
-    if max_face_ratio > 0 and max_face_ratio < _FACE_FULLBODY_THRESHOLD:
-        logger.info(
-            f'avatar_person_check: ACCEPTED - small face ratio {max_face_ratio:.3f} '
-            f'indicates full-body shot (ignoring {total_faces} face detections, {valid_bodies} body detections)'
-        )
-        return _result(None, None)
-
-    # Reject multiple bodies (reliable indicator of multiple people)
-    if valid_bodies > 1:
+    # IMPORTANT: Check multiple FACES first - face detection is reliable
+    # Reject multiple faces regardless of size - even small faces in background count
+    # This catches cases where second person is far away (small face)
+    if total_faces > 1:
         return _result(
             'Please upload a photo with only one person. '
             'Collages, group photos, or composite images cannot be used as avatars.',
             AvatarRejectionCode.MULTIPLE_PEOPLE
         )
 
-    # Reject multiple LARGE faces (real faces in close-up, not false positives)
-    # Only reject if faces are significant (> 10% of image = close-up/selfie territory)
-    if total_faces > 1 and max_face_ratio >= _FACE_FULLBODY_THRESHOLD:
+    # For full-body shots (small face = person far from camera), accept
+    # Small face means person is far from camera = full body visible
+    # HOG body detector is unreliable (false positives on shadows, patterns, etc.)
+    # so we bypass the body check for confirmed single-face full-body shots
+    if max_face_ratio > 0 and max_face_ratio < _FACE_FULLBODY_THRESHOLD:
+        logger.info(
+            f'avatar_person_check: ACCEPTED - single face with small ratio {max_face_ratio:.3f} '
+            f'indicates full-body shot (bypassing unreliable body count)'
+        )
+        return _result(None, None)
+
+    # For close-up shots (large face), check multiple bodies as secondary validation
+    # HOG is more reliable when subjects are larger/closer
+    if valid_bodies > 1 and max_face_ratio >= _FACE_FULLBODY_THRESHOLD:
         return _result(
             'Please upload a photo with only one person. '
             'Collages, group photos, or composite images cannot be used as avatars.',

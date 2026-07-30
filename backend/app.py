@@ -244,6 +244,29 @@ def save_avatar():
             from features.tryon.service import _remove_background_local
             from PIL import Image
             from io import BytesIO
+
+            # Ensure minimum resolution for avatar (768px minimum dimension)
+            MIN_AVATAR_DIMENSION = 768
+            try:
+                img = Image.open(BytesIO(avatar_data))
+                width, height = img.size
+                min_dim = min(width, height)
+                if min_dim < MIN_AVATAR_DIMENSION:
+                    scale = MIN_AVATAR_DIMENSION / min_dim
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    logger.info(f"Avatar upscaled from {width}x{height} to {new_width}x{new_height} (min dimension {MIN_AVATAR_DIMENSION}px)")
+                    output = BytesIO()
+                    # Preserve original format
+                    img_format = img.format or 'PNG'
+                    if img.mode == 'RGBA' and img_format == 'JPEG':
+                        img_format = 'PNG'
+                    img.save(output, format=img_format)
+                    avatar_data = output.getvalue()
+            except Exception as scale_error:
+                logger.warning(f"Could not check/scale avatar resolution: {str(scale_error)}, continuing with original")
+
             logger.info(f"Removing background from avatar using rembg (local) for user: {user_id}")
             avatar_data = _remove_background_local(avatar_data)
             try:
