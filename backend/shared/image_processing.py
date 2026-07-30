@@ -598,38 +598,38 @@ def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_m
         return False
 
 
-def is_result_full_body(image_bytes: bytes, min_height_ratio: float = 0.75, alpha_threshold: int = 30) -> bool:
+def is_result_full_body(image_bytes: bytes) -> bool:
     """
-    Check whether the subject in image_bytes spans at least min_height_ratio of
-    the full image height. Used to catch Gemini generations that technically
-    succeed (no IMAGE_OTHER error) but render a half-body/waist-up figure when
-    a full-body result was expected - normalize_avatar_framing can only scale/
-    reposition whatever bbox is actually present, it can't recover missing
-    lower-body content, so this needs to be caught before that step, while a
-    retry with a different seed is still possible.
+    Check whether the subject in image_bytes looks full-body, using the exact
+    same bbox formula normalize_avatar_framing already uses to decide full-body
+    vs upper-body framing (proven reliable in production logs - it correctly
+    flagged every observed half-body/waist-up generation as not-full-body).
 
-    Uses an explicit alpha threshold (same approach as clean_and_solidify_alpha_mask)
-    rather than PIL's getbbox(), which treats ANY non-zero pixel across any channel
-    as part of the subject - faint noise/artifacts near the frame edges (which
-    Gemini's raw output isn't guaranteed to be free of) can make getbbox() span
-    the full canvas even when the actual visible figure only fills the top portion.
+    IMPORTANT: image_bytes must already have its background removed AND be run
+    through clean_and_solidify_alpha_mask first, same as normalize_avatar_framing
+    expects - a first attempt at this check used a hand-rolled alpha threshold on
+    raw rembg output and unreliably passed clearly-bad crops (residual soft-alpha
+    noise from rembg's segmentation was enough to satisfy a low threshold across
+    nearly the whole frame). Reusing the identical bbox call this function already
+    relies on downstream, on identically-prepared input, avoids re-guessing at a
+    threshold that isn't actually validated against real generations.
     """
     try:
-        import numpy as np
         img = Image.open(BytesIO(image_bytes))
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
 
-        alpha = np.array(img)[:, :, 3]
-        fg_rows = np.where(np.any(alpha > alpha_threshold, axis=1))[0]
-        if fg_rows.size == 0:
+        bbox = img.getbbox()
+        if not bbox:
             return False
 
-        bbox_height = int(fg_rows[-1] - fg_rows[0] + 1)
-        img_height = img.size[1]
-        ratio = bbox_height / float(img_height) if img_height else 0.0
-        is_full = ratio >= min_height_ratio
-        logger.info(f"is_result_full_body: bbox_height_ratio={ratio:.3f}, is_full_body={is_full}")
+        left, top, right, bottom = bbox
+        crop_w = right - left
+        crop_h = bottom - top
+        img_h = img.size[1]
+
+        is_full = crop_h >= (img_h * 0.78) or (crop_h / float(crop_w) >= 2.1)
+        logger.info(f"is_result_full_body: crop_h={crop_h}, img_h={img_h}, ratio={crop_h/float(img_h):.3f}, is_full_body={is_full}")
         return is_full
     except Exception as e:
         logger.warning(f"is_result_full_body error: {e}")

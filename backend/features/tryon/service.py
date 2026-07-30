@@ -949,15 +949,17 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 # accepting a bad crop as success.
                 #
                 # Gemini's raw output isn't guaranteed to have a transparent
-                # background (often comes back fully opaque), so alpha-thresholding
-                # the raw bytes directly would always see the whole canvas as
-                # "foreground" and never catch anything. Run background removal
-                # first to get a real foreground mask to check against.
+                # background, so it needs the same background-removal + alpha-mask
+                # cleanup normalize_avatar_framing's input already gets before this
+                # bbox check is meaningful - checking raw or merely-rembg'd bytes
+                # both unreliably passed clearly-bad crops in testing.
                 is_full_body_result = True
                 if pad_left > 0 and attempt_idx < len(generation_attempts) - 1:
                     try:
+                        from shared.image_processing import clean_and_solidify_alpha_mask
                         preview_no_bg = _remove_background_local(candidate_image_bytes)
-                        is_full_body_result = is_result_full_body(preview_no_bg)
+                        preview_cleaned = clean_and_solidify_alpha_mask(preview_no_bg)
+                        is_full_body_result = is_result_full_body(preview_cleaned)
                     except Exception as check_error:
                         logger.warning(f"process_tryon: Full-body check failed: {check_error}, skipping check")
 
