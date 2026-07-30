@@ -562,49 +562,62 @@ class GarmentSearchService:
             yielded_count += 1
             return item
 
-        # 1. Process Gemini Flash grounded item candidates one by one
+        # 1. Process Gemini Flash grounded item candidates concurrently in parallel
+        def resolve_candidate(idx_fg):
+            idx, fg = idx_fg
+            if isinstance(fg, dict) and fg.get('title'):
+                title = fg.get('title', 'Online Garment')
+                brand = fg.get('brand') or 'Online Store'
+                url = unwrap_redirect_url(fg.get('url') or '#')
+                price = float(fg.get('price') or 39.99)
+                img_url = fg.get('image_url')
+
+                # If URL is category listing page or missing product image, scrape item image concurrently
+                if (not img_url or not is_valid_garment_image(img_url)) and url and url.startswith('http') and not is_category_url(url):
+                    resolved_img = GarmentSearchService._resolve_product_image_from_url(url)
+                    if is_valid_garment_image(resolved_img):
+                        img_url = resolved_img
+
+                if not is_valid_garment_image(img_url):
+                    img_url = get_color_aware_photo(req_subcat, fg.get('color') or req_color)
+
+                return {
+                    "id": f"flash_grounding_{idx}",
+                    "title": title,
+                    "brand": brand,
+                    "category": preferences.get('category') or "Upper body",
+                    "subcategory": req_subcat,
+                    "gender": preferences.get('gender') or "unisex",
+                    "price": price,
+                    "currency": "$",
+                    "color": fg.get('color') or preferences.get('color') or "Black",
+                    "colors_available": [fg.get('color')] if fg.get('color') else [],
+                    "sizes_available": ["S", "M", "L"],
+                    "style": "Modern",
+                    "url": url,
+                    "image_url": img_url,
+                    "description": f"{title} from {brand}",
+                    "tryon_ready": True
+                }
+            return None
+
         if flash_garments and isinstance(flash_garments, list):
-            for idx, fg in enumerate(flash_garments):
-                if isinstance(fg, dict) and fg.get('title'):
-                    title = fg.get('title', 'Online Garment')
-                    brand = fg.get('brand') or 'Online Store'
-                    url = unwrap_redirect_url(fg.get('url') or '#')
-                    price = float(fg.get('price') or 39.99)
-                    img_url = fg.get('image_url')
-
-                    # If URL is category listing page or missing product image, scrape item image
-                    if (not img_url or not is_valid_garment_image(img_url)) and url and url.startswith('http') and not is_category_url(url):
-                        resolved_img = GarmentSearchService._resolve_product_image_from_url(url)
-                        if is_valid_garment_image(resolved_img):
-                            img_url = resolved_img
-
-                    if not is_valid_garment_image(img_url):
-                        img_url = get_color_aware_photo(req_subcat, fg.get('color') or req_color)
-
-                    candidate = {
-                        "id": f"flash_grounding_{idx}",
-                        "title": title,
-                        "brand": brand,
-                        "category": preferences.get('category') or "Upper body",
-                        "subcategory": req_subcat,
-                        "gender": preferences.get('gender') or "unisex",
-                        "price": price,
-                        "currency": "$",
-                        "color": fg.get('color') or preferences.get('color') or "Black",
-                        "colors_available": [fg.get('color')] if fg.get('color') else [],
-                        "sizes_available": ["S", "M", "L"],
-                        "style": "Modern",
-                        "url": url,
-                        "image_url": img_url,
-                        "description": f"{title} from {brand}",
-                        "tryon_ready": True
-                    }
-
-                    validated = try_format_and_validate(candidate)
-                    if validated:
-                        yield validated
-                        if yielded_count >= limit:
-                            return
+            import concurrent.futures
+            items_to_process = list(enumerate(flash_garments))
+            max_workers = min(6, max(1, len(items_to_process)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(resolve_candidate, pair) for pair in items_to_process]
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        candidate = future.result()
+                        if candidate:
+                            validated = try_format_and_validate(candidate)
+                            if validated:
+                                yield validated
+                                if yielded_count >= limit:
+                                    return
+                    except Exception as ex:
+                        print(f"[GarmentSearchService] Error resolving candidate: {ex}")
 
         # 2. Process Curated & Database catalog candidates matching request
         all_catalog = CURATED_GARMENT_CATALOG + GarmentSearchService._get_db_garments()
