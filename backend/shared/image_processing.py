@@ -19,6 +19,39 @@ ALLOWED_FORMATS = ['JPEG', 'PNG', 'WEBP']
 CONVERTIBLE_FORMATS = ['AVIF', 'HEIC', 'HEIF', 'BMP', 'TIFF', 'GIF']  # Will be converted to PNG
 ALLOWED_MIMETYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif']
 
+DEFAULT_CANVAS_SIZE = (900, 1200)  # 3:4 - used when no client aspect_ratio is supplied
+# Clamp to a sane range: very wide/very narrow ratios would blow up the padding
+# logic in normalize_avatar_framing or produce a canvas too thin to be useful.
+MIN_ASPECT_RATIO = 0.45
+MAX_ASPECT_RATIO = 1.2
+
+
+def canvas_size_from_aspect_ratio(aspect_ratio, base_height: int = DEFAULT_CANVAS_SIZE[1]) -> tuple:
+    """
+    Compute a (width, height) canvas size matching the client device's display
+    aspect ratio (width/height), so normalize_avatar_framing's output better
+    fills the device's screen instead of always using a fixed 3:4 canvas and
+    letterboxing more than necessary on very different device shapes.
+
+    Args:
+        aspect_ratio: client-supplied width/height ratio (e.g. request.form value,
+            str or float). None/invalid falls back to DEFAULT_CANVAS_SIZE.
+        base_height: canvas height to hold constant - only width varies with ratio.
+
+    Returns:
+        (width, height) tuple, safe to pass directly as normalize_avatar_framing's
+        target_canvas_size.
+    """
+    try:
+        ratio = float(aspect_ratio)
+        if ratio <= 0:
+            raise ValueError("aspect_ratio must be positive")
+    except (TypeError, ValueError):
+        return DEFAULT_CANVAS_SIZE
+
+    ratio = max(MIN_ASPECT_RATIO, min(MAX_ASPECT_RATIO, ratio))
+    return (int(base_height * ratio), base_height)
+
 
 def convert_to_supported_format(image_data: bytes) -> bytes:
     """
@@ -596,6 +629,44 @@ def is_image_substantially_unchanged(img1_bytes: bytes, img2_bytes: bytes, max_m
     except Exception as e:
         logger.warning(f"is_image_substantially_unchanged error: {e}")
         return False
+
+
+def is_result_full_body(image_bytes: bytes) -> bool:
+    """
+    Check whether the subject in image_bytes looks full-body, using the exact
+    same bbox formula normalize_avatar_framing already uses to decide full-body
+    vs upper-body framing (proven reliable in production logs - it correctly
+    flagged every observed half-body/waist-up generation as not-full-body).
+
+    IMPORTANT: image_bytes must already have its background removed AND be run
+    through clean_and_solidify_alpha_mask first, same as normalize_avatar_framing
+    expects - a first attempt at this check used a hand-rolled alpha threshold on
+    raw rembg output and unreliably passed clearly-bad crops (residual soft-alpha
+    noise from rembg's segmentation was enough to satisfy a low threshold across
+    nearly the whole frame). Reusing the identical bbox call this function already
+    relies on downstream, on identically-prepared input, avoids re-guessing at a
+    threshold that isn't actually validated against real generations.
+    """
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+
+        bbox = img.getbbox()
+        if not bbox:
+            return False
+
+        left, top, right, bottom = bbox
+        crop_w = right - left
+        crop_h = bottom - top
+        img_h = img.size[1]
+
+        is_full = crop_h >= (img_h * 0.78) or (crop_h / float(crop_w) >= 2.1)
+        logger.info(f"is_result_full_body: crop_h={crop_h}, img_h={img_h}, ratio={crop_h/float(img_h):.3f}, is_full_body={is_full}")
+        return is_full
+    except Exception as e:
+        logger.warning(f"is_result_full_body error: {e}")
+        return True  # Fail open - don't block a result over a broken check
 
 
 

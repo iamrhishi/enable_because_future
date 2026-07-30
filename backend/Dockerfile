@@ -15,6 +15,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake the rembg background-removal model into the image at build time.
+# Without this, every fresh Cloud Run instance's first background-removal
+# call has to download the ~176MB model over the network before it can run
+# (rembg caches to $U2NET_HOME, which doesn't survive across instances) -
+# this alone caused multi-second-to-minute stalls on cold starts.
+ENV U2NET_HOME=/app/.u2net
+RUN mkdir -p /app/.u2net && python3 -c "from rembg import new_session; new_session('u2net')"
+
 COPY . .
 
 RUN useradd --create-home --uid 1000 appuser \

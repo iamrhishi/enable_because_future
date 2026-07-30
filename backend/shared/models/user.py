@@ -108,7 +108,7 @@ class User:
                        WHERE userid = ?""",
                     (self.email, self.first_name, self.last_name, self.gender,
                      self.birthday, self.street, self.city, self.postal_code, self.country, self.avatar,
-                     self.avatar_path, self.is_active, self.is_deleted, self.deleted_at, self.userid)
+                     self.avatar_path, bool(self.is_active), bool(self.is_deleted), self.deleted_at, self.userid)
                 )
                 # Update password if provided
                 if hashed_password:
@@ -128,7 +128,7 @@ class User:
                        gender, birthday, street, city, postal_code, country, avatar, avatar_path, is_active)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.userid, self.email, self.first_name, self.last_name, hashed_password,
-                     self.gender, self.birthday, self.street, self.city, self.postal_code, self.country, self.avatar, self.avatar_path, self.is_active)
+                     self.gender, self.birthday, self.street, self.city, self.postal_code, self.country, self.avatar, self.avatar_path, bool(self.is_active))
                 )
                 self.id = user_id
                 self.password = hashed_password  # Store hashed version

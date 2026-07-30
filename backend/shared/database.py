@@ -9,6 +9,7 @@ happens transparently here.
 
 import os
 import sqlite3
+import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
 from dotenv import load_dotenv  # type: ignore
@@ -88,6 +89,35 @@ class DatabaseManager:
             return query.replace('?', '%s')
         return query
 
+    @staticmethod
+    def _normalize_row(row: dict) -> dict:
+        """
+        Normalize a Postgres row to match SQLite's wire format, so API
+        responses are identical regardless of which engine is behind them.
+
+        Postgres has real BOOLEAN/DATE/TIMESTAMP types, so psycopg2 returns
+        native Python bool/date/datetime objects. SQLite has no such types -
+        it always returns 0/1 integers and plain date/datetime strings.
+        Clients (e.g. a strictly-typed mobile app) built against the SQLite
+        shape break the moment they see a real JSON boolean instead of 0/1,
+        or an RFC-822-style datetime string instead of 'YYYY-MM-DD HH:MM:SS'.
+
+        psycopg2 also returns BYTEA columns as memoryview objects rather
+        than plain bytes (sqlite3 always returns bytes for BLOB columns) -
+        code calling bytes-only methods (.startswith(), etc.) on an avatar/
+        garment_image BLOB breaks unless this is converted back.
+        """
+        for key, value in row.items():
+            if isinstance(value, bool):
+                row[key] = int(value)
+            elif isinstance(value, memoryview):
+                row[key] = bytes(value)
+            elif isinstance(value, datetime.datetime):
+                row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(value, datetime.date):
+                row[key] = value.strftime('%Y-%m-%d')
+        return row
+
     def execute_query(self, query: str, params: Tuple = None, fetch_one: bool = False, fetch_all: bool = False) -> Optional[Any]:
         """
         Execute a database query
@@ -130,10 +160,14 @@ class DatabaseManager:
 
             if fetch_one:
                 result = cursor.fetchone()
-                return dict(result) if result else None
+                if not result:
+                    return None
+                row = dict(result)
+                return self._normalize_row(row) if self.db_type == 'postgres' else row
             elif fetch_all:
                 results = cursor.fetchall()
-                return [dict(row) for row in results]
+                rows = [dict(row) for row in results]
+                return [self._normalize_row(r) for r in rows] if self.db_type == 'postgres' else rows
             else:
                 return cursor.rowcount
 

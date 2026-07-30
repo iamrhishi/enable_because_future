@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, Response, send_from_directory, redirect
 from werkzeug.exceptions import BadRequest, HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests  # type: ignore
 from flask_cors import CORS  # type: ignore
 import os
@@ -26,6 +27,14 @@ from features.sizing.controller import sizing_bp
 from features.garment_discovery.controller import garment_discovery_bp
 
 app = Flask(__name__)
+
+# Cloud Run sits behind a TLS-terminating Load Balancer, so Flask only ever
+# sees a plain HTTP request internally - without this, request.url_root/
+# request.scheme report 'http' even though the original client request was
+# HTTPS, producing broken http:// URLs (e.g. avatar_url) that mobile OSes
+# refuse to load over cleartext by default.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1, x_host=1)
+
 CORS(app, origins=Config.CORS_ORIGINS)
 
 from shared.rate_limit import limiter
@@ -33,6 +42,16 @@ limiter.init_app(app)
 
 # Validate configuration
 Config.validate()
+
+# Warm the rembg background-removal session now, not on first request - session
+# init takes a few seconds and this way it happens during Cloud Run's startup
+# probe (before traffic is routed to this instance), not on a live user's request.
+try:
+    from features.tryon.service import _get_rembg_session
+    _get_rembg_session()
+    logger.info("app: Warmed rembg session at startup")
+except Exception as warmup_error:
+    logger.warning(f"app: Failed to warm rembg session at startup: {warmup_error}")
 
 # Serve images from local storage
 @app.route('/images/<path:filename>')
@@ -44,7 +63,8 @@ def serve_image(filename):
             storage_service = get_storage_service()
             try:
                 signed_url = storage_service.get_signed_url(filename)
-            except Exception:
+            except Exception as e:
+                logger.exception(f"serve_image: Failed to generate signed URL for {filename}: {str(e)}")
                 return jsonify({"error": "Image not found"}), 404
             return redirect(signed_url)
 
@@ -98,8 +118,8 @@ def get_user_avatar_file(userid):
             from shared.storage import get_storage_service
             try:
                 signed_url = get_storage_service().get_signed_url(user.avatar_path)
-            except Exception:
-                logger.warning(f"get_user_avatar_file: Avatar object not found - userid={userid}, path={user.avatar_path}")
+            except Exception as e:
+                logger.exception(f"get_user_avatar_file: Failed to sign URL - userid={userid}, path={user.avatar_path}: {str(e)}")
                 return jsonify({"error": "Avatar file not found"}), 404
             logger.info(f"get_user_avatar_file: EXIT - Redirecting to signed URL for userid={userid}")
             return redirect(signed_url)
@@ -319,9 +339,10 @@ def save_avatar():
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
             
             # Solidify alpha mask to fill interior semi-transparency and prevent background bleed-through
-            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing, canvas_size_from_aspect_ratio
             avatar_data = clean_and_solidify_alpha_mask(avatar_data)
-            avatar_data = normalize_avatar_framing(avatar_data)
+            target_canvas_size = canvas_size_from_aspect_ratio(request.form.get('aspect_ratio'))
+            avatar_data = normalize_avatar_framing(avatar_data, target_canvas_size=target_canvas_size)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(
@@ -477,9 +498,10 @@ def save_avatar_local():
             except Exception as trim_error:
                 logger.warning(f"Could not trim avatar padding: {str(trim_error)}, using original size")
                 
-            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
+            from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing, canvas_size_from_aspect_ratio
             avatar_data = clean_and_solidify_alpha_mask(avatar_data)
-            avatar_data = normalize_avatar_framing(avatar_data)
+            target_canvas_size = canvas_size_from_aspect_ratio(request.form.get('aspect_ratio'))
+            avatar_data = normalize_avatar_framing(avatar_data, target_canvas_size=target_canvas_size)
         except Exception as e:
             logger.exception(f"Background removal error for user {user_id}: {str(e)}")
             return error_response_from_string(

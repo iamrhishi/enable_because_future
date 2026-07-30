@@ -11,12 +11,31 @@ import time
 import re
 import json
 import hashlib
+import threading
 import numpy as np  # type: ignore
 from PIL import Image  # type: ignore
 from io import BytesIO
 from config import Config
 from shared.logger import logger
 from shared.errors import ExternalServiceError
+
+_rembg_session = None
+_rembg_session_lock = threading.Lock()
+
+
+def _get_rembg_session():
+    """
+    Lazily create and reuse a single rembg ONNX session across all calls/threads.
+    onnxruntime sessions support concurrent Run() calls, and re-creating one per
+    call otherwise re-pays session init cost on every background removal.
+    """
+    global _rembg_session
+    if _rembg_session is None:
+        with _rembg_session_lock:
+            if _rembg_session is None:
+                from rembg import new_session
+                _rembg_session = new_session('u2net')
+    return _rembg_session
 
 
 # =============================================================================
@@ -327,9 +346,9 @@ def _detect_person_boundaries(person_image: bytes) -> dict:
     """
     try:
         from rembg import remove  # type: ignore
-        
+
         # Remove background to get person mask
-        person_with_bg_removed = remove(person_image)
+        person_with_bg_removed = remove(person_image, session=_get_rembg_session())
         
         # Convert to PIL Image
         img = Image.open(BytesIO(person_with_bg_removed))
@@ -578,7 +597,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         ExternalServiceError: If processing fails
     """
     logger.info(f"process_tryon: ENTRY - garment_type={garment_type}, garment_details={garment_details}")
-    
+
+    from shared.image_processing import canvas_size_from_aspect_ratio
+    target_canvas_size = canvas_size_from_aspect_ratio((options or {}).get('aspect_ratio'))
+
     try:
         if not Config.GEMINI_API_KEY:
             raise ExternalServiceError("Gemini API key not configured", service='gemini')
@@ -673,10 +695,18 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             logger.info(f"process_tryon: Original person image: {original_width}x{original_height}, ratio={input_ratio:.3f}")
             api_canvas_width, api_canvas_height = original_width, original_height
 
-            # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing
+            # If aspect ratio is very narrow (< 0.6), pad to prevent Gemini from reframing.
+            # Previously always padded to a fixed 0.75 (3:4) - for very narrow inputs
+            # (e.g. ~0.35) that more than doubled the canvas width, and Gemini appeared
+            # to respond to that extreme a transformation by rendering the person
+            # notably shorter than full-frame (feet/shoes cut off), even with explicit
+            # prompt instructions to preserve them. Capping how much ratio we add (+0.2)
+            # rather than jumping straight to a fixed target keeps the transformation
+            # proportionally gentler for very narrow inputs, while still adding enough
+            # width to discourage reframing/zoom. (Must stay > input_ratio or the
+            # "padding" would compute a narrower width than the original.)
             if input_ratio < 0.6:
-                # Pad to 3:4 aspect ratio (0.75) which is more standard
-                target_ratio = 0.75
+                target_ratio = min(0.75, input_ratio + 0.2)
                 new_width = int(original_height * target_ratio)
 
                 # Create padded canvas with transparent background
@@ -723,10 +753,15 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         prompt_parts = [
             "TASK: Virtual try-on - dress the person in image 1 with the garment from image 2.\n\n",
             "CRITICAL FULL-BODY PRESERVATION:\n",
+            "- The person's SHOES/FEET touching the ground MUST be visible at the very bottom of the frame, exactly as in Image 1. "
+            "Do NOT stop at the ankle, calf, or knee - the legs must extend all the way down to the shoes.\n",
             "- If Image 1 shows a full-body person (head to toe including legs, pants, and shoes), you MUST preserve the full-body framing.\n",
             "- You MUST generate the FULL-BODY of the person from head to toe.\n",
             "- Do NOT crop at the waist, do NOT zoom in, and do NOT generate a half-body or waist-up portrait.\n",
-            "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n\n"
+            "- Do NOT render the person shorter or smaller than in Image 1 - the full height from head to shoes must be preserved.\n",
+            "- Keep the person's lower body (pants, legs, and shoes) fully visible exactly as shown in Image 1.\n",
+            "- Keep BOTH ARMS AND HANDS fully visible within the frame, at the same width/position as Image 1. "
+            "Do NOT crop, cut off, or extend the arms beyond the sides of the frame.\n\n"
         ]
 
         # Add garment details if available
@@ -775,7 +810,9 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             f"Image 1 shows a person. Image 2 shows a garment.\n"
             f"Edit image 1 so the person wears the garment from image 2 on their {body_location}. "
             "Keep the exact same full-body framing (head to toe including legs, pants, and shoes), pose, face, hair, skin tone, and camera framing as image 1.\n",
-            "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n\n",
+            "Do NOT crop at the waist or generate a waist-up shot. Keep the full body and feet visible exactly as in image 1.\n",
+            "The shoes/feet touching the ground must be visible at the bottom of the frame - do not stop at the ankle or calf, and do not render the person shorter than in image 1.\n",
+            "Keep both arms and hands fully visible within the frame, at the same width as image 1 - do not crop them at the sides.\n\n",
             "Match the garment's colors, patterns, cut, neckline, sleeves, hem, and silhouette from image 2 as faithfully as reasonable.\n",
             "Output one photorealistic full image only. No collage, no before/after split, no text, no labels.\n\n",
         ]
@@ -895,7 +932,49 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             result = response.json()
             parsed = _parse_gemini_tryon_image_response(result)
             if parsed[0] == "ok":
-                result_image_bytes = parsed[1]
+                candidate_image_bytes = parsed[1]
+                from shared.image_processing import is_image_substantially_unchanged, is_result_full_body
+                if (
+                    attempt_idx < len(generation_attempts) - 1
+                    and is_image_substantially_unchanged(padded_person_image, candidate_image_bytes)
+                ):
+                    logger.warning(
+                        "process_tryon: Gemini returned an unchanged image on %s (%s/%s); retrying",
+                        attempt_name,
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                    )
+                    continue
+                # If the input was itself a full-body photo (narrow enough to need
+                # padding), Gemini's output should be too. It doesn't always comply -
+                # catch a half-body/waist-up result here (before normalize_avatar_framing,
+                # which can't recover missing lower-body content) and retry instead of
+                # accepting a bad crop as success.
+                #
+                # Gemini's raw output isn't guaranteed to have a transparent
+                # background, so it needs the same background-removal + alpha-mask
+                # cleanup normalize_avatar_framing's input already gets before this
+                # bbox check is meaningful - checking raw or merely-rembg'd bytes
+                # both unreliably passed clearly-bad crops in testing.
+                is_full_body_result = True
+                if pad_left > 0 and attempt_idx < len(generation_attempts) - 1:
+                    try:
+                        from shared.image_processing import clean_and_solidify_alpha_mask
+                        preview_no_bg = _remove_background_local(candidate_image_bytes)
+                        preview_cleaned = clean_and_solidify_alpha_mask(preview_no_bg)
+                        is_full_body_result = is_result_full_body(preview_cleaned)
+                    except Exception as check_error:
+                        logger.warning(f"process_tryon: Full-body check failed: {check_error}, skipping check")
+
+                if not is_full_body_result:
+                    logger.warning(
+                        "process_tryon: Gemini result isn't full-body on %s (%s/%s); retrying",
+                        attempt_name,
+                        attempt_idx + 1,
+                        len(generation_attempts),
+                    )
+                    continue
+                result_image_bytes = candidate_image_bytes
                 if attempt_idx > 0:
                     logger.info(
                         "process_tryon: Gemini succeeded on generation attempt %s/%s (%s)",
@@ -938,8 +1017,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 # Use rembg to remove background
                 logger.info("process_tryon: Gemini result has no transparency - using rembg to remove background")
                 from rembg import remove  # type: ignore
-                
-                result_image_bytes = remove(result_image_bytes)
+
+                result_image_bytes = remove(result_image_bytes, session=_get_rembg_session())
                 logger.info(f"process_tryon: rembg processed image, new size={len(result_image_bytes)} bytes")
                 
                 # Verify and convert rembg result to RGBA if needed
@@ -1000,13 +1079,31 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                             result_img = canvas
                             logger.info(f"process_tryon: Scaled to fit padded canvas: {padded_width}x{padded_height}")
 
-                    # Now crop to extract the original (unpadded) region
+                    # Crop to extract the original (unpadded) region - but only as a
+                    # starting point. Gemini isn't guaranteed to keep the subject
+                    # within that exact window (e.g. it may draw arms/hands wider
+                    # than the source photo); blindly cropping to it would clip
+                    # them. Widen the crop to the actual subject bbox if it extends
+                    # beyond the intended window, same "never crop off body parts"
+                    # principle already used in the non-padded branch below.
                     crop_left = pad_left
                     crop_top = pad_top
                     crop_right = crop_left + original_width
                     crop_bottom = crop_top + original_height
+
+                    subject_bbox = result_img.getbbox()
+                    if subject_bbox:
+                        bbox_left, bbox_top, bbox_right, bbox_bottom = subject_bbox
+                        crop_left = min(crop_left, bbox_left)
+                        crop_top = min(crop_top, bbox_top)
+                        crop_right = max(crop_right, bbox_right)
+                        crop_bottom = max(crop_bottom, bbox_bottom)
+
                     result_img = result_img.crop((crop_left, crop_top, crop_right, crop_bottom))
-                    logger.info(f"process_tryon: Cropped to original dimensions: {original_width}x{original_height}")
+                    logger.info(
+                        f"process_tryon: Cropped to {crop_right - crop_left}x{crop_bottom - crop_top} "
+                        f"(target was {original_width}x{original_height})"
+                    )
 
                 else:
                     # No padding was applied - use original dimension matching logic
@@ -1055,9 +1152,10 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
                 result_img.save(output, format='PNG')
                 result_image_bytes = output.getvalue()
                 
-                # Apply normalize_avatar_framing to format final canvas framing nicely
+                # Apply normalize_avatar_framing to format final canvas framing nicely,
+                # matching the client device's aspect ratio if one was supplied
                 from shared.image_processing import normalize_avatar_framing
-                result_image_bytes = normalize_avatar_framing(result_image_bytes)
+                result_image_bytes = normalize_avatar_framing(result_image_bytes, target_canvas_size=target_canvas_size)
                 logger.info(f"process_tryon: Final output dimensions after framing: {result_img.size[0]}x{result_img.size[1]}")
             except Exception as resize_error:
                 logger.warning(f"process_tryon: Dimension matching failed: {str(resize_error)}, using result as-is")
@@ -1251,7 +1349,7 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
                                     raw_bytes = base64.b64decode(raw_b64)
                                     from rembg import remove  # type: ignore
                                     try:
-                                        raw_bytes = remove(raw_bytes)
+                                        raw_bytes = remove(raw_bytes, session=_get_rembg_session())
                                     except Exception as bg_err:
                                         logger.warning(f"process_tryon_layered: rembg error: {bg_err}")
                                     from shared.image_processing import clean_and_solidify_alpha_mask
@@ -1482,7 +1580,7 @@ def _remove_background_local(image_data: bytes) -> bytes:
     try:
         from rembg import remove  # type: ignore
 
-        result = remove(image_data)
+        result = remove(image_data, session=_get_rembg_session())
         logger.info(f"_remove_background_local: EXIT - Success, result size={len(result)} bytes")
         return result
     except Exception as e:

@@ -25,7 +25,35 @@ class GCSStorageService:
         self.bucket_name = Config.GCS_BUCKET_NAME
         self.client = gcs_storage.Client()
         self.bucket = self.client.bucket(self.bucket_name)
+        self._signing_credentials = None
         logger.info(f"GCSStorageService.__init__: EXIT - bucket={self.bucket_name}")
+
+    def _get_signing_credentials(self):
+        """
+        Cloud Run's ambient credentials (google.auth.compute_engine.Credentials)
+        carry only a short-lived token, not a private key, so
+        Blob.generate_signed_url() can't sign locally. Wrapping them in
+        impersonated_credentials targeting the same service account routes
+        signing through the IAM signBlob API instead - this is why
+        roles/iam.serviceAccountTokenCreator was granted to the service
+        account on itself.
+        """
+        if self._signing_credentials is None:
+            import google.auth
+            from google.auth import impersonated_credentials
+
+            ambient_credentials, _ = google.auth.default()
+            target_principal = getattr(ambient_credentials, 'service_account_email', None)
+            if not target_principal or target_principal == 'default':
+                target_principal = Config.GCS_SIGNING_SERVICE_ACCOUNT
+
+            self._signing_credentials = impersonated_credentials.Credentials(
+                source_credentials=ambient_credentials,
+                target_principal=target_principal,
+                target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+                lifetime=3600,
+            )
+        return self._signing_credentials
 
     def upload_image(self, image_data: bytes, file_path: str,
                       content_type: str = 'image/png',
@@ -74,7 +102,12 @@ class GCSStorageService:
         file_path = file_path.lstrip('/')
         hours = expiration_hours if expiration_hours is not None else Config.GCS_SIGNED_URL_EXPIRATION_HOURS
         blob = self.bucket.blob(file_path)
-        return blob.generate_signed_url(version='v4', expiration=timedelta(hours=hours), method='GET')
+        return blob.generate_signed_url(
+            version='v4',
+            expiration=timedelta(hours=hours),
+            method='GET',
+            credentials=self._get_signing_credentials(),
+        )
 
     def delete_image(self, file_path: str) -> bool:
         """Delete an object from GCS. Returns True if deleted, False otherwise."""
