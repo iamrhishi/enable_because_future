@@ -79,6 +79,28 @@ def is_category_url(url: Optional[str]) -> bool:
         return True
     return False
 
+def is_valid_active_url(url: Optional[str]) -> bool:
+    """Verify that a product URL exists and returns HTTP 200/30x (filters 404/410 dead links)."""
+    if not url or not isinstance(url, str) or not url.startswith('http'):
+        return False
+    if is_category_url(url):
+        return False
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        resp = requests.head(url, headers=headers, timeout=1.5, allow_redirects=True)
+        if resp.status_code in (200, 301, 302, 307, 308):
+            return True
+        if resp.status_code in (404, 410):
+            return False
+        if resp.status_code == 405:
+            resp_get = requests.get(url, headers=headers, timeout=1.5, allow_redirects=True, stream=True)
+            return resp_get.status_code in (200, 301, 302, 307, 308)
+        return resp.status_code < 400
+    except Exception:
+        return False
+
 PINK_DRESS_PHOTOS = [
     "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&auto=format&fit=crop",
     "https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=600&auto=format&fit=crop",
@@ -571,6 +593,10 @@ class GarmentSearchService:
                 url = unwrap_redirect_url(fg.get('url') or '#')
                 price = float(fg.get('price') or 39.99)
                 img_url = fg.get('image_url')
+
+                # Validate that product URL is active and not a 404 dead link
+                if url and url.startswith('http') and not is_valid_active_url(url):
+                    return None
 
                 # If URL is category listing page or missing product image, scrape item image concurrently
                 if (not img_url or not is_valid_garment_image(img_url)) and url and url.startswith('http') and not is_category_url(url):
