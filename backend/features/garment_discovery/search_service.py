@@ -77,14 +77,16 @@ def is_category_url(url: Optional[str]) -> bool:
     Patterns are gathered per-retailer since there's no universal convention:
     Zara/H&M (-l820.html), generic (/category/, /department/, /catalog/,
     /collections/), ASOS (/refine/), Marks & Spencer (/l/...), Nordstrom
-    (/browse/), and generic color/filter query params.
+    (/browse/), Dillard's (/c/...), and generic color/filter query params.
+    This list is necessarily best-effort, not exhaustive - new retailers
+    surfaced by broader web search may use conventions not covered here.
     """
     if not url or not isinstance(url, str):
         return True
     lower = url.lower()
     category_markers = (
         '/category/', '/department/', '/catalog/', '/collections/',
-        '/refine/', '/browse/', '/l/', 'filterby', 'refine=',
+        '/refine/', '/browse/', '/l/', '/c/', 'filterby', 'refine=',
     )
     if re.search(r'-l\d+\.html', lower) or any(m in lower for m in category_markers):
         return True
