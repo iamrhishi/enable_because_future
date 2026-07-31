@@ -927,8 +927,11 @@ class GarmentSearchService:
                 url = item.get('href', '')
                 snippet = item.get('body', '')
                 
-                # Verify URL structure
-                if url and url.startswith('http'):
+                # Verify URL structure and reject category/listing pages -
+                # the "-inurl:category" search hint isn't reliably honored by
+                # DDG, so results like a "/collections/midi-dresses" page were
+                # slipping through as if they were a specific product.
+                if url and url.startswith('http') and not is_category_url(url):
                     urls_to_resolve.append(url)
                     candidate_items.append({
                         "idx": idx,
