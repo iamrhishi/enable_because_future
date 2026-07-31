@@ -669,15 +669,24 @@ class GarmentSearchService:
             req_subcat = preferences.get('subcategory') or preferences.get('category') or 'Shirts'
             req_color = preferences.get('color') or ''
             
-            # Find all URLs that require image scraping
+            # Find all URLs that require image scraping, and all URLs that need
+            # dead-link/category-page validation (the streaming variant of this
+            # search already does this via is_valid_active_url in resolve_candidate,
+            # but this non-streaming path - used by chat's non-stream branch and
+            # refine() - never did, so Gemini's occasional category-listing-page
+            # or 404 URLs were passed straight through as if they were real
+            # products).
             urls_to_resolve = []
+            urls_to_validate = []
             for fg in flash_garments:
                 if isinstance(fg, dict) and fg.get('title'):
                     img_url = fg.get('image_url')
                     url = fg.get('url')
+                    if url and url.startswith('http'):
+                        urls_to_validate.append(url)
                     if (not img_url or not isinstance(img_url, str) or not img_url.startswith('http')) and url and url.startswith('http'):
                         urls_to_resolve.append(url)
-            
+
             # Concurrently scrape the page images in parallel threads
             resolved_images = {}
             if urls_to_resolve:
@@ -692,8 +701,26 @@ class GarmentSearchService:
                         except Exception:
                             resolved_images[url] = None
 
+            # Concurrently validate URLs are real, live product pages (not
+            # category listings or dead links) before they're shown as results.
+            valid_urls = {}
+            if urls_to_validate:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=min(len(urls_to_validate), 6)) as executor:
+                    futures = {executor.submit(is_valid_active_url, url): url for url in urls_to_validate}
+                    for future in as_completed(futures):
+                        url = futures[future]
+                        try:
+                            valid_urls[url] = future.result()
+                        except Exception:
+                            valid_urls[url] = False
+
             for idx, fg in enumerate(flash_garments):
                 if isinstance(fg, dict) and fg.get('title'):
+                    raw_url = fg.get('url')
+                    if raw_url and raw_url.startswith('http') and not valid_urls.get(raw_url, True):
+                        continue
+
                     title = fg.get('title', 'Online Garment')
                     brand = fg.get('brand') or 'Online Store'
                     url = unwrap_redirect_url(fg.get('url') or '#')
@@ -829,9 +856,17 @@ class GarmentSearchService:
             
         # Option 2: Fallback to DuckDuckGo Search Scraping for any brand (or if Option 1 yielded no results)
         if not results:
-            search_brand = brand if brand else "zara" # Default to a brand if none provided
-            ddg_query = f"{base_query} site:{search_brand.lower()}.com/us/en/ -inurl:search -inurl:category"
-            results = GarmentSearchService._search_duckduckgo_api(ddg_query, search_brand, preferences)
+            if brand:
+                # User named a brand - restrict the search to that retailer's site.
+                ddg_query = f"{base_query} site:{brand.lower()}.com -inurl:search -inurl:category"
+                results = GarmentSearchService._search_duckduckgo_api(ddg_query, brand, preferences)
+            else:
+                # No brand requested - search the open web instead of silently
+                # narrowing every query to Zara (previous behavior), which made
+                # unrelated requests (different color/category/gender) return
+                # the same small pool of Zara results regardless of what was asked.
+                ddg_query = f"{base_query} buy online -inurl:search -inurl:category"
+                results = GarmentSearchService._search_duckduckgo_api(ddg_query, "", preferences)
 
         # Cache discovered items into SQLite database table 'garment_metadata'
         for res in results:

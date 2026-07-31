@@ -137,8 +137,14 @@ NEVER phrase suggested_followups as assistant questions (NEVER use "Are you look
 
             prompt = f"{system_instruction}\n\nRecent History:\n{history_str}\n\nUSER LATEST MESSAGE: {user_message}"
 
+            # The system prompt instructs the model to "USE GoogleSearch", but
+            # without actually attaching the tool here the model has no way to
+            # search - it was silently falling back to hallucinating plausible-
+            # looking products from training data, which is why the same handful
+            # of generic items kept showing up regardless of what was asked.
             config = types.GenerateContentConfig(
                 temperature=0.7,
+                tools=[types.Tool(google_search=types.GoogleSearch())],
             )
 
             response = client.models.generate_content(
