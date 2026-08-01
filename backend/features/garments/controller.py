@@ -60,15 +60,17 @@ def _scrape_and_cache(url):
     """Helper function to scrape product and cache result"""
     # Use brand-specific extractor with graceful fallback
     from features.wardrobe.extractors import BrandExtractorFactory
+    used_fallback = False
     try:
         extractor = BrandExtractorFactory.get_extractor(url)
         product_info = extractor.extract_product_info(url)
     except Exception as e:
         logger.warning(f"_scrape_and_cache: Extractor failed for url={url}: {str(e)}. Generating fallback product info.")
+        used_fallback = True
         from urllib.parse import urlparse
         parsed = urlparse(url)
         domain = parsed.netloc.replace('www.', '').split('.')[0].capitalize()
-        
+
         # Clean title slug from path
         slug = parsed.path.strip('/').split('/')[-1]
         slug = re.sub(r'[\-_]', ' ', slug)
@@ -89,36 +91,45 @@ def _scrape_and_cache(url):
             'fabric': None,
             'description': f"Garment item from {domain}"
         }
-    
+
     # Categorize garment
     categorization = categorize_garment(title=product_info.get('title'))
-    
-    # Store/update in cache (INSERT OR REPLACE)
-    try:
-        db_manager.execute_query(
-            """INSERT INTO garment_metadata
-               (url, title, price, images, sizes, colors, brand, fabric, description, scraped_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-               ON CONFLICT (url) DO UPDATE SET
-                   title = EXCLUDED.title,
-                   price = EXCLUDED.price,
-                   images = EXCLUDED.images,
-                   sizes = EXCLUDED.sizes,
-                   colors = EXCLUDED.colors,
-                   brand = EXCLUDED.brand,
-                   fabric = EXCLUDED.fabric,
-                   description = EXCLUDED.description,
-                   updated_at = CURRENT_TIMESTAMP""",
-            (url, product_info.get('title'), product_info.get('price'),
-             json.dumps(product_info.get('images', [])),
-             json.dumps(product_info.get('sizes', [])),
-             json.dumps(product_info.get('colors', [])),
-             product_info.get('brand'),
-             json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None,
-             product_info.get('description'))
-        )
-    except Exception as e:
-        logger.warning(f"Failed to cache garment metadata: {str(e)}")
+
+    # Store/update in cache (INSERT OR REPLACE) - but only for genuine scrapes.
+    # A fallback result (extractor failed - missing API key, rate limit, site
+    # blocking, etc.) is a generic stock photo standing in for this one request;
+    # caching it here would make a transient failure permanently masquerade as
+    # this product's real image for every future request until someone notices
+    # and force-refreshes. Let the caller get the graceful fallback without
+    # poisoning the shared cache.
+    if not used_fallback:
+        try:
+            db_manager.execute_query(
+                """INSERT INTO garment_metadata
+                   (url, title, price, images, sizes, colors, brand, fabric, description, scraped_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                   ON CONFLICT (url) DO UPDATE SET
+                       title = EXCLUDED.title,
+                       price = EXCLUDED.price,
+                       images = EXCLUDED.images,
+                       sizes = EXCLUDED.sizes,
+                       colors = EXCLUDED.colors,
+                       brand = EXCLUDED.brand,
+                       fabric = EXCLUDED.fabric,
+                       description = EXCLUDED.description,
+                       updated_at = CURRENT_TIMESTAMP""",
+                (url, product_info.get('title'), product_info.get('price'),
+                 json.dumps(product_info.get('images', [])),
+                 json.dumps(product_info.get('sizes', [])),
+                 json.dumps(product_info.get('colors', [])),
+                 product_info.get('brand'),
+                 json.dumps(product_info.get('fabric')) if product_info.get('fabric') else None,
+                 product_info.get('description'))
+            )
+        except Exception as e:
+            logger.warning(f"Failed to cache garment metadata: {str(e)}")
+    else:
+        logger.info(f"_scrape_and_cache: Skipping cache write for {url} - result is a fallback, not a real scrape")
     
     result = {
         'url': url,
