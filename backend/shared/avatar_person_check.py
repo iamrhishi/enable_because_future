@@ -172,8 +172,15 @@ def reject_message_if_avatar_not_person(
     # clutter (e.g. a shelving unit's grid pattern triggered a spurious profile-
     # face hit); 5 requires more agreeing detection windows and eliminated it
     # without affecting the real face, which both cascades detect confidently.
+    #
+    # Profile cascade specifically uses minNeighbors=7 (not 5): a second real
+    # false-positive report (an A-frame sign, caught by the profile cascade at
+    # roughly the same size as the real face - a relative-size filter alone
+    # couldn't distinguish them) confirmed the profile cascade is the noisier
+    # of the two and needs a stricter threshold. Frontal stays at 5 since it
+    # has been reliable and still finds the real face confidently at that level.
     raw_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=min_size)
-    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=min_size)
+    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=7, minSize=min_size)
 
     all_raw_faces = []
     if raw_faces_f is not None and len(raw_faces_f) > 0:
@@ -196,6 +203,20 @@ def reject_message_if_avatar_not_person(
     ]
 
     unique_faces = _merge_overlapping_boxes(all_raw_faces, iou_threshold=0.3)
+
+    # Drop any candidate much smaller than the largest one found (confirmed via
+    # the same false-positive report: a ceiling-mounted smoke detector was
+    # picked up by the frontal cascade at ~15% of the real face's area). A
+    # genuine second person's face - even one standing further back - is very
+    # unlikely to be under a fifth the size of the main subject's in a normal
+    # avatar photo, while tiny background fixtures/icons commonly are.
+    if unique_faces:
+        max_area = max(fw * fh for (_, _, fw, fh) in unique_faces)
+        unique_faces = [
+            (x, y, fw, fh) for (x, y, fw, fh) in unique_faces
+            if (fw * fh) >= max_area * 0.20
+        ]
+
     total_faces = len(unique_faces)
     max_face_ratio = 0.0
     for (_, _, fw, fh) in unique_faces:
