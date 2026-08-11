@@ -173,14 +173,21 @@ def reject_message_if_avatar_not_person(
     # face hit); 5 requires more agreeing detection windows and eliminated it
     # without affecting the real face, which both cascades detect confidently.
     #
-    # Profile cascade specifically uses minNeighbors=7 (not 5): a second real
+    # Profile cascade specifically uses minNeighbors=8 (not 5): a second real
     # false-positive report (an A-frame sign, caught by the profile cascade at
     # roughly the same size as the real face - a relative-size filter alone
     # couldn't distinguish them) confirmed the profile cascade is the noisier
-    # of the two and needs a stricter threshold. Frontal stays at 5 since it
-    # has been reliable and still finds the real face confidently at that level.
+    # of the two and needs a stricter threshold. 7 wasn't quite enough - the
+    # same sign still triggered a false hit once the client-side compressed
+    # version of the exact same photo was tested (different resize/JPEG
+    # artifacts at a different source resolution changed the cascade's
+    # response); 8 clears it while the real face's own profile-cascade
+    # detection in the other report survives even up to minNeighbors=12,
+    # since a genuine confident detection is far more robust than a weak
+    # clutter-triggered one. Frontal stays at 5 since it has been reliable
+    # and still finds the real face confidently at that level.
     raw_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=5, minSize=min_size)
-    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=7, minSize=min_size)
+    raw_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=8, minSize=min_size)
 
     all_raw_faces = []
     if raw_faces_f is not None and len(raw_faces_f) > 0:
