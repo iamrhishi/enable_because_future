@@ -419,16 +419,26 @@ def save_avatar_local():
         
         # Read file as binary data
         avatar_data = avatar_file.read()
-        
-        # Validate file size (max 5MB)
+
+        # If over the size limit, try resizing first instead of flat-rejecting -
+        # a modestly-sized, lightly-compressed photo (common from phone cameras)
+        # can easily be several MB over the limit while resizing down to well
+        # under it in one pass, exactly like the same class of bug already fixed
+        # in shared.image_processing.preprocess_image() for garment uploads.
         max_size = 5 * 1024 * 1024  # 5MB
         if len(avatar_data) > max_size:
-            return error_response_from_string(
-                'File too large. Maximum size is 5MB',
-                400,
-                'VALIDATION_ERROR'
-            )
-        
+            try:
+                from shared.image_processing import resize_image, MAX_DIMENSION_RESIZE
+                avatar_data = resize_image(avatar_data, max_dimension=MAX_DIMENSION_RESIZE)
+            except Exception as e:
+                logger.warning(f"save_avatar_local: Resize-on-oversize failed: {str(e)}")
+            if len(avatar_data) > max_size:
+                return error_response_from_string(
+                    'File too large. Maximum size is 5MB',
+                    400,
+                    'VALIDATION_ERROR'
+                )
+
         user_id = request.user_id
         logger.info(f"save_avatar_local: Got avatar file, size={len(avatar_data)} bytes, user_id={user_id}")
 
@@ -652,13 +662,20 @@ def update_avatar():
         if rejection:
             return error_response_from_string(rejection, 400, 'INVALID_AVATAR_NOT_PERSON')
 
-        # Validate file size (max 5MB)
+        # If over the size limit, try resizing first instead of flat-rejecting -
+        # see save_avatar_local for the reasoning (same class of bug fixed there).
         max_size = 5 * 1024 * 1024  # 5MB
         if len(avatar_data) > max_size:
-            return jsonify({
-                'success': False,
-                'error': 'File too large. Maximum size is 5MB'
-            }), 400
+            try:
+                from shared.image_processing import resize_image, MAX_DIMENSION_RESIZE
+                avatar_data = resize_image(avatar_data, max_dimension=MAX_DIMENSION_RESIZE)
+            except Exception as e:
+                logger.warning(f"update_avatar: Resize-on-oversize failed: {str(e)}")
+            if len(avatar_data) > max_size:
+                return jsonify({
+                    'success': False,
+                    'error': 'File too large. Maximum size is 5MB'
+                }), 400
         
         logger.info(f"Updating avatar for user: {user_id}, size: {len(avatar_data)} bytes")
 
