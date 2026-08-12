@@ -1191,6 +1191,27 @@ def create_layered_tryon():
 
         logger.info(f"create_layered_tryon: Processing {len(garment_images)} garments sequentially")
 
+        # Create a tryon_jobs row and fire the same analytics events the async
+        # /tryon flow does, for parity - this endpoint is synchronous (no
+        # queue/worker), so unlike the async flow the row is created already
+        # 'processing' rather than 'queued', and updated to its final state
+        # directly at the end of this same request instead of by a worker.
+        import time as time_module
+        job_id = str(uuid.uuid4())
+        start_time = time_module.time()
+        db_manager.execute_query(
+            """INSERT INTO tryon_jobs (job_id, user_id, status, progress)
+               VALUES (?, ?, 'processing', 0)""",
+            (job_id, user_id)
+        )
+        user_for_analytics = User.get_by_id(user_id)
+        track_event(
+            EventType.TRYON_START,
+            user_id=user_id,
+            user_email=user_for_analytics.email if user_for_analytics else None,
+            metadata={'job_id': job_id, 'garment_type': 'layered', 'layer_count': len(garment_images)}
+        )
+
         # Process garments sequentially
         results = []
         current_avatar = person_image
@@ -1249,19 +1270,42 @@ def create_layered_tryon():
                 logger.info(f"create_layered_tryon: Layer {idx + 1} complete, saved to {absolute_url}")
 
             except Exception as e:
+                elapsed = time_module.time() - start_time
                 logger.exception(f"create_layered_tryon: Failed at layer {idx + 1}: {str(e)}")
-                return error_response_from_string(
-                    f'Failed at garment {idx + 1}: {str(e)}',
-                    500, 'GENERATION_ERROR'
+                error_message = f'Failed at garment {idx + 1}: {str(e)}'
+                db_manager.execute_query(
+                    "UPDATE tryon_jobs SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                    (error_message, job_id)
                 )
+                track_event(
+                    EventType.TRYON_FAILED,
+                    user_id=user_id,
+                    user_email=user_for_analytics.email if user_for_analytics else None,
+                    metadata={'job_id': job_id, 'error': str(e), 'layer': idx + 1, 'elapsed_seconds': round(elapsed, 1)}
+                )
+                return error_response_from_string(error_message, 500, 'GENERATION_ERROR')
 
         final_result = results[-1] if results else None
+        final_result_url = final_result['result_url'] if final_result else None
+        elapsed = time_module.time() - start_time
+
+        db_manager.execute_query(
+            "UPDATE tryon_jobs SET status = 'done', progress = 100, result_url = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+            (final_result_url, job_id)
+        )
+        track_event(
+            EventType.TRYON_COMPLETE,
+            user_id=user_id,
+            user_email=user_for_analytics.email if user_for_analytics else None,
+            metadata={'job_id': job_id, 'elapsed_seconds': round(elapsed, 1), 'layer_count': len(results)}
+        )
 
         logger.info(f"create_layered_tryon: EXIT - Success, {len(results)} layers processed")
         return success_response(
             data={
+                'job_id': job_id,
                 'results': results,
-                'final_result_url': final_result['result_url'] if final_result else None,
+                'final_result_url': final_result_url,
                 'layers_processed': len(results)
             },
             message=f'Layered try-on complete with {len(results)} garments'
@@ -1269,6 +1313,17 @@ def create_layered_tryon():
 
     except Exception as e:
         logger.exception(f"create_layered_tryon: EXIT - Error: {str(e)}")
+        # Best-effort: if the job row was already created (error happened after
+        # that point, outside the per-layer loop's own handling), don't leave
+        # it stuck in 'processing' forever.
+        if 'job_id' in locals():
+            try:
+                db_manager.execute_query(
+                    "UPDATE tryon_jobs SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                    (str(e), job_id)
+                )
+            except Exception:
+                pass
         return error_response_from_string(f'Server error: {str(e)}', 500)
 
 
