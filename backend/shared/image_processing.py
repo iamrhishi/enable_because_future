@@ -308,13 +308,22 @@ def preprocess_image(image_data: bytes, filename: str = None,
         # Convert unsupported formats (AVIF, HEIC, etc.) to PNG first
         image_data = convert_to_supported_format(image_data)
 
-        # Quick dimension check first - if image exceeds MAX_DIMENSION, resize immediately
-        # This prevents validation errors for large images that will be resized anyway
+        # Quick dimension/size check first - if image exceeds MAX_DIMENSION or MAX_FILE_SIZE,
+        # resize immediately. This prevents validation errors for large images that will be
+        # resized anyway. File size alone (not just pixel dimensions) needs to trigger this too -
+        # a modestly-sized, lightly-compressed image (e.g. a raw PNG under 4096px) can easily be
+        # several MB over the limit while never tripping the dimension check, and used to go
+        # straight to validate_image() and get hard-rejected instead of getting the same chance
+        # to shrink under the limit that oversized-dimension images already got.
         try:
             img = Image.open(BytesIO(image_data))
             max_dim = max(img.size)
-            if max_dim > MAX_DIMENSION and resize:
-                logger.info(f"preprocess_image: Image dimension {max_dim}px exceeds {MAX_DIMENSION}px, resizing first")
+            file_size = len(image_data)
+            if (max_dim > MAX_DIMENSION or file_size > MAX_FILE_SIZE) and resize:
+                logger.info(
+                    f"preprocess_image: Image dimension {max_dim}px / size {file_size / 1024 / 1024:.2f}MB "
+                    f"exceeds limit, resizing first"
+                )
                 image_data = resize_image(image_data, max_dimension=MAX_DIMENSION_RESIZE)
         except Exception as e:
             # If we can't open the image, let validation handle it
