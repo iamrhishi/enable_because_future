@@ -35,6 +35,36 @@
 
 ## Resolved
 
+- **2026-08-14 - Avatar validation accepted non-person images (objects,
+  screenshots) via two overly-loose fallback paths.** Reported via a bug
+  report from another testing session claiming avatar validation had
+  problems; verified the claims against actual code/logs rather than taking
+  them at face value (two of the report's own root-cause theories were
+  wrong - a "flip-flop" entry was actually a mid-test deploy, not
+  non-determinism, and there is no external service involved, it's pure
+  local OpenCV) - but the underlying false-accept symptom was real. Given
+  the exact real test files (SHA-256-verified: a Wikimedia Commons photo of
+  wooden chairs, and a webpage screenshot), reproduced two distinct
+  exploitable paths:
+  1. The chairs photo's wood-grain pattern triggered a spurious frontal-face
+     match at area ratio 0.00122 - just above the existing 0.0009 noise
+     floor - which then cleared the "small face ratio = far-away full body
+     shot, skip body check entirely" bypass with zero corroboration.
+  2. The screenshot triggered a HOG body-detector match (weight 0.66, area
+     ratio 0.06) with *zero* face detected anywhere in frame, which was
+     enough on its own to clear the `valid_bodies >= 1` fallback - HOG's own
+     documented false-positive tendency, exploited with no other signal
+     present at all.
+  Fixed both without touching the paths where a face IS present as
+  corroboration: raised the face-area floor to 0.003 (clear of the false
+  hit, still under every real distant-face ratio seen in production) and
+  added a separate, stricter HOG confidence/area bar used only for the
+  zero-face fallback. Verified against both real false-positive files (now
+  correctly rejected) and every previously-fixed real false-positive case
+  plus a real accepted avatar (no regression) - both locally and by running
+  the exact deployed function against the real files directly on the VM.
+  (`8aff2f6`)
+
 - **2026-08-14 - Avatar person-check and background removal both decoded
   some real phone photos sideways, causing three different-looking (and all
   nonsensical) rejections on the same photo across retries: "multiple
