@@ -86,20 +86,29 @@ def reject_message_if_avatar_not_person(
         )
         return _skip()
 
-    img = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if img is None or img.size == 0:
-        try:
-            from PIL import Image
-            pil = Image.open(BytesIO(image_bytes))
-            pil = pil.convert('RGB')
-            rgb = np.asarray(pil)
-            img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        except Exception as ex:
-            logger.warning(f'avatar_person_check: decode failed: {ex}')
-            msg = 'Could not read this image file. Upload a JPG, PNG, or WEBP photo.'
-            if return_code:
-                return (msg, AvatarRejectionCode.INVALID_IMAGE)
-            return msg
+    # Decode via PIL, not cv2.imdecode - confirmed via a real rejected upload
+    # (an otherwise completely normal full-body iPhone photo) that cv2.imdecode
+    # can decode certain JPEGs into the wrong pixel-grid orientation entirely,
+    # not just "ignoring EXIF rotation" but genuinely transposed relative to
+    # what every other viewer (Photos, WhatsApp, PIL itself) shows - causing
+    # 0 face/body detections on a photo a human would immediately recognize as
+    # fine. PIL's raw decode (deliberately *without* applying exif_transpose -
+    # tested against the same real file, which showed the opposite problem:
+    # its EXIF orientation tag is stale and applying it rotates an
+    # already-correct image into the wrong orientation) matched what every
+    # other viewer shows.
+    try:
+        from PIL import Image
+        pil = Image.open(BytesIO(image_bytes))
+        pil = pil.convert('RGB')
+        rgb = np.asarray(pil)
+        img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    except Exception as ex:
+        logger.warning(f'avatar_person_check: decode failed: {ex}')
+        msg = 'Could not read this image file. Upload a JPG, PNG, or WEBP photo.'
+        if return_code:
+            return (msg, AvatarRejectionCode.INVALID_IMAGE)
+        return msg
 
     h0, w0 = img.shape[:2]
 
