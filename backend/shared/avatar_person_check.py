@@ -29,7 +29,11 @@ class AvatarRejectionCode:
 # Detection thresholds
 # ---------------------------------------------------------------------------
 # Face box must occupy at least this fraction of the image area (handles distant selfies).
-_FACE_MIN_AREA_RATIO = 0.0009
+# Raised from 0.0009 after a real wood-grain pattern (wooden chairs, no person in frame)
+# cleared the old floor at ratio 0.00122 and was accepted via the small-face-ratio
+# full-body bypass below. 0.003 sits well clear of that false hit while staying under
+# every real distant-face ratio observed in production (0.006 and up).
+_FACE_MIN_AREA_RATIO = 0.003
 # Ignore tiny detections typical of JPEG noise while keeping toddlers / webcam shots usable.
 _ABS_MIN_FACE_PX = 22
 
@@ -39,8 +43,16 @@ _ABS_MIN_FACE_PX = 22
 _FACE_FULLBODY_THRESHOLD = 0.10
 
 # Default HOG people detector - loosened for varied poses (crossed arms, walking, angled)
+# Used only where a face was also detected (some corroborating signal already exists).
 _HOG_WEIGHT_MIN = 0.35
 _HOG_MIN_AREA_RATIO = 0.04
+
+# Stricter HOG bar used when body detection is the ONLY signal (zero faces found at all).
+# HOG alone is known to false-positive on non-human shapes (a real webpage screenshot
+# cleared the old bodies>=1 fallback at weight=0.66/area=0.06 with no face anywhere in
+# frame). Requires meaningfully stronger confidence before accepting on body alone.
+_HOG_WEIGHT_MIN_SOLE = 0.80
+_HOG_MIN_AREA_RATIO_SOLE = 0.08
 
 
 def reject_message_if_avatar_not_person(
@@ -245,19 +257,20 @@ def reject_message_if_avatar_not_person(
     rects, weights = hog.detectMultiScale(img, winStride=(8, 8), padding=(24, 24), scale=1.035)
 
     valid_bodies = 0
+    valid_bodies_sole = 0
     if weights is not None and len(rects) > 0:
         flat = weights.flatten().tolist()
         for rect, wt in zip(rects, flat):
-            if wt < _HOG_WEIGHT_MIN:
-                continue
             _, _, rw, rh = rect
-            if (rw * rh) / img_area < _HOG_MIN_AREA_RATIO:
-                continue
-            valid_bodies += 1
+            area_ratio = (rw * rh) / img_area
+            if wt >= _HOG_WEIGHT_MIN and area_ratio >= _HOG_MIN_AREA_RATIO:
+                valid_bodies += 1
+            if wt >= _HOG_WEIGHT_MIN_SOLE and area_ratio >= _HOG_MIN_AREA_RATIO_SOLE:
+                valid_bodies_sole += 1
 
     logger.info(
         f'avatar_person_check: unique_faces={total_faces}, max_face_ratio={max_face_ratio:.3f}, '
-        f'bodies={valid_bodies}'
+        f'bodies={valid_bodies}, bodies_sole={valid_bodies_sole}'
     )
 
     # IMPORTANT: Check multiple FACES first - face detection is reliable
@@ -312,8 +325,9 @@ def reject_message_if_avatar_not_person(
             AvatarRejectionCode.HEAD_ONLY
         )
 
-    # Accept: has body (with or without visible face)
-    if valid_bodies >= 1:
+    # Accept: has body, no face at all - HOG is the only signal here, so require the
+    # stricter sole-signal bar (see _HOG_WEIGHT_MIN_SOLE / _HOG_MIN_AREA_RATIO_SOLE above)
+    if valid_bodies_sole >= 1:
         return _result(None, None)
 
     # No face and no body detected
