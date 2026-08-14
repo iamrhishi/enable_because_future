@@ -268,6 +268,9 @@ def save_avatar():
         avatar_data = avatar_file.read()
         logger.info(f"save_avatar: Got avatar file, size={len(avatar_data)} bytes, user_id={user_id}")
 
+        from shared.image_processing import normalize_image_orientation
+        avatar_data = normalize_image_orientation(avatar_data)
+
         from shared.avatar_person_check import reject_message_if_avatar_not_person
 
         rejection = reject_message_if_avatar_not_person(avatar_data)
@@ -419,6 +422,9 @@ def save_avatar_local():
         
         # Read file as binary data
         avatar_data = avatar_file.read()
+
+        from shared.image_processing import normalize_image_orientation
+        avatar_data = normalize_image_orientation(avatar_data)
 
         # If over the size limit, try resizing first instead of flat-rejecting -
         # a modestly-sized, lightly-compressed photo (common from phone cameras)
@@ -655,7 +661,10 @@ def update_avatar():
                 'success': False,
                 'error': 'Invalid base64 data'
             }), 400
-        
+
+        from shared.image_processing import normalize_image_orientation
+        avatar_data = normalize_image_orientation(avatar_data)
+
         from shared.avatar_person_check import reject_message_if_avatar_not_person
 
         rejection = reject_message_if_avatar_not_person(avatar_data)

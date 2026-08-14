@@ -168,7 +168,37 @@ def validate_image(image_data: bytes, filename: str = None) -> dict:
         raise ValidationError(f"Image validation failed: {str(e)}")
 
 
-def resize_image(image_data: bytes, max_dimension: int = MAX_DIMENSION_RESIZE, 
+def normalize_image_orientation(image_data: bytes) -> bytes:
+    """
+    Re-encode image bytes via PIL's raw decode, guarding against consumers
+    that decode certain phone JPEGs into the wrong pixel-grid orientation.
+
+    Found from a real rejected avatar upload: cv2.imdecode (used by the
+    person-detection check) and rembg's internal decoder (used for background
+    removal) both decoded one specific iPhone JPEG sideways relative to what
+    every normal viewer (Photos, WhatsApp, PIL's own raw decode) shows -
+    not an EXIF-rotation-ignored issue, a genuinely different pixel grid.
+    Applying exif_transpose() on top of PIL's decode made it wrong again for
+    that same file (its EXIF Orientation tag is stale). PIL's raw decode,
+    with no rotation applied, matched every other viewer and is what's used
+    here.
+
+    Call this once, immediately after reading the raw upload, before any
+    downstream step (person-check, background removal, resizing) touches the
+    bytes - that way every consumer sees the same, correctly-oriented image
+    instead of each one potentially decoding it differently.
+    """
+    try:
+        img = Image.open(BytesIO(image_data)).convert('RGB')
+        output = BytesIO()
+        img.save(output, format='PNG')
+        return output.getvalue()
+    except Exception as e:
+        logger.warning(f"normalize_image_orientation: Failed to normalize, using original bytes: {e}")
+        return image_data
+
+
+def resize_image(image_data: bytes, max_dimension: int = MAX_DIMENSION_RESIZE,
                  maintain_aspect: bool = True) -> bytes:
     """
     Resize image to max dimension (per context.md line 78: 2048px max)
