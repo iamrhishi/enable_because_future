@@ -2,7 +2,7 @@
 
 ## Open
 
-- **Avatar false-positive rejection: real background bystanders count as "multiple people".**
+- **Avatar false-positive rejection: real background bystanders count as "multiple people" - original report not independently re-verified.**
   Reported 2026-08-13 (Munya, via WhatsApp). A candid full-body photo taken at
   an event was rejected (`unique_faces=3, bodies=2`) with the standard
   "please upload a photo with only one person" message, even though only one
@@ -18,22 +18,40 @@
   happened to fix it by accident (blurring away the bystanders), not because
   of any size threshold.
 
-  Real fix needed: a "dominant subject" heuristic - only reject for multiple
-  people when a second detected face is reasonably close in size to the
-  primary one (an actual second posed subject), not when it's clearly smaller/
-  more distant (a background stranger). Needs the actual rejected high-res
-  file to calibrate the size-ratio threshold correctly rather than guessing -
-  the copy shared in chat was already the WhatsApp-compressed (passing) one.
-  Not yet reproduced with real data (2026-08-14's testing session captured a
-  *different* photo that turned out to be the sideways-decode bug below, not
-  this one) - still needs an actual retry with the original bystander photo,
-  captured the same way (temporary debug hook on `save_avatar`/
-  `save_avatar_local`, currently removed from prod, easy to re-add).
+  2026-08-14 update: the "dominant subject" size-ratio heuristic this entry
+  asked for was implemented as part of the multi-face false-positive fix
+  below (relative-size floor raised 20% -> 50%), driven by 3 *different* real
+  false-positive reports rather than this one - the original high-res
+  bystander file was never obtained, so this specific case has not been
+  directly re-tested. Given the mechanism is the same (a smaller/farther
+  face no longer counts as a second subject), this is very likely fixed as a
+  side effect, but leaving this open until actually confirmed against the
+  real file rather than assuming.
 
   Do **not** add a "your image is too large" message for this case per the
   above - it would be factually wrong and mask the real cause.
 
 ## Resolved
+
+- **2026-08-14 - Avatar multi-face rejection triggered by patterned clothing
+  and background clutter, not real second people.** Given 3 real single-
+  person photos (checksummed, visually confirmed single-subject) that were
+  each wrongly rejected as "multiple people" during a live test suite run:
+  every extra "face" turned out to be a spurious cascade hit, not a second
+  person - a tie-dye skirt and a sequined bodice (patterned clothing on the
+  *same* subject), a building's window grid, and an ad billboard's text
+  (background clutter). All three measured 37-44% of the primary face's
+  size - clear of the existing 20% noise floor, but nowhere near what a real
+  second person actually measures at. Raised the relative-size floor for
+  what counts as a second face from 20% to 50%, and added a check that drops
+  any candidate face centered in the primary subject's own torso column
+  (below their own face, within ~2 face-widths either side) regardless of
+  size - needed for the sequined-bodice case specifically, which measured 86%
+  of the real face's size, too close to filter by ratio alone. Verified
+  against all 3 real files (now accepted) plus the existing regression set
+  (chairs, screenshot, shelving unit, office/balcony - all unchanged), both
+  locally and by running the exact deployed function against the real files
+  on the VM. (`8bb5a23`)
 
 - **2026-08-14 - Avatar validation accepted non-person images (objects,
   screenshots) via two overly-loose fallback paths.** Reported via a bug
