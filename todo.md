@@ -24,14 +24,44 @@
   more distant (a background stranger). Needs the actual rejected high-res
   file to calibrate the size-ratio threshold correctly rather than guessing -
   the copy shared in chat was already the WhatsApp-compressed (passing) one.
-  Debug capture is live on `save_avatar_local` (writes raw upload bytes to
-  `/tmp/avatar_debug_<userid>_<timestamp>.jpg` on the VM) waiting for a retry
-  with the original photo.
+  Not yet reproduced with real data (2026-08-14's testing session captured a
+  *different* photo that turned out to be the sideways-decode bug below, not
+  this one) - still needs an actual retry with the original bystander photo,
+  captured the same way (temporary debug hook on `save_avatar`/
+  `save_avatar_local`, currently removed from prod, easy to re-add).
 
   Do **not** add a "your image is too large" message for this case per the
   above - it would be factually wrong and mask the real cause.
 
 ## Resolved
+
+- **2026-08-14 - Avatar person-check and background removal both decoded
+  some real phone photos sideways, causing three different-looking (and all
+  nonsensical) rejections on the same photo across retries: "multiple
+  people", "just your face, not full-body", and "no person at all" -
+  the third with the exact bytes captured directly from a live request
+  (temporary debug hook, since the first two attempts landed on whichever
+  endpoint didn't have the hook yet at the time). Root cause: `cv2.imdecode`
+  decoded a real iPhone JPEG into a completely different pixel-grid
+  orientation than every other viewer (Photos, WhatsApp, PIL's own raw
+  decode) shows - not merely "ignores EXIF rotation", genuinely transposed.
+  The face/body detectors were correctly finding nothing because they were
+  looking at a sideways image. Confirmed empirically which decode is
+  actually correct for this file: PIL's *raw* decode (no `exif_transpose`)
+  matches every viewer; both `cv2.imdecode` and PIL+`exif_transpose` (this
+  file's EXIF Orientation tag is stale) produce a wrong result. (`f0e22ca`)
+
+  Follow-up same day: fixing the person-check wasn't enough - the *saved*
+  avatar was still sideways, because `rembg`'s own internal decoder (used
+  for background removal) shares the same wrong-orientation behavior for
+  this file, and was receiving the raw, un-normalized upload bytes. Added
+  `normalize_image_orientation()` (same proven-correct PIL raw decode,
+  re-encoded to PNG) and call it once immediately after reading the raw
+  upload in all three avatar-save routes, before person-check, size-
+  checking, or background removal touch the bytes - so every downstream
+  consumer sees the same correctly-oriented image. Verified end-to-end
+  (both locally and via the live API with the real failing file) - the
+  saved, background-removed avatar is now correctly upright. (`fcabc48`)
 
 - **2026-08-12 - Layered try-on missing analytics/history parity.**
   `POST /tryon/layered` runs synchronously (bypasses the async `JobQueue`
