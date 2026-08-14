@@ -234,15 +234,44 @@ def reject_message_if_avatar_not_person(
 
     # Drop any candidate much smaller than the largest one found (confirmed via
     # the same false-positive report: a ceiling-mounted smoke detector was
-    # picked up by the frontal cascade at ~15% of the real face's area). A
-    # genuine second person's face - even one standing further back - is very
-    # unlikely to be under a fifth the size of the main subject's in a normal
-    # avatar photo, while tiny background fixtures/icons commonly are.
+    # picked up by the frontal cascade at ~15% of the real face's area).
+    # Raised from 20% to 50% after 3 real single-person photos (verified by
+    # eye) each triggered a false MULTIPLE_PEOPLE rejection from a spurious
+    # second "face" at 37-44% of the primary's size, matched to patterned
+    # clothing (a tie-dye skirt, a sequined bodice) or background clutter (a
+    # building's window grid, an ad billboard's text) - all comfortably above
+    # the old floor but well short of what a real second, more-distant person
+    # actually measures at in practice. This also directly addresses the
+    # still-open "background bystander" report (todo.md), whose whole premise
+    # was that a smaller/farther real stranger shouldn't count as a second
+    # subject.
     if unique_faces:
         max_area = max(fw * fh for (_, _, fw, fh) in unique_faces)
+        primary = max(unique_faces, key=lambda b: b[2] * b[3])
+        px, py, pw, ph = primary
+        pcx = px + pw / 2.0
+
+        # A face-shaped detection sitting inside the primary subject's own
+        # torso column (same real photo, same false-positive report) is
+        # almost always a pattern on their own clothing, not a second head -
+        # a sequined bodice measured at 86% of the real face's size, too
+        # close in size to filter by the ratio check above. A real second
+        # person's face is never centered directly below where the first
+        # person's own face already is.
+        own_body_x_min = pcx - 2 * pw
+        own_body_x_max = pcx + 2 * pw
+        own_body_y_min = py + ph
+
+        def _in_own_body_column(box):
+            x, y, fw, fh = box
+            ccx = x + fw / 2.0
+            ccy = y + fh / 2.0
+            return own_body_x_min <= ccx <= own_body_x_max and ccy >= own_body_y_min
+
         unique_faces = [
-            (x, y, fw, fh) for (x, y, fw, fh) in unique_faces
-            if (fw * fh) >= max_area * 0.20
+            box for box in unique_faces
+            if box == primary
+            or ((box[2] * box[3]) >= max_area * 0.50 and not _in_own_body_column(box))
         ]
 
     total_faces = len(unique_faces)

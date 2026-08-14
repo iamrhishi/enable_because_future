@@ -83,3 +83,6 @@ htmlcov/
 **/*.pem
 **/*.key
 
+# Real-photo calibration inputs (not test fixtures meant to ship with the repo)
+backend/tests/avatar_calibration_files/
+
