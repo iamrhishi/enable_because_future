@@ -232,6 +232,46 @@ def reject_message_if_avatar_not_person(
 
     unique_faces = _merge_overlapping_boxes(all_raw_faces, iou_threshold=0.3)
 
+    # Before treating the largest detected box as the size reference for the
+    # relative-size filter below, confirm it survives a stricter re-detection
+    # pass - but only when more than one candidate exists (the common case of
+    # a single face never needs this extra pass). A real photo of 3 people
+    # (checksummed, verified by eye) sitting at roughly the same distance
+    # from camera had its *largest* "face" turn out to be a false hit on
+    # empty stadium seating next to one subject's hair, barely clipping his
+    # actual face - and because that spurious box was the biggest, it became
+    # the reference every real face got measured against, wrongly deflating
+    # the other 2 real people below the ratio floor and collapsing a 3-person
+    # photo down to what looked like 1. Confirmed empirically that this
+    # specific spurious hit disappears at minNeighbors=7 (frontal) while all
+    # 3 real faces in that same photo - and every other real primary face
+    # already verified this session (Aardra, Siuzanna, the soccer player,
+    # the shelving-unit and office/balcony cases) - survive it comfortably.
+    # A real face is detected far more redundantly than background clutter
+    # that only barely cleared the base threshold once.
+    if len(unique_faces) > 1:
+        strict_faces_f = frontal.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=7, minSize=min_size)
+        strict_faces_p = profile.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=10, minSize=min_size)
+        strict_boxes = list(strict_faces_f) + list(strict_faces_p)
+
+        def _confirmed_at_stricter_threshold(box):
+            x1, y1, w1, h1 = box
+            area1 = w1 * h1
+            for (x2, y2, w2, h2) in strict_boxes:
+                ix = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+                iy = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+                inter = ix * iy
+                union = area1 + (w2 * h2) - inter
+                if union > 0 and (inter / union) > 0.3:
+                    return True
+            return False
+
+        while len(unique_faces) > 1:
+            candidate_primary = max(unique_faces, key=lambda b: b[2] * b[3])
+            if _confirmed_at_stricter_threshold(candidate_primary):
+                break
+            unique_faces = [b for b in unique_faces if b != candidate_primary]
+
     # Drop any candidate much smaller than the largest one found (confirmed via
     # the same false-positive report: a ceiling-mounted smoke detector was
     # picked up by the frontal cascade at ~15% of the real face's area).
