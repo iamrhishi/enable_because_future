@@ -142,9 +142,19 @@ NEVER phrase suggested_followups as assistant questions (NEVER use "Are you look
             # search - it was silently falling back to hallucinating plausible-
             # looking products from training data, which is why the same handful
             # of generic items kept showing up regardless of what was asked.
+            #
+            # http_options timeout is explicit (unlike the SDK default of none)
+            # because this was the one external call in the codebase without a
+            # bound - gunicorn runs with --timeout 0 so a worker thread stuck
+            # here forever is never recycled or even noticed, and enough of
+            # those accumulating silently over time is what took the whole
+            # server down on 2026-08-17 (no crash, no error, just ran out of
+            # worker threads). 60s matches the other external-call timeouts
+            # already used elsewhere (Scrape.do fallback, mixer-service).
             config = types.GenerateContentConfig(
                 temperature=0.7,
                 tools=[types.Tool(google_search=types.GoogleSearch())],
+                http_options=types.HttpOptions(timeout=60000),
             )
 
             response = client.models.generate_content(
