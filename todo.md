@@ -33,6 +33,56 @@
 
 ## Resolved
 
+- **2026-08-17 - Backend went fully unresponsive for ~26 hours (silent hang,
+  not a crash), root-caused to the one external call in the codebase with no
+  timeout.** Reported as "is server down?" - confirmed via `curl` timing out
+  completely against `server.becausefuture.tech` despite the VM's raw ports
+  (22/443/5001) still accepting TCP connections, and SSH itself unable to
+  complete its banner exchange (consistent with severe CPU starvation, not a
+  network problem). App logs showed a completely ordinary request (a garment
+  scrape) completing normally at 2026-08-16 16:43:50, then total silence -
+  no exception, no stack trace, nothing - until discovered ~26 hours later.
+  `gcloud compute instances get-serial-port-output` initially looked like it
+  showed a fresh OOM-killed `gunicorn` process, but cross-checking against
+  `journalctl -k -b -1` proved that specific kill was actually from a
+  *separate*, already-self-healed incident on 2026-08-12 (systemd restarted
+  it within 32 seconds that time) - the serial console ring buffer had just
+  retained the old entry. This 2026-08-17 incident had no OOM record at all.
+
+  Root cause: audited every outbound `requests.get/post` call in the
+  codebase (ASOS/generic scraper, Scrape.do fallback, Lovable API,
+  mixer-service try-on) - all had explicit timeouts except one: the Gemini
+  `generate_content` call in `garment_discovery/ai_engine.py` (the one using
+  the `google_search` tool), which relied on the SDK's default of none.
+  `gunicorn` runs with `--timeout 0`, deliberately, so legitimate long-
+  running avatar/try-on jobs are never killed mid-processing - but that also
+  means a thread stuck in a genuinely unbounded call is never recycled or
+  even noticed. With only 2 workers x 8 threads = 16 total request slots,
+  it only takes a handful of these silently accumulating over hours/days
+  before the app runs out of usable threads and stops responding to
+  anything, with no crash to trigger `Restart=on-failure` and nothing in the
+  logs to point at.
+
+  Recovery: VM was fully unresponsive to SSH, so the only path back was a
+  hard reset (`gcloud compute instances reset`) - confirmed via serial
+  console this was a power-cycle, not a graceful recovery.
+
+  Fix, two parts:
+  1. Added an explicit 60s timeout to the Gemini call (matching the other
+     external-call timeouts already used elsewhere). (`11bd21b`)
+  2. Gave `gunicorn` a bounded backstop instead of `--timeout 0`: raised to
+     `--timeout 600` (10 minutes - comfortably above any real request, since
+     the slowest known legitimate path, try-on's 3x120s retry loop, tops out
+     around 400s, while still bounding a genuine hang instead of leaving it
+     permanent), plus `--max-requests 500 --max-requests-jitter 50` to
+     periodically recycle each worker as defense-in-depth against slow leaks
+     generally (relevant to the separate 2026-08-12 OOM too). Applied
+     directly to the VM's systemd unit (`/etc/systemd/system/because-future-
+     backend.service`) - old version backed up alongside it before editing.
+  Verified live: API responding normally post-restart (`/api/login` -> 400
+  in ~1s), full pytest suite unaffected (same 7 pre-existing unrelated
+  `discovery_sessions`-table failures as before).
+
 - **2026-08-14 - Group photo (3 real people) wrongly accepted - regression from the same-day multi-face fix below.** Caught within an hour of that fix shipping, via a live re-run of the same test suite: a real 3-person photo (checksummed, verified by eye - Wikimedia Commons "Kadavar-Bandfoto.jpg", 3 men sitting at roughly the same distance from camera) that was correctly rejected before any of today's fixes started passing as a single-person photo (`unique_faces=1, bodies=2` in production logs - HOG still independently saw 2 distinct people even as the face check missed them). Root cause: the 50%-of-primary size-ratio filter compares every candidate against the single *largest* detected box, which the earlier fix assumed was always the real primary subject - true for the 3 cases it was built against, false here. The largest detected "face" in this photo was actually a false hit on empty stadium seating next to one subject's hair, barely clipping his real face; because it was the biggest, it became the reference every real face got measured against, deflating the other 2 real people below the ratio floor. Fixed by confirming the largest box survives a stricter re-detection pass (frontal minNeighbors 5->7, profile 8->10) before trusting it as the reference, whenever more than one candidate exists - confirmed empirically the stadium-seat false hit disappears at minNeighbors=7 while all 3 real faces in that photo, and every other real primary face verified today (Aardra, Siuzanna, the soccer player, the shelving-unit and office/balcony cases), survive it comfortably. Verified against the group photo (now correctly rejected) plus the full existing regression set - all unchanged. (`c34868e`)
 
 - **2026-08-14 - Avatar multi-face rejection triggered by patterned clothing
