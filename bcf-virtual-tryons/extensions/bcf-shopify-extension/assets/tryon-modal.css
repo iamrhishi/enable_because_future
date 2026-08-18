@@ -1,0 +1,642 @@
+.bcf-tryon-root .bcf-hidden {
+  display: none !important;
+}
+
+.bcf-tryon-root .bcf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 16, 10, 0.56);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.bcf-tryon-root .bcf-modal {
+  width: min(390px, calc(100vw - 20px));
+  height: min(86vh, 720px);
+  max-height: 86vh;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+
+.bcf-tryon-root .bcf-modal-header-img {
+  width: 140px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+}
+
+.bcf-tryon-root .bcf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #ffffff;
+  color: #003500;
+}
+
+.bcf-tryon-root .bcf-avatar-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.bcf-tryon-root .bcf-avatar-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-avatar-chip.is-active {
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+
+.bcf-tryon-root .bcf-avatar-chip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bcf-tryon-root .bcf-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bcf-tryon-root .bcf-close-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #003500;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.bcf-tryon-root .bcf-modal-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 14px;
+  box-sizing: border-box;
+  background: #f5f8f5;
+}
+
+.bcf-tryon-root .bcf-view {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.bcf-tryon-root .bcf-view-login {
+  display: flex;
+  align-items: stretch;
+}
+
+.bcf-tryon-root .bcf-login-shell {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  padding: 12px 2px 18px;
+  box-sizing: border-box;
+}
+
+.bcf-tryon-root .bcf-login-logo {
+  width: 190px;
+  height: auto;
+  margin: 0 auto 18px;
+  display: block;
+}
+
+.bcf-tryon-root .bcf-login-copy {
+  text-align: center;
+}
+
+.bcf-tryon-root .bcf-login-copy h3 {
+  margin: 0 0 8px;
+  color: #0a4813;
+  font-size: 22px;
+  line-height: 1.1;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.bcf-tryon-root .bcf-login-copy p {
+  margin: 0;
+  color: #697769;
+  font-size: 14px;
+}
+
+.bcf-tryon-root .bcf-input-wrap {
+  position: relative;
+}
+
+.bcf-tryon-root .bcf-input-large {
+  margin: 0;
+  min-height: 60px;
+  padding: 18px 16px;
+  border-radius: 14px;
+  border-color: #d7ddd7;
+  box-shadow: 0 8px 18px rgba(19, 31, 20, 0.08);
+  font-size: 15px;
+}
+
+.bcf-tryon-root .bcf-password-wrap .bcf-input-large {
+  padding-right: 48px;
+}
+
+.bcf-tryon-root .bcf-password-eye {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7d857d;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.bcf-tryon-root .bcf-login-action {
+  margin-top: 8px;
+  padding: 16px 18px;
+  border-radius: 999px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 18px;
+}
+
+.bcf-tryon-root .bcf-login-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #4f5f4f;
+  font-size: 14px;
+}
+
+.bcf-tryon-root .bcf-inline-link {
+  border: none;
+  background: transparent;
+  color: #0c4e13;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-guest-link {
+  width: auto;
+  margin: -6px auto 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #0c4e13;
+  text-decoration: underline;
+}
+
+.bcf-tryon-root .bcf-view-home {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.bcf-tryon-root .bcf-view label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #113312;
+}
+
+.bcf-tryon-root .bcf-input {
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #ccddcc;
+  box-sizing: border-box;
+  font-size: 14px;
+  background: #ffffff;
+}
+
+.bcf-tryon-root .bcf-primary-action,
+.bcf-tryon-root .bcf-secondary-action,
+.bcf-tryon-root .bcf-tryon-action,
+.bcf-tryon-root .bcf-try-again,
+.bcf-tryon-root .bcf-nav-btn {
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.bcf-tryon-root .bcf-primary-action
+{
+  width: 100%;
+  background: #003500;
+  color: #ffffff;
+  padding: 11px 12px;
+  font-weight: 600;
+}
+
+.bcf-tryon-root .bcf-tryon-action {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  background: #003500;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 53, 0, 0.35);
+}
+
+.bcf-tryon-root .bcf-secondary-action {
+  width: 100%;
+  background: #ffffff;
+  color: #003500;
+  padding: 11px 12px;
+  border: 1px solid #003500;
+  font-weight: 600;
+}
+
+.bcf-tryon-root .bcf-divider {
+  text-align: center;
+  position: relative;
+  margin: 12px 0;
+  color: #587058;
+  font-size: 12px;
+}
+
+.bcf-tryon-root .bcf-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid #d7e5d7;
+  z-index: 0;
+}
+
+.bcf-tryon-root .bcf-divider span {
+  position: relative;
+  z-index: 1;
+  background: #f5f8f5;
+  padding: 0 8px;
+}
+
+.bcf-tryon-root .bcf-home-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 16px;
+  border: 1px solid #d5e2d5;
+  background: radial-gradient(circle at 20% 20%, #fdfefe 0%, #ecf2ec 100%);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.bcf-tryon-root .bcf-selected-avatar-wrap-large {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bcf-tryon-root .bcf-selected-avatar-large {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 18px;
+  object-fit: contain;
+  border: 1px solid #d7e4d7;
+  background: #ffffff;
+}
+
+.bcf-tryon-root .bcf-home-note {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #355336;
+}
+
+.bcf-tryon-root .bcf-home-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.bcf-tryon-root .bcf-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 12px;
+  box-sizing: border-box;
+  background: rgba(245, 248, 245, 0.92);
+}
+
+.bcf-tryon-root .bcf-loader-shell {
+  height: 100%;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f5f2 100%);
+  border-radius: 18px;
+  border: 1px solid #dbe3db;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.bcf-tryon-root .bcf-loader-shell h4 {
+  margin: 0;
+  text-align: center;
+  color: #07390f;
+  font-size: 30px;
+  line-height: 1.1;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.bcf-tryon-root .bcf-loader-shell p {
+  margin: 6px 0 12px;
+  text-align: center;
+  color: #506250;
+  font-size: 13px;
+}
+
+.bcf-tryon-root .bcf-loader-bar {
+  height: 4px;
+  background: #ffffff;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.bcf-tryon-root .bcf-loader-bar span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: #0c4e13;
+  border-radius: 999px;
+  animation: bcfTryOnPulse 1.2s ease-in-out infinite;
+}
+
+.bcf-tryon-root .bcf-loader-scene {
+  position: relative;
+  height: 220px;
+  margin-bottom: 14px;
+}
+
+.bcf-tryon-root .bcf-loader-garment,
+.bcf-tryon-root .bcf-loader-avatar,
+.bcf-tryon-root .bcf-loader-garment-fallback {
+  position: absolute;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #dae3da;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.09);
+}
+
+.bcf-tryon-root .bcf-loader-garment {
+  left: 14%;
+  top: 20px;
+  width: 44%;
+  height: 62%;
+  object-fit: cover;
+  transform: rotate(-4deg);
+}
+
+.bcf-tryon-root .bcf-loader-avatar {
+  right: 12%;
+  top: 34px;
+  width: 40%;
+  height: 68%;
+  object-fit: cover;
+  transform: rotate(4deg);
+}
+
+.bcf-tryon-root .bcf-loader-garment-fallback {
+  left: 14%;
+  top: 20px;
+  width: 44%;
+  height: 62%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #456046;
+  transform: rotate(-4deg);
+}
+
+.bcf-tryon-root .bcf-loader-fact {
+  border: 1px solid #cfd9cf;
+  background: #edf2ee;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #445644;
+}
+
+@keyframes bcfTryOnPulse {
+  0% {
+    transform: translateX(-6%);
+  }
+
+  50% {
+    transform: translateX(125%);
+  }
+
+  100% {
+    transform: translateX(-6%);
+  }
+}
+
+@keyframes bcfTryOnSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bcf-tryon-root .bcf-result-card {
+  position: relative;
+  height: 100%;
+  background: #ffffff;
+  border: 1px solid #cfe0cf;
+  border-radius: 18px;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bcf-tryon-root .bcf-result {
+  position: absolute;
+  inset: 12px;
+  z-index: 2;
+}
+
+.bcf-tryon-root .bcf-result-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #113412;
+}
+
+.bcf-tryon-root .bcf-result-card p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #2b472c;
+}
+
+.bcf-tryon-root .bcf-result-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  margin: 0;
+  background: #f7faf7;
+}
+
+.bcf-tryon-root .bcf-result-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 44px 16px 18px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(7, 34, 11, 0.78) 62%, rgba(7, 34, 11, 0.9) 100%);
+}
+
+.bcf-tryon-root .bcf-result-overlay p {
+  margin: 0;
+  text-align: center;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.bcf-tryon-root .bcf-try-again {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #003500;
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 53, 0, 0.35);
+}
+
+.bcf-tryon-root .bcf-profile-row {
+  background: #ffffff;
+  border: 1px solid #d6e5d6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #244025;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.bcf-tryon-root .bcf-profile-row strong {
+  color: #0d2d0f;
+  text-align: right;
+  word-break: break-word;
+}
+
+.bcf-tryon-root .bcf-error-text {
+  color: #b3261e;
+  font-size: 12px;
+  text-align: center;
+  margin: 8px 0 0;
+}
+
+.bcf-tryon-root .bcf-bottom-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid #dbe8db;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.bcf-tryon-root .bcf-nav-btn {
+  background: #eff5ef;
+  color: #244025;
+  padding: 10px;
+  font-weight: 600;
+}
+
+.bcf-tryon-root .bcf-nav-btn.is-active {
+  background: #003500;
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .bcf-tryon-root .bcf-overlay {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .bcf-tryon-root .bcf-modal {
+    width: 100%;
+    height: 92vh;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .bcf-tryon-root .bcf-home-canvas {
+    min-height: 250px;
+  }
+
+  .bcf-tryon-root .bcf-loader-shell h4 {
+    font-size: 24px;
+  }
+}

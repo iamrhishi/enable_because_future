@@ -1,0 +1,68 @@
+{% assign tryon_root_id = 'bcf-tryon-' | append: block.id %}
+{% assign tryon_product_title = product.title | default: 'Product preview unavailable' %}
+{% assign man_avatar_url = 'man_avatar_bcf.jpg' | asset_url %}
+{% assign woman_avatar_url = 'woman_avatar_bcf.jpg' | asset_url %}
+{% assign man_icon_url = 'man_icon.png' | asset_url %}
+{% assign woman_icon_url = 'woman_icon.png' | asset_url %}
+{% assign default_avatar_url = man_avatar_url %}
+{% if product and product.featured_image %}
+  {% assign tryon_product_image = product.featured_image | image_url: width: 640 %}
+{% else %}
+  {% assign tryon_product_image = '' %}
+{% endif %}
+
+{{ 'tryon-modal.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'tryon-modal.js' | asset_url }}" defer></script>
+
+<div
+  id="{{ tryon_root_id }}"
+  class="bcf-tryon-root"
+  data-tryon-root
+  data-default-avatar="{{ default_avatar_url }}"
+  data-tryon-garment-url="{{ canonical_url }}"
+  data-tryon-garment-image="{{ tryon_product_image }}"
+>
+  <button
+    type="button"
+    data-tryon-open
+    style="
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #003500;
+      color: #ffffff;
+      border: none;
+      border-radius: 9999px;
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 550;
+      cursor: pointer;
+    "
+  >
+    <img
+      src="{{ 'bcf Icon.png' | asset_url }}"
+      alt="BCF Icon"
+      width="18"
+      height="18"
+      loading="lazy"
+    >
+    <span>Try before you Buy</span>
+  </button>
+
+  {% render 'tryon-modal',
+    root_id: tryon_root_id,
+    tryon_product_title: tryon_product_title,
+    tryon_product_image: tryon_product_image,
+    man_avatar_url: man_avatar_url,
+    woman_avatar_url: woman_avatar_url,
+    default_avatar_url: default_avatar_url
+  %}
+</div>
+
+{% schema %}
+{
+  "name": "Try-On Button",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
