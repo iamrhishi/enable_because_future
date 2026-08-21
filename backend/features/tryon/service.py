@@ -571,7 +571,10 @@ def _tryon_resize_max_long_edge(image_bytes: bytes, max_edge: int) -> bytes:
             img = img.convert('RGB')
         img = img.resize((nw, nh), Image.Resampling.LANCZOS)
         out = BytesIO()
-        img.save(out, format='PNG', optimize=True)
+        # optimize=True's slow exhaustive compression search isn't worth it here
+        # either - see image_processing.normalize_image()'s comment for the
+        # measured cost (~5x slower for ~5% smaller output on a real garment image).
+        img.save(out, format='PNG')
         return out.getvalue()
     except Exception as e:
         logger.warning(f'process_tryon: _tryon_resize_max_long_edge skipped: {e}')
