@@ -1,0 +1,130 @@
+<div class="bcf-overlay bcf-hidden" aria-hidden="true" data-tryon-overlay>
+  <div class="bcf-modal" role="dialog" aria-modal="true" aria-labelledby="{{ root_id }}-title">
+    <div class="bcf-modal-header">
+      <img
+        class="bcf-modal-header-img"
+        src="{{ 'bcf_logo.png' | asset_url }}"
+        alt="BCF logo"
+        width="140"
+        height="32"
+        loading="lazy"
+      >
+      <div class="bcf-avatar-switch bcf-hidden" data-tryon-avatar-switch>
+        <button type="button" class="bcf-avatar-chip is-active" data-tryon-avatar-btn data-avatar-url="{{ man_avatar_url }}">
+          <img src="{{ 'man_icon.png' | asset_url }}" alt="Man avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
+        </button>
+        <button type="button" class="bcf-avatar-chip" data-tryon-avatar-btn data-avatar-url="{{ woman_avatar_url }}">
+          <img src="{{ 'woman_icon.png' | asset_url }}" alt="Woman avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
+        </button>
+        <button type="button" class="bcf-avatar-chip" data-upload-trigger="true" aria-label="Upload avatar">
+          <img src="{{ 'camera.png' | asset_url }}" alt="Upload avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
+        </button>
+      </div>
+      <button type="button" class="bcf-close-btn" aria-label="Close" data-tryon-close>X</button>
+    </div>
+    <input type="file" class="bcf-avatar-upload-input bcf-hidden" accept="image/*" data-tryon-upload-input>
+
+    <div class="bcf-modal-body">
+      <section class="bcf-view bcf-view-login" data-tryon-view="login">
+        <div class="bcf-login-shell">
+          <img
+            class="bcf-login-logo"
+            src="{{ 'bcf_logo.png' | asset_url }}"
+            alt="BCF logo"
+            width="180"
+            height="64"
+            loading="lazy"
+          >
+          <div class="bcf-login-copy">
+            <h3>Shop Smarter. Shop Responsibly</h3>
+          </div>
+
+          <div class="bcf-input-wrap">
+            <input id="{{ root_id }}-email" class="bcf-input bcf-input-large" type="email" placeholder="Email" autocomplete="email" data-tryon-email>
+          </div>
+
+          <div class="bcf-input-wrap bcf-password-wrap">
+            <input id="{{ root_id }}-password" class="bcf-input bcf-input-large" type="password" placeholder="Password" autocomplete="current-password" data-tryon-password>
+            <span class="bcf-password-eye" aria-hidden="true">◔</span>
+          </div>
+
+          <button type="button" class="bcf-primary-action bcf-login-action" data-tryon-signin>Continue</button>
+
+          <div class="bcf-login-links">
+            <span>Don't have an account?</span>
+            <button type="button" class="bcf-inline-link">Sign up</button>
+          </div>
+
+          <button type="button" class="bcf-secondary-action bcf-guest-link" data-tryon-guest>Continue as guest</button>
+          <p class="bcf-error-text bcf-hidden" data-tryon-login-error></p>
+        </div>
+      </section>
+
+      <section class="bcf-view bcf-view-home bcf-hidden" data-tryon-view="home">
+        <div class="bcf-home-canvas">
+          <div class="bcf-selected-avatar-wrap bcf-selected-avatar-wrap-large" data-tryon-avatar-stage>
+            <img class="bcf-selected-avatar bcf-selected-avatar-large" src="{{ default_avatar_url }}" alt="Selected avatar preview" width="260" height="360" loading="lazy" data-tryon-avatar-preview>
+            <button type="button" class="bcf-tryon-action" data-tryon-run>
+              <span class="bcf-tryon-bolt" aria-hidden="true">&#9889;</span>
+              <span>Try On</span>
+            </button>
+          </div>
+
+          <div class="bcf-loading bcf-hidden" aria-live="polite" data-tryon-loading>
+            <div class="bcf-loader-shell">
+              <h4>Creating your look</h4>
+              <p>Usually takes around 1 min</p>
+              <div class="bcf-loader-bar" aria-hidden="true"><span></span></div>
+
+              <div class="bcf-loader-scene">
+                {% if tryon_product_image != blank %}
+                  <img class="bcf-loader-garment" src="{{ tryon_product_image }}" alt="{{ tryon_product_title | escape }}" width="180" height="180" loading="lazy">
+                {% else %}
+                  <div class="bcf-loader-garment-fallback">Garment</div>
+                {% endif %}
+                <img class="bcf-loader-avatar" src="{{ default_avatar_url }}" alt="Avatar look preview" width="170" height="220" loading="lazy" data-tryon-avatar-preview>
+              </div>
+
+              <div class="bcf-loader-fact">A single cotton T-shirt can take around 2,700L of water to make.</div>
+            </div>
+          </div>
+
+          <div class="bcf-result bcf-hidden" data-tryon-result>
+            <div class="bcf-result-card">
+              <img class="bcf-result-avatar" src="{{ default_avatar_url }}" alt="Generated look preview" width="160" height="210" loading="lazy" data-tryon-result-image>
+              <div class="bcf-result-overlay">
+                <p>Here's your try-on with {{ tryon_product_title }}.</p>
+                <button type="button" class="bcf-try-again" data-tryon-reset>
+                  <span class="bcf-tryon-bolt" aria-hidden="true">&#9889;</span>
+                  <span>Try again</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bcf-home-meta">
+            <p class="bcf-home-note">Selected garment: {{ tryon_product_title }}</p>
+            <p class="bcf-error-text bcf-hidden" data-tryon-home-error></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="bcf-view bcf-view-profile bcf-hidden" data-tryon-view="profile">
+        <div class="bcf-profile-row"><span>Session type</span><strong data-profile-session>Guest</strong></div>
+        <div class="bcf-profile-row"><span>Email</span><strong data-profile-email>guest@example.com</strong></div>
+        <div class="bcf-profile-row"><span>Gender</span><strong>Not set</strong></div>
+        <div class="bcf-profile-row"><span>Birthdate</span><strong>Not set</strong></div>
+        <div class="bcf-profile-row"><span>Age</span><strong>Not set</strong></div>
+        <div class="bcf-profile-row"><span>Height</span><strong>Not set</strong></div>
+        <div class="bcf-profile-row"><span>Weight</span><strong>Not set</strong></div>
+        <div class="bcf-profile-row"><span>Size</span><strong>Not set</strong></div>
+      </section>
+    </div>
+
+    <nav class="bcf-bottom-nav bcf-hidden" aria-label="Try-on navigation" data-tryon-nav>
+      <button type="button" class="bcf-nav-btn is-active" data-view="wishlist">Wishlist</button>
+      <button type="button" class="bcf-nav-btn is-active" data-view="home">Home</button>
+      <button type="button" class="bcf-nav-btn" data-view="profile">Profile</button>
+    </nav>
+  </div>
+</div>
