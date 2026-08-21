@@ -33,6 +33,27 @@
 
 ## Resolved
 
+- **2026-08-21 - Try-on end-to-end mobile latency (~40s) vs ~16s Gemini
+  generation time - root-caused the gap, fixed part of it.** Pulled a real
+  production job's full timeline from logs (2026-08-20): ~7.8s job-creation
+  overhead (before the client even gets a job_id back) + ~2.6s rembg on the
+  garment + ~16s Gemini generation = ~26s server-side, before any client
+  polling overhead. Of that 7.8s, ~5s was `normalize_image()`'s PNG
+  `optimize=True` on the garment image alone (~1s on the avatar) - Pillow's
+  exhaustive PNG compression search, confirmed via direct benchmark against
+  the exact real file (0.67s optimized vs 0.13s default, ~5x, for only ~5%
+  smaller output) on mid-pipeline bytes headed straight to the Gemini API
+  next. Removed `optimize=True` from all 4 PNG-save call sites in the image
+  pipeline (`normalize_image`, `convert_to_supported_format`, `resize_image`'s
+  PNG branch, `process_tryon`'s `_tryon_resize_max_long_edge`). Verified live
+  on the VM with the real files: garment preprocessing 5s -> 0.65s, avatar
+  ~2.3s -> 0.13s - roughly 6 real seconds off every job's server-side time.
+  Not yet investigated: client-side polling interval/overhead, and whether
+  `JobQueue`'s single background worker thread per gunicorn process ever
+  queues jobs behind each other under real concurrent load (the one real
+  trace checked showed no queueing delay, but that was a single data point,
+  not a load test). (`718d310`)
+
 - **2026-08-21 - Try-on model upgraded to Nano Banana 2 (gemini-3.1-flash-image),
   with automatic fallback to Nano Banana Pro (gemini-3-pro-image) on failure.**
   Driven by a real benchmark: 20 real try-on cases (10 garments x 2 candidate
