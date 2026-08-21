@@ -33,6 +33,45 @@
 
 ## Resolved
 
+- **2026-08-21 - Try-on model upgraded to Nano Banana 2 (gemini-3.1-flash-image),
+  with automatic fallback to Nano Banana Pro (gemini-3-pro-image) on failure.**
+  Driven by a real benchmark: 20 real try-on cases (10 garments x 2 candidate
+  models, across two different real avatars) showed Nano Banana 2 averaging
+  ~1.75x faster (13.8-14.1s vs 24.2s for Pro) with no quality regression on
+  shared cases. Its one reliability gap - a reproducible `IMAGE_SAFETY` block
+  on a specific person/garment combination (confirmed on 2 separate runs, though
+  a 3rd later attempt succeeded - not 100% deterministic) - is handled by an
+  automatic fallback: `process_tryon_with_fallback()` /
+  `process_tryon_layered_with_fallback()` try the primary model first and
+  retry with Pro only if it fails outright, wired into all 3 real call sites
+  (async job queue / main `/tryon`, both legs of layered try-on, `/tryon-gemini`).
+  `process_tryon()` and `process_tryon_layered()` now take an explicit
+  `model_name` param instead of reading `Config.GEMINI_MODEL_NAME` directly,
+  so the fallback retry doesn't mutate shared state across gunicorn's 8
+  threads. Also fixed along the way: `/tryon-gemini` wasn't forwarding
+  `aspect_ratio` from the request at all, and `process_tryon_layered` had no
+  canvas-normalization support whatsoever (its own exit log falsely claimed
+  "normalized framing" when no such step existed) - both real, separate causes
+  of try-on results sometimes coming back a different size than the avatar.
+  Verified live: forced a guaranteed primary failure (invalid model name) and
+  confirmed the wrapper correctly caught it and recovered via Pro; normal case
+  and layered flow both verified working; full pytest suite unaffected (same
+  7 pre-existing unrelated failures). No API contract changes - same routes,
+  params, and response shapes; the one newly-read field (`aspect_ratio`) is
+  optional and defaults identically to prior behavior when absent, so older
+  installed app builds are unaffected. Deployed and confirmed live on the VM.
+  (`2e613b2`)
+
+- **2026-08-21 - Garment categorization was English-only, mis-tagging German-
+  storefront lower-body items as upper-body.** `categorize_garment()`'s
+  keyword list had zero German vocabulary. When Zara/H&M scraping is blocked
+  (no title available) and the fallback URL-slug scan runs, German words like
+  `hemd` (shirt), `jacke` (jacket), `hose` (pants), `rock` (skirt) matched
+  nothing - confirmed via a real `culotte-mit-spitzensaum` URL (a lower-body
+  garment) mis-categorized as generic upper-body "top" at zero confidence.
+  Added German vocabulary; every previously-broken real URL now categorizes
+  correctly.
+
 - **2026-08-17 - Backend went fully unresponsive for ~26 hours (silent hang,
   not a crash), root-caused to the one external call in the codebase with no
   timeout.** Reported as "is server down?" - confirmed via `curl` timing out
