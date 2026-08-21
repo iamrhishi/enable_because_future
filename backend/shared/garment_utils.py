@@ -24,20 +24,30 @@ def categorize_garment(image_url: str = None, image_data: bytes = None, title: s
         image_url_text = (image_url or '').lower()
 
         # Dictionary of upper body sub-types and their associated keywords
+        # Includes German terms alongside English - a large share of scraped
+        # products are from Zara/H&M's German storefronts (zara.com/de/de/,
+        # hm.com/de_de/), and title metadata is frequently unavailable for
+        # these sites (bot-protection blocks scraping), leaving only the
+        # product URL slug to categorize from - which is usually German
+        # (e.g. "hemd", "jacke", "hose"). Without these, a real garment falls
+        # through to the zero-score fallback below (generic "top", upper
+        # body, confidence 0.4) regardless of its actual category - this is
+        # confirmed the direct cause of lower-body items (e.g. a "culotte")
+        # being sent to try-on tagged as upper-body.
         upper_keywords = {
             'polo': ['polo', 'polos', 'polo-shirt', 'polo-tshirt'],
-            'shirt': ['shirt', 'shirts', 'blouse', 'blouses', 'top', 'tops', 'tee', 'tees', 't-shirt', 'tshirt', 'tank', 'tanktop', 'cami', 'henley', 'tunics', 'tunic'],
-            'jacket': ['jacket', 'jackets', 'coat', 'coats', 'blazer', 'blazers', 'cardigan', 'hoodie', 'hoodies', 'sweater', 'sweaters', 'vest', 'vests', 'pullover', 'parka', 'trench', 'windbreaker', 'fleece', 'puffer', 'anorak', 'overshirt', 'shacket', 'knitwear', 'knit', 'outerwear'],
+            'shirt': ['shirt', 'shirts', 'blouse', 'blouses', 'top', 'tops', 'tee', 'tees', 't-shirt', 'tshirt', 'tank', 'tanktop', 'cami', 'henley', 'tunics', 'tunic', 'hemd', 'hemden', 'bluse', 'blusen', 'oberteil', 'oberteile'],
+            'jacket': ['jacket', 'jackets', 'coat', 'coats', 'blazer', 'blazers', 'cardigan', 'hoodie', 'hoodies', 'sweater', 'sweaters', 'vest', 'vests', 'pullover', 'parka', 'trench', 'windbreaker', 'fleece', 'puffer', 'anorak', 'overshirt', 'shacket', 'knitwear', 'knit', 'outerwear', 'jacke', 'jacken', 'mantel', 'maentel', 'weste', 'westen', 'strickjacke', 'strickjacken', 'pulli', 'pullis', 'daunenjacke', 'lederjacke'],
             'crop': ['crop', 'croptop', 'corset', 'bustier', 'halter', 'bandeau', 'camisole'],
-            'dress': ['dress', 'dresses', 'gown', 'gowns', 'frock', 'jumpsuit', 'romper', 'bodysuit'],
+            'dress': ['dress', 'dresses', 'gown', 'gowns', 'frock', 'jumpsuit', 'romper', 'bodysuit', 'kleid', 'kleider', 'overall', 'overalls'],
         }
 
         # Dictionary of lower body sub-types and their associated keywords
         lower_keywords = {
-            'pants': ['pants', 'trousers', 'jeans', 'slacks', 'sweatpants', 'joggers', 'chinos', 'cargo', 'culottes', 'palazzo', 'bottom', 'bottoms'],
-            'shorts': ['shorts', 'bermuda', 'bikershorts', 'trunks'],
-            'skirt': ['skirt', 'skirts', 'miniskirt', 'midiskirt', 'maxiskirt'],
-            'leggings': ['leggings', 'tights']
+            'pants': ['pants', 'trousers', 'jeans', 'slacks', 'sweatpants', 'joggers', 'chinos', 'cargo', 'culotte', 'culottes', 'palazzo', 'bottom', 'bottoms', 'hose', 'hosen', 'jeanshose'],
+            'shorts': ['shorts', 'bermuda', 'bikershorts', 'trunks', 'kurze-hose'],
+            'skirt': ['skirt', 'skirts', 'miniskirt', 'midiskirt', 'maxiskirt', 'rock', 'roecke', 'minirock'],
+            'leggings': ['leggings', 'tights', 'leggins']
         }
 
         # URL path category signals (e.g. /men-clothing-shirts-polos/)
