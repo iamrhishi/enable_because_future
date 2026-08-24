@@ -4,12 +4,30 @@ Eliminates code duplication across the codebase
 Uses rotating user agents and optional proxy support to avoid bot detection
 """
 
+import re
 import requests  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from urllib.parse import urljoin
 from typing import Optional, List
 from shared.logger import logger
 from features.garments.scraping_constants import get_default_headers, get_proxy_config, get_proxy_auth
+
+# Matches site-chrome assets (nav/header logos, flag icons, promo banners) that
+# turn up interspersed with real product photos when just grabbing the page's
+# first N <img> tags in DOM order - confirmed via a real production trace on a
+# SuitSupply product page, where the first 16 <img> tags were exclusively a
+# country-flag icon, 2 logo variants, and 13 nav-menu collection/occasion
+# banners, with the actual product photo only appearing at position 17 of 21.
+_NON_PRODUCT_IMAGE_PATTERN = re.compile(
+    r'(logo|favicon|sprite|/flags?/|nav-menu|nav_|/icons?/|icon[-_]|placeholder|spinner|/badges?/)',
+    re.I
+)
+
+
+def _looks_like_product_image(url: str) -> bool:
+    if url.lower().endswith('.svg'):
+        return False
+    return not _NON_PRODUCT_IMAGE_PATTERN.search(url)
 
 
 def unwrap_redirect_url(url: str) -> str:
@@ -189,15 +207,23 @@ def extract_images_from_html(html_content: str, base_url: str, max_images: int =
         soup = BeautifulSoup(html_content, 'html.parser')
         images = []
         img_tags = soup.find_all('img', src=True)
-        
-        for img in img_tags[:max_images]:
+
+        # Scan further than max_images in DOM order (bounded) rather than slicing
+        # to max_images up front - a page's first N <img> tags are frequently all
+        # header/nav/logo assets, which _looks_like_product_image filters out, so
+        # slicing before filtering could return zero real product photos even
+        # when plenty exist further down the page.
+        scan_limit = max(max_images * 4, 40)
+        for img in img_tags[:scan_limit]:
+            if len(images) >= max_images:
+                break
             img_url = img.get('src') or img.get('data-src') or img.get('data-lazy-src')
             if img_url:
                 if not img_url.startswith('http'):
                     img_url = urljoin(base_url, img_url)
-                if img_url not in images:
+                if img_url not in images and _looks_like_product_image(img_url):
                     images.append(img_url)
-        
+
         logger.info(f"extract_images_from_html: EXIT - Found {len(images)} images")
         return images
     except Exception as e:
