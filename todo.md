@@ -2,6 +2,24 @@
 
 ## Open
 
+- **App cannot layer two 'upper' garments (e.g. jacket over t-shirt) even
+  though the backend fully supports it.** `process_tryon_layered` is built
+  for exactly this ("top + jacket" is its own docstring example) and
+  `garment_type='upper'` maps to a "jacket/outerwear/top layer" prompt that
+  tells Gemini to add it *over* the existing top rather than replace it -
+  verified live 2026-08-24 with a real polo + blazer layered on the same
+  avatar, result correctly showed the polo collar/cuffs under the blazer.
+  But the mobile app has no path to reach it: `selectedTop` is a single
+  slot and `getLayeredTryOn` only ever sends exactly one top + one bottom,
+  so tapping a second 'upper' item (the jacket) silently overwrites/discards
+  the first (the polo) rather than queuing both. There is no UI state or
+  request path - deliberate or accidental - that currently sends two
+  'upper' entries together. Needs real frontend work if wanted: a distinct
+  outerwear slot separate from the base top (or letting the top selection
+  hold multiple items), UI to pick both, and wiring to send them as two
+  'upper' entries in the correct order. Confirmed with the user to log
+  only, not build, for now.
+
 - **`create_layered_tryon` (`/tryon/layered`) and `tryon_gemini_remote`
   (`/tryon-gemini`) are synchronous routes with no bound on the client
   upload.** Both call `process_tryon`/`process_tryon_layered` directly in
