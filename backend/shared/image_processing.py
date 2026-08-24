@@ -435,11 +435,22 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
         response = requests.get(url, headers=headers, timeout=timeout, proxies=proxies, auth=auth)
         response.raise_for_status()
         
-        # Validate content type
+        # Validate content type - reject outright (SVG icons/logos/flags, HTML
+        # error pages, etc.) rather than just warning and returning them anyway.
+        # Confirmed via a real production trace: a scraped product page's image
+        # gallery included a country-flag SVG and 2 logo SVGs alongside real
+        # product photos - previously these were fetched, logged as "unexpected
+        # content type", then returned as valid candidates regardless. One
+        # (220 bytes, no person in it) then won the flat-lay/no-model
+        # preference in create_tryon_job's candidate scoring over any real
+        # garment photo, since a logo trivially "has no person" too. The
+        # caller already has a per-URL try/except that skips fetch failures
+        # and moves to the next candidate, so raising here is enough to
+        # exclude these without any change to the calling code.
         content_type = response.headers.get('Content-Type', '').lower()
         if not any(mt in content_type for mt in ALLOWED_MIMETYPES):
-            logger.warning(f"fetch_image_from_url: Unexpected content type: {content_type}")
-        
+            raise ValidationError(f"Not a photo (content-type: {content_type or 'unknown'})")
+
         image_data = response.content
         logger.info(f"fetch_image_from_url: EXIT - Fetched {len(image_data)} bytes")
         return image_data
@@ -500,7 +511,14 @@ def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> by
 def normalize_avatar_framing(
     image_bytes: bytes,
     target_canvas_size: tuple[int, int] = (900, 1200),
-    target_height_percent: float = 0.95,
+    # Was 0.95 - left only ~3% of canvas height as top headroom (1.0 - 0.95 -
+    # bottom_margin_percent), with no separate top-margin parameter at all -
+    # confirmed via a real currently-saved production avatar: bbox top margin
+    # measured at 46px on a 1200px canvas, just 3.8%. That's tight enough that
+    # a photo with slightly more hair volume, a raised chin, or a less-clean
+    # alpha mask edge would push the head past the top edge. 0.90 roughly
+    # triples the top margin to ~8% for a barely-noticeable size reduction.
+    target_height_percent: float = 0.90,
     bottom_margin_percent: float = 0.02
 ) -> bytes:
     """

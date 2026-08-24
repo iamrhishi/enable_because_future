@@ -575,9 +575,14 @@ def create_tryon_job():
                                     base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', '', ''))
                                     
                                     # Save with exact URL (GLOBAL CACHE - no user_id, shared across all users)
-                                    # Only save 1-2 image URLs (the ones we actually use for Gemini), not all images
+                                    # Cache enough candidate URLs to match the fetch loop's own attempt cap
+                                    # below (max_attempts = min(10, len(images))) - caching only the first 2
+                                    # meant a metadata-only cache hit (Priority 2, no byte cache yet) had
+                                    # nothing left to retry when those 2 turned out to be non-garment assets
+                                    # (confirmed in production: SuitSupply's first 2 images were a flag icon
+                                    # and a logo SVG, both now rejected by fetch_image_from_url).
                                     all_images = product_info.get('images', [])
-                                    images_to_cache = all_images[:2]  # Only cache first 2 images
+                                    images_to_cache = all_images[:10]  # Match fetch loop's max_attempts cap
                                     db_manager.execute_query(
                                         """INSERT INTO garment_metadata
                                            (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
@@ -674,27 +679,41 @@ def create_tryon_job():
                             if images:
                                 import time as time_module
                                 image_fetch_start = time_module.time()
-                                # Fetch a few candidates (not all - most listings have 10-20) so we
-                                # can actually choose between them instead of blindly taking the
-                                # gallery's first image, which is frequently a styled/layered look
-                                # shot (e.g. a jacket worn over other visible garments) rather than
-                                # a clean shot of just the item being tried on.
-                                images_to_fetch = min(4, len(images))
-                                logger.info(f"create_tryon_job: ⏱️  STEP 3: Fetching {images_to_fetch} garment image(s) from URLs (only the ones we may use for Gemini, not all {len(images)} images)")
+                                # Fetch candidates (not all - most listings have 10-20) so we can
+                                # choose between them instead of blindly taking the gallery's first
+                                # image, which is frequently a styled/layered look shot (e.g. a
+                                # jacket worn over other visible garments) rather than a clean shot
+                                # of just the item being tried on.
+                                #
+                                # Keep walking the list (up to a hard cap) rather than stopping at
+                                # a fixed first-N window - confirmed via a real production trace
+                                # that a scraped page's gallery can lead with several non-garment
+                                # site assets (a country-flag icon, 2 logo variants) before any real
+                                # product photo. fetch_image_from_url() now rejects non-photo
+                                # content-types outright, so those don't count toward the target;
+                                # without walking further, all 4 fetch slots could be burned on
+                                # site chrome with zero real garment photos to show for it.
+                                target_valid_images = 4
+                                max_attempts = min(10, len(images))
+                                logger.info(f"create_tryon_job: ⏱️  STEP 3: Fetching up to {target_valid_images} valid garment image(s), trying up to {max_attempts} of {len(images)} URLs")
 
-                                for idx, img_url in enumerate(images[:images_to_fetch]):
+                                attempted = 0
+                                for img_url in images[:max_attempts]:
+                                    if len(garment_images) >= target_valid_images:
+                                        break
+                                    attempted += 1
                                     try:
                                         img_fetch_single_start = time_module.time()
                                         garment_img = fetch_image_from_url(img_url)
                                         img_fetch_time = time_module.time() - img_fetch_single_start
                                         garment_images.append((img_url, garment_img))  # Store URL with image for caching
-                                        logger.info(f"create_tryon_job: ✅ Fetched image {idx+1}/{images_to_fetch} in {img_fetch_time:.2f}s: {img_url[:100]}")
+                                        logger.info(f"create_tryon_job: ✅ Fetched image {len(garment_images)}/{target_valid_images} (attempt {attempted}) in {img_fetch_time:.2f}s: {img_url[:100]}")
                                     except Exception as img_fetch_error:
-                                        logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
+                                        logger.debug(f"create_tryon_job: Skipped candidate image {img_url}: {str(img_fetch_error)}")
                                         continue
 
                                 total_image_fetch_time = time_module.time() - image_fetch_start
-                                logger.info(f"create_tryon_job: Total image fetching took {total_image_fetch_time:.2f}s")
+                                logger.info(f"create_tryon_job: Total image fetching took {total_image_fetch_time:.2f}s ({len(garment_images)} valid of {attempted} attempted)")
 
                                 # Prefer the first candidate with no human model in frame (a flat-
                                 # lay/hanger/isolated product shot) over the gallery's raw first
