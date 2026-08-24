@@ -2,6 +2,30 @@
 
 ## Open
 
+- **`create_layered_tryon` (`/tryon/layered`) and `tryon_gemini_remote`
+  (`/tryon-gemini`) are synchronous routes with no bound on the client
+  upload.** Both call `process_tryon`/`process_tryon_layered` directly in
+  the request thread rather than going through `JobQueue`, and Werkzeug
+  lazily parses `request.files` on first access - blocking until the full
+  multipart body arrives, with no read timeout. Observed live 2026-08-24: a
+  real `create_layered_tryon` request for user `b2edc96b` (entry 16:53:56,
+  last progress line 16:56:06 "Using saved avatar") produced zero further
+  log output for 40+ minutes while the rest of the server stayed responsive
+  (health check and other threads unaffected) - consistent with one thread
+  wedged on a slow/incomplete client upload rather than a server-wide hang.
+  Cleared by the day's unrelated deploy restart, not by a real fix. Worth a
+  request-level upload timeout or moving these 2 routes onto `JobQueue` like
+  the main `/tryon` path, if this recurs.
+
+- **`JobQueue`'s single background worker thread per gunicorn process is a
+  real (but so far untriggered) concurrency ceiling.** Each of gunicorn's 2
+  worker processes runs its own independent single-threaded job processor,
+  capping the whole app at 2 concurrent Gemini generations regardless of how
+  many client threads/requests are in flight. Checked 162 historical job
+  timestamps on 2026-08-21 for evidence of real queueing delay - found none.
+  Not preemptively addressed; revisit if try-on volume grows enough for this
+  to become a real bottleneck.
+
 - **Avatar false-positive rejection: real background bystanders count as "multiple people" - original report not independently re-verified.**
   Reported 2026-08-13 (Munya, via WhatsApp). A candid full-body photo taken at
   an event was rejected (`unique_faces=3, bodies=2`) with the standard
@@ -32,6 +56,54 @@
   above - it would be factually wrong and mask the real cause.
 
 ## Resolved
+
+- **2026-08-24 - Multi-garment try-on failing with "Received HTML content
+  instead of image" - root-caused to the garment scraper feeding non-photo
+  site assets into the try-on pipeline, not a frontend bug.** User reported
+  this while tapping a real product photo thumbnail in the mobile app, which
+  made it look like a frontend image-selection bug - traced instead to 3
+  compounding backend issues, all confirmed live against the real reported
+  SuitSupply product page:
+  1. `extract_images_from_html()` grabbed a page's first N `<img>` tags in
+     raw DOM order with no filtering at all. On this real page the first 16
+     of 21 tags were a country-flag icon, 2 logo SVGs, and 13 nav-menu
+     collection/occasion banners - the actual product photo only appeared at
+     position 17. Now filters out `.svg` and known non-product URL patterns
+     (logo/flag/nav-menu/icon/etc.) and scans further into the DOM (bounded)
+     to still reach real photos further down the page. (`58c4788`)
+  2. `fetch_image_from_url()` only warned on an unexpected content-type and
+     returned the bytes anyway - so the 220-byte flag SVG got returned as a
+     "valid" candidate and then won the flat-lay/no-model preference in
+     `create_tryon_job`'s candidate scoring over any real garment photo
+     (a logo trivially "has no person" too). Now rejects outright. (`9553af0`)
+  3. Both the live fetch loop and the `garment_metadata` image-URL cache were
+     capped at a fixed first-2/first-4 window - once non-garment candidates
+     in that window got correctly rejected by fix #2, there was nothing left
+     to fall back to even though real photos existed further down the same
+     gallery. Both widened to walk up to 10 candidates. (`9553af0`)
+
+  Separately confirmed the frontend's `selectedImageUrl` wiring (added
+  earlier) is correct - the currently-installed app build simply predates
+  that fix, so the backend's own (buggy, now-fixed) auto-selection ran
+  instead of honoring the user's tap. Verified live end-to-end via the real
+  `/api/garments/scrape` endpoint against the exact reported URL: image #0
+  is now the real product photo, zero site-chrome assets anywhere in the
+  result. Purged the 3 SuitSupply rows in `garment_metadata` that had
+  already cached the flag SVG so they re-scrape clean. Full pytest suite
+  unaffected (same 7 pre-existing unrelated failures).
+
+- **2026-08-24 - Avatar head clipped by the top logo overlay on the home
+  screen.** `normalize_avatar_framing()` had no dedicated top-margin
+  parameter at all - the top margin was purely an implicit leftover of
+  `1.0 - target_height_percent - bottom_margin_percent`, which left only
+  ~3% of canvas height as headroom. Measured directly on a real, currently-
+  saved production avatar: top margin was 46px / 3.8% of a 1200px canvas -
+  tight enough that slightly more hair volume, a raised chin, or a less-
+  clean alpha mask edge would push the head past the top edge. Reduced
+  `target_height_percent` 0.95 -> 0.90, roughly tripling the real margin to
+  97px / 8.1% for a barely-noticeable size reduction. Verified against the
+  same real avatar file and visually confirmed the result still looks
+  natural.
 
 - **2026-08-21 - Try-on end-to-end mobile latency (~40s) vs ~16s Gemini
   generation time - root-caused the gap, fixed part of it.** Pulled a real
