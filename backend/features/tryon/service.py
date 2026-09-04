@@ -440,7 +440,11 @@ def _raise_gemini_tryon_finish_error(finish_reason: str, finish_message: str) ->
         )
         raise ExternalServiceError(user_msg, service='gemini')
 
-    if finish_reason in ('SAFETY', 'PROHIBITED_CONTENT'):
+    if finish_reason in ('SAFETY', 'PROHIBITED_CONTENT', 'IMAGE_SAFETY'):
+        # IMAGE_SAFETY confirmed via a real benchmark run (2026-08-21, gemini-3.1-flash-image
+        # on a short/revealing garment) - a distinct finishReason from plain SAFETY/
+        # PROHIBITED_CONTENT that this branch didn't recognize, so it fell through to the
+        # generic "failed unexpectedly" message instead of telling the user what happened.
         user_msg = (
             'This image combination was blocked by safety filters. '
             'Please try a different photo or garment.'
@@ -567,7 +571,10 @@ def _tryon_resize_max_long_edge(image_bytes: bytes, max_edge: int) -> bytes:
             img = img.convert('RGB')
         img = img.resize((nw, nh), Image.Resampling.LANCZOS)
         out = BytesIO()
-        img.save(out, format='PNG', optimize=True)
+        # optimize=True's slow exhaustive compression search isn't worth it here
+        # either - see image_processing.normalize_image()'s comment for the
+        # measured cost (~5x slower for ~5% smaller output on a real garment image).
+        img.save(out, format='PNG')
         return out.getvalue()
     except Exception as e:
         logger.warning(f'process_tryon: _tryon_resize_max_long_edge skipped: {e}')
@@ -575,7 +582,7 @@ def _tryon_resize_max_long_edge(image_bytes: bytes, max_edge: int) -> bytes:
 
 
 def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
-                  garment_details: dict = None, options: dict = None) -> str:
+                  garment_details: dict = None, options: dict = None, model_name: str = None) -> str:
     """
     Process try-on using Gemini (Nano Banana) API - PRIMARY SERVICE
 
@@ -589,6 +596,12 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
         garment_type: 'upper' or 'lower'
         garment_details: Dict with garment info (category, material_type, brand, color, style, etc.)
         options: Additional options (not currently used, kept for compatibility)
+        model_name: Explicit model override - defaults to Config.GEMINI_MODEL_NAME. Takes an
+            explicit parameter (rather than the caller mutating Config directly) so
+            process_tryon_with_fallback() can retry with a different model without
+            touching shared state - Config.GEMINI_MODEL_NAME is read by every gunicorn
+            thread, so mutating it for one request's retry would race with other
+            concurrent requests' primary attempts.
 
     Returns:
         result_url: Base64 data URL of result image
@@ -596,7 +609,8 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
     Raises:
         ExternalServiceError: If processing fails
     """
-    logger.info(f"process_tryon: ENTRY - garment_type={garment_type}, garment_details={garment_details}")
+    model_name = model_name or Config.GEMINI_MODEL_NAME
+    logger.info(f"process_tryon: ENTRY - garment_type={garment_type}, garment_details={garment_details}, model={model_name}")
 
     from shared.image_processing import canvas_size_from_aspect_ratio
     target_canvas_size = canvas_size_from_aspect_ratio((options or {}).get('aspect_ratio'))
@@ -820,7 +834,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
             relaxed_parts.insert(1, f"Garment context: {', '.join(garment_info_parts)}.\n")
         prompt_relaxed = "".join(relaxed_parts)
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         headers = {"Content-Type": "application/json"}
         params = {"key": Config.GEMINI_API_KEY}
 
@@ -1178,7 +1192,7 @@ def process_tryon(person_image: bytes, garment_image: bytes, garment_type: str =
 
 
 def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
-                          garment_details: dict = None) -> str:
+                          garment_details: dict = None, options: dict = None, model_name: str = None) -> str:
     """
     Process try-on with LAYERING mode - adds garment OVER existing outfit.
 
@@ -1190,11 +1204,23 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
         garment_image: Garment image bytes to layer on top
         garment_type: 'upper' or 'lower' or 'outerwear'
         garment_details: Optional dict with garment info
+        options: Optional dict; 'aspect_ratio' matches output canvas to the client
+            device's display shape, same as process_tryon(). Previously missing
+            entirely here - this endpoint returned Gemini's raw output dimensions
+            unadjusted, causing inconsistent result sizing versus single-garment
+            try-on (confirmed: the old exit log even claimed "normalized framing"
+            when no normalization step existed in this function at all).
+        model_name: Explicit model override - see process_tryon()'s docstring for why
+            this is a parameter rather than a Config mutation.
 
     Returns:
         result_url: Base64 data URL of result image
     """
-    logger.info(f"process_tryon_layered: ENTRY - garment_type={garment_type}")
+    model_name = model_name or Config.GEMINI_MODEL_NAME
+    logger.info(f"process_tryon_layered: ENTRY - garment_type={garment_type}, model={model_name}")
+
+    from shared.image_processing import canvas_size_from_aspect_ratio
+    target_canvas_size = canvas_size_from_aspect_ratio((options or {}).get('aspect_ratio'))
 
     try:
         if not Config.GEMINI_API_KEY:
@@ -1293,7 +1319,7 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
         prompt = "".join(prompt_parts)
 
         # Call Gemini API
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{Config.GEMINI_MODEL_NAME}:generateContent"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
 
         headers = {
             "Content-Type": "application/json",
@@ -1352,11 +1378,12 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
                                         raw_bytes = remove(raw_bytes, session=_get_rembg_session())
                                     except Exception as bg_err:
                                         logger.warning(f"process_tryon_layered: rembg error: {bg_err}")
-                                    from shared.image_processing import clean_and_solidify_alpha_mask
+                                    from shared.image_processing import clean_and_solidify_alpha_mask, normalize_avatar_framing
                                     processed_bytes = clean_and_solidify_alpha_mask(raw_bytes)
+                                    processed_bytes = normalize_avatar_framing(processed_bytes, target_canvas_size=target_canvas_size)
                                     new_b64 = base64.b64encode(processed_bytes).decode('utf-8')
                                     result_url = f"data:image/png;base64,{new_b64}"
-                                    logger.info(f"process_tryon_layered: EXIT - Success (normalized framing)")
+                                    logger.info(f"process_tryon_layered: EXIT - Success (normalized framing to {target_canvas_size})")
                                     return result_url
 
                     raise ExternalServiceError("No image in Gemini response", service='gemini')
@@ -1387,6 +1414,47 @@ def process_tryon_layered(person_image: bytes, garment_image: bytes, garment_typ
     except Exception as e:
         logger.exception(f"process_tryon_layered: EXIT - Error: {str(e)}")
         raise ExternalServiceError(f"Layered try-on failed: {str(e)}", service='gemini')
+
+
+def process_tryon_with_fallback(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
+                                 garment_details: dict = None, options: dict = None) -> str:
+    """
+    process_tryon(), retrying once with Config.GEMINI_FALLBACK_MODEL_NAME (Nano Banana
+    Pro) if the primary model (Config.GEMINI_MODEL_NAME, Nano Banana 2) fails outright.
+
+    Driven by a real, reproducible finding from a 2026-08-21 benchmark: Nano Banana 2
+    hit a consistent IMAGE_SAFETY block on a specific person/garment combination
+    (confirmed on two separate runs) that Nano Banana Pro handled correctly both
+    times it was tried. Nano Banana 2 stays primary since it averaged ~1.75x faster
+    across 20 real test cases with no quality regression on the cases it shares with
+    Pro - this only pays Pro's latency cost on the minority of requests that actually
+    need it, instead of on every request.
+    """
+    try:
+        return process_tryon(person_image, garment_image, garment_type, garment_details, options,
+                              model_name=Config.GEMINI_MODEL_NAME)
+    except Exception as primary_error:
+        logger.warning(
+            f"process_tryon_with_fallback: primary model ({Config.GEMINI_MODEL_NAME}) failed "
+            f"({primary_error}), retrying with fallback model ({Config.GEMINI_FALLBACK_MODEL_NAME})"
+        )
+        return process_tryon(person_image, garment_image, garment_type, garment_details, options,
+                              model_name=Config.GEMINI_FALLBACK_MODEL_NAME)
+
+
+def process_tryon_layered_with_fallback(person_image: bytes, garment_image: bytes, garment_type: str = 'upper',
+                                         garment_details: dict = None, options: dict = None) -> str:
+    """Same primary/fallback retry as process_tryon_with_fallback(), for the layered flow."""
+    try:
+        return process_tryon_layered(person_image, garment_image, garment_type, garment_details, options,
+                                      model_name=Config.GEMINI_MODEL_NAME)
+    except Exception as primary_error:
+        logger.warning(
+            f"process_tryon_layered_with_fallback: primary model ({Config.GEMINI_MODEL_NAME}) failed "
+            f"({primary_error}), retrying with fallback model ({Config.GEMINI_FALLBACK_MODEL_NAME})"
+        )
+        return process_tryon_layered(person_image, garment_image, garment_type, garment_details, options,
+                                      model_name=Config.GEMINI_FALLBACK_MODEL_NAME)
 
 
 def remove_background(image_data: bytes) -> bytes:

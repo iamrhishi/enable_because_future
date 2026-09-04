@@ -17,7 +17,15 @@ from shared.analytics import track_event, EventType
 
 # Queue limits per context.md line 89
 MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '50'))  # Max jobs in queue
-JOB_TIMEOUT_SECONDS = int(os.environ.get('JOB_TIMEOUT_SECONDS', '120'))  # 120 seconds per context.md
+# Raised from 120s after 2 real jobs (checksummed against production logs,
+# user 02704f4a on 2026-08-17) failed outright at 173.1s and 316.5s -
+# both legitimate runs of process_tryon's own retry/fallback system, which
+# exists specifically to recover from Gemini's inconsistent output (the
+# same inconsistency reported as a bug). That system's real-world worst
+# case can exceed the old 120s ceiling on its own, converting a case that
+# would have eventually succeeded into a guaranteed hard failure. 450s
+# gives ~40% margin over the worst observed real duration.
+JOB_TIMEOUT_SECONDS = int(os.environ.get('JOB_TIMEOUT_SECONDS', '450'))
 
 
 class JobQueue:
@@ -151,7 +159,7 @@ class JobQueue:
             self._update_job_status(job_id, 'processing', progress=10)
 
             # Import here to avoid circular imports
-            from features.tryon.service import process_tryon, _remove_background_local
+            from features.tryon.service import process_tryon_with_fallback, _remove_background_local
 
             # Remove garment background here (in the worker, not the request handler) -
             # rembg can take anywhere from 1-50+s and the client is waiting on job
@@ -191,7 +199,7 @@ class JobQueue:
             if elapsed > JOB_TIMEOUT_SECONDS:
                 raise ValidationError(f"Job timeout: {elapsed:.1f}s > {JOB_TIMEOUT_SECONDS}s")
 
-            result_data = process_tryon(
+            result_data = process_tryon_with_fallback(
                 job_data['person_image'],
                 garment_image,
                 job_data.get('garment_type', 'upper'),

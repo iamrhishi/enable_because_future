@@ -13,7 +13,7 @@ import requests
 from config import Config
 from features.tryon.job_queue import get_job_queue
 from shared.database import db_manager
-from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image
+from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image, _detect_person_in_image
 from shared.garment_utils import categorize_garment
 from shared.models.user import User
 from shared.response import success_response, error_response_from_string, server_error_response
@@ -575,9 +575,14 @@ def create_tryon_job():
                                     base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', '', ''))
                                     
                                     # Save with exact URL (GLOBAL CACHE - no user_id, shared across all users)
-                                    # Only save 1-2 image URLs (the ones we actually use for Gemini), not all images
+                                    # Cache enough candidate URLs to match the fetch loop's own attempt cap
+                                    # below (max_attempts = min(10, len(images))) - caching only the first 2
+                                    # meant a metadata-only cache hit (Priority 2, no byte cache yet) had
+                                    # nothing left to retry when those 2 turned out to be non-garment assets
+                                    # (confirmed in production: SuitSupply's first 2 images were a flag icon
+                                    # and a logo SVG, both now rejected by fetch_image_from_url).
                                     all_images = product_info.get('images', [])
-                                    images_to_cache = all_images[:2]  # Only cache first 2 images
+                                    images_to_cache = all_images[:10]  # Match fetch loop's max_attempts cap
                                     db_manager.execute_query(
                                         """INSERT INTO garment_metadata
                                            (url, title, price, images, sizes, colors, brand, scraped_at, updated_at, last_accessed_at)
@@ -655,33 +660,83 @@ def create_tryon_job():
                         # Only fetch 1-2 images that we actually use for Gemini (not all images)
                         # Skip if we already got image from wardrobe or cached bytes
                         garment_images = []
+                        # Optional explicit pick from the frontend (e.g. the user tapped a
+                        # specific photo in the product's image gallery before trying it on).
+                        # Takes priority over auto-selection below when present and fetchable;
+                        # falls through to auto-selection if it's missing or fails to fetch.
+                        selected_image_url = request.form.get('selected_image_url')
+                        if selected_image_url and product_info and not garment_image:
+                            try:
+                                selected_bytes = fetch_image_from_url(selected_image_url)
+                                garment_images.append((selected_image_url, selected_bytes))
+                                garment_image = selected_bytes
+                                logger.info(f"create_tryon_job: Using frontend-selected image ({len(selected_bytes)} bytes): {selected_image_url[:100]}")
+                            except Exception as selected_fetch_error:
+                                logger.warning(f"create_tryon_job: Failed to fetch frontend-selected image {selected_image_url[:100]}: {str(selected_fetch_error)}, falling back to auto-selection")
+
                         if product_info and not garment_image:
                             images = product_info.get('images', [])
                             if images:
                                 import time as time_module
                                 image_fetch_start = time_module.time()
-                                # Only fetch 1-2 images (the ones we actually use for Gemini)
-                                images_to_fetch = min(2, len(images))  # Max 2 images
-                                logger.info(f"create_tryon_job: ⏱️  STEP 3: Fetching {images_to_fetch} garment image(s) from URLs (only the ones we use for Gemini, not all {len(images)} images)")
-                                
-                                for idx, img_url in enumerate(images[:images_to_fetch]):
+                                # Fetch candidates (not all - most listings have 10-20) so we can
+                                # choose between them instead of blindly taking the gallery's first
+                                # image, which is frequently a styled/layered look shot (e.g. a
+                                # jacket worn over other visible garments) rather than a clean shot
+                                # of just the item being tried on.
+                                #
+                                # Keep walking the list (up to a hard cap) rather than stopping at
+                                # a fixed first-N window - confirmed via a real production trace
+                                # that a scraped page's gallery can lead with several non-garment
+                                # site assets (a country-flag icon, 2 logo variants) before any real
+                                # product photo. fetch_image_from_url() now rejects non-photo
+                                # content-types outright, so those don't count toward the target;
+                                # without walking further, all 4 fetch slots could be burned on
+                                # site chrome with zero real garment photos to show for it.
+                                target_valid_images = 4
+                                max_attempts = min(10, len(images))
+                                logger.info(f"create_tryon_job: ⏱️  STEP 3: Fetching up to {target_valid_images} valid garment image(s), trying up to {max_attempts} of {len(images)} URLs")
+
+                                attempted = 0
+                                for img_url in images[:max_attempts]:
+                                    if len(garment_images) >= target_valid_images:
+                                        break
+                                    attempted += 1
                                     try:
                                         img_fetch_single_start = time_module.time()
                                         garment_img = fetch_image_from_url(img_url)
                                         img_fetch_time = time_module.time() - img_fetch_single_start
                                         garment_images.append((img_url, garment_img))  # Store URL with image for caching
-                                        logger.info(f"create_tryon_job: ✅ Fetched image {idx+1}/{images_to_fetch} in {img_fetch_time:.2f}s: {img_url[:100]}")
+                                        logger.info(f"create_tryon_job: ✅ Fetched image {len(garment_images)}/{target_valid_images} (attempt {attempted}) in {img_fetch_time:.2f}s: {img_url[:100]}")
                                     except Exception as img_fetch_error:
-                                        logger.debug(f"create_tryon_job: Failed to fetch image {img_url}: {str(img_fetch_error)}")
+                                        logger.debug(f"create_tryon_job: Skipped candidate image {img_url}: {str(img_fetch_error)}")
                                         continue
-                                
+
                                 total_image_fetch_time = time_module.time() - image_fetch_start
-                                logger.info(f"create_tryon_job: Total image fetching took {total_image_fetch_time:.2f}s")
-                                
-                                # If we got at least one image, use the first one
+                                logger.info(f"create_tryon_job: Total image fetching took {total_image_fetch_time:.2f}s ({len(garment_images)} valid of {attempted} attempted)")
+
+                                # Prefer the first candidate with no human model in frame (a flat-
+                                # lay/hanger/isolated product shot) over the gallery's raw first
+                                # image - a flat-lay structurally can't show the target garment
+                                # layered under/over other clothing, since there's no model to
+                                # style it on. Falls back to the first image if every candidate
+                                # is a model shot (unchanged from prior behavior in that case).
+                                chosen_idx = 0
+                                for idx, (_, candidate_bytes) in enumerate(garment_images):
+                                    try:
+                                        if not _detect_person_in_image(candidate_bytes):
+                                            chosen_idx = idx
+                                            break
+                                    except Exception:
+                                        continue
+
+                                # If we got at least one image, use the chosen one
                                 if garment_images:
-                                    garment_image = garment_images[0][1]  # Use first image bytes
-                                    logger.info(f"create_tryon_job: Using first image for try-on ({len(garment_image)} bytes)")
+                                    garment_image = garment_images[chosen_idx][1]
+                                    logger.info(
+                                        f"create_tryon_job: Using image {chosen_idx+1}/{len(garment_images)} for try-on "
+                                        f"({len(garment_image)} bytes){' - flat-lay/no-model preferred over gallery order' if chosen_idx != 0 else ''}"
+                                    )
                                     
                                     # CACHE the fetched images for future use (1-2 images only, not all)
                                     if garment_images and item_url:
@@ -1110,7 +1165,7 @@ def create_layered_tryon():
     logger.info(f"create_layered_tryon: ENTRY - user_id={user_id}")
 
     try:
-        from features.tryon.service import process_tryon, process_tryon_layered
+        from features.tryon.service import process_tryon_with_fallback, process_tryon_layered_with_fallback
         from shared.storage import get_storage_service
         import uuid
 
@@ -1224,19 +1279,22 @@ def create_layered_tryon():
             try:
                 # First garment: normal try-on on avatar
                 # Subsequent garments: layer over existing outfit
+                tryon_options = {'aspect_ratio': request.form.get('aspect_ratio')}
                 if idx == 0:
                     logger.info("create_layered_tryon: Using process_tryon for first garment")
-                    result_data_url = process_tryon(
+                    result_data_url = process_tryon_with_fallback(
                         person_image=current_avatar,
                         garment_image=garment_image,
-                        garment_type=garment_type
+                        garment_type=garment_type,
+                        options=tryon_options
                     )
                 else:
                     logger.info("create_layered_tryon: Using process_tryon_layered for subsequent garment")
-                    result_data_url = process_tryon_layered(
+                    result_data_url = process_tryon_layered_with_fallback(
                         person_image=current_avatar,
                         garment_image=garment_image,
-                        garment_type=garment_type
+                        garment_type=garment_type,
+                        options=tryon_options
                     )
 
                 # Extract base64 data and convert to bytes
@@ -1437,13 +1495,16 @@ def tryon_gemini_remote():
         # Call local Gemini try-on service
         logger.info("🤖 tryon_gemini_remote: Calling local Gemini try-on service...")
         try:
-            from features.tryon.service import process_tryon
-            result_data_url = process_tryon(
+            from features.tryon.service import process_tryon_with_fallback
+            result_data_url = process_tryon_with_fallback(
                 person_image=avatar_bytes,
                 garment_image=garment_bytes,
                 garment_type=cloth_type,
                 garment_details=None,
-                options={'num_inference_steps': num_inference_steps}
+                options={
+                    'num_inference_steps': num_inference_steps,
+                    'aspect_ratio': request.form.get('aspect_ratio'),
+                }
             )
             logger.info(f"✅ tryon_gemini_remote: Gemini try-on completed")
             

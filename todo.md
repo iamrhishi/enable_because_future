@@ -2,6 +2,48 @@
 
 ## Open
 
+- **App cannot layer two 'upper' garments (e.g. jacket over t-shirt) even
+  though the backend fully supports it.** `process_tryon_layered` is built
+  for exactly this ("top + jacket" is its own docstring example) and
+  `garment_type='upper'` maps to a "jacket/outerwear/top layer" prompt that
+  tells Gemini to add it *over* the existing top rather than replace it -
+  verified live 2026-08-24 with a real polo + blazer layered on the same
+  avatar, result correctly showed the polo collar/cuffs under the blazer.
+  But the mobile app has no path to reach it: `selectedTop` is a single
+  slot and `getLayeredTryOn` only ever sends exactly one top + one bottom,
+  so tapping a second 'upper' item (the jacket) silently overwrites/discards
+  the first (the polo) rather than queuing both. There is no UI state or
+  request path - deliberate or accidental - that currently sends two
+  'upper' entries together. Needs real frontend work if wanted: a distinct
+  outerwear slot separate from the base top (or letting the top selection
+  hold multiple items), UI to pick both, and wiring to send them as two
+  'upper' entries in the correct order. Confirmed with the user to log
+  only, not build, for now.
+
+- **`create_layered_tryon` (`/tryon/layered`) and `tryon_gemini_remote`
+  (`/tryon-gemini`) are synchronous routes with no bound on the client
+  upload.** Both call `process_tryon`/`process_tryon_layered` directly in
+  the request thread rather than going through `JobQueue`, and Werkzeug
+  lazily parses `request.files` on first access - blocking until the full
+  multipart body arrives, with no read timeout. Observed live 2026-08-24: a
+  real `create_layered_tryon` request for user `b2edc96b` (entry 16:53:56,
+  last progress line 16:56:06 "Using saved avatar") produced zero further
+  log output for 40+ minutes while the rest of the server stayed responsive
+  (health check and other threads unaffected) - consistent with one thread
+  wedged on a slow/incomplete client upload rather than a server-wide hang.
+  Cleared by the day's unrelated deploy restart, not by a real fix. Worth a
+  request-level upload timeout or moving these 2 routes onto `JobQueue` like
+  the main `/tryon` path, if this recurs.
+
+- **`JobQueue`'s single background worker thread per gunicorn process is a
+  real (but so far untriggered) concurrency ceiling.** Each of gunicorn's 2
+  worker processes runs its own independent single-threaded job processor,
+  capping the whole app at 2 concurrent Gemini generations regardless of how
+  many client threads/requests are in flight. Checked 162 historical job
+  timestamps on 2026-08-21 for evidence of real queueing delay - found none.
+  Not preemptively addressed; revisit if try-on volume grows enough for this
+  to become a real bottleneck.
+
 - **Avatar false-positive rejection: real background bystanders count as "multiple people" - original report not independently re-verified.**
   Reported 2026-08-13 (Munya, via WhatsApp). A candid full-body photo taken at
   an event was rejected (`unique_faces=3, bodies=2`) with the standard
@@ -32,6 +74,114 @@
   above - it would be factually wrong and mask the real cause.
 
 ## Resolved
+
+- **2026-08-24 - Multi-garment try-on failing with "Received HTML content
+  instead of image" - root-caused to the garment scraper feeding non-photo
+  site assets into the try-on pipeline, not a frontend bug.** User reported
+  this while tapping a real product photo thumbnail in the mobile app, which
+  made it look like a frontend image-selection bug - traced instead to 3
+  compounding backend issues, all confirmed live against the real reported
+  SuitSupply product page:
+  1. `extract_images_from_html()` grabbed a page's first N `<img>` tags in
+     raw DOM order with no filtering at all. On this real page the first 16
+     of 21 tags were a country-flag icon, 2 logo SVGs, and 13 nav-menu
+     collection/occasion banners - the actual product photo only appeared at
+     position 17. Now filters out `.svg` and known non-product URL patterns
+     (logo/flag/nav-menu/icon/etc.) and scans further into the DOM (bounded)
+     to still reach real photos further down the page. (`58c4788`)
+  2. `fetch_image_from_url()` only warned on an unexpected content-type and
+     returned the bytes anyway - so the 220-byte flag SVG got returned as a
+     "valid" candidate and then won the flat-lay/no-model preference in
+     `create_tryon_job`'s candidate scoring over any real garment photo
+     (a logo trivially "has no person" too). Now rejects outright. (`9553af0`)
+  3. Both the live fetch loop and the `garment_metadata` image-URL cache were
+     capped at a fixed first-2/first-4 window - once non-garment candidates
+     in that window got correctly rejected by fix #2, there was nothing left
+     to fall back to even though real photos existed further down the same
+     gallery. Both widened to walk up to 10 candidates. (`9553af0`)
+
+  Separately confirmed the frontend's `selectedImageUrl` wiring (added
+  earlier) is correct - the currently-installed app build simply predates
+  that fix, so the backend's own (buggy, now-fixed) auto-selection ran
+  instead of honoring the user's tap. Verified live end-to-end via the real
+  `/api/garments/scrape` endpoint against the exact reported URL: image #0
+  is now the real product photo, zero site-chrome assets anywhere in the
+  result. Purged the 3 SuitSupply rows in `garment_metadata` that had
+  already cached the flag SVG so they re-scrape clean. Full pytest suite
+  unaffected (same 7 pre-existing unrelated failures).
+
+- **2026-08-24 - Avatar head clipped by the top logo overlay on the home
+  screen.** `normalize_avatar_framing()` had no dedicated top-margin
+  parameter at all - the top margin was purely an implicit leftover of
+  `1.0 - target_height_percent - bottom_margin_percent`, which left only
+  ~3% of canvas height as headroom. Measured directly on a real, currently-
+  saved production avatar: top margin was 46px / 3.8% of a 1200px canvas -
+  tight enough that slightly more hair volume, a raised chin, or a less-
+  clean alpha mask edge would push the head past the top edge. Reduced
+  `target_height_percent` 0.95 -> 0.90, roughly tripling the real margin to
+  97px / 8.1% for a barely-noticeable size reduction. Verified against the
+  same real avatar file and visually confirmed the result still looks
+  natural.
+
+- **2026-08-21 - Try-on end-to-end mobile latency (~40s) vs ~16s Gemini
+  generation time - root-caused the gap, fixed part of it.** Pulled a real
+  production job's full timeline from logs (2026-08-20): ~7.8s job-creation
+  overhead (before the client even gets a job_id back) + ~2.6s rembg on the
+  garment + ~16s Gemini generation = ~26s server-side, before any client
+  polling overhead. Of that 7.8s, ~5s was `normalize_image()`'s PNG
+  `optimize=True` on the garment image alone (~1s on the avatar) - Pillow's
+  exhaustive PNG compression search, confirmed via direct benchmark against
+  the exact real file (0.67s optimized vs 0.13s default, ~5x, for only ~5%
+  smaller output) on mid-pipeline bytes headed straight to the Gemini API
+  next. Removed `optimize=True` from all 4 PNG-save call sites in the image
+  pipeline (`normalize_image`, `convert_to_supported_format`, `resize_image`'s
+  PNG branch, `process_tryon`'s `_tryon_resize_max_long_edge`). Verified live
+  on the VM with the real files: garment preprocessing 5s -> 0.65s, avatar
+  ~2.3s -> 0.13s - roughly 6 real seconds off every job's server-side time.
+  Not yet investigated: client-side polling interval/overhead, and whether
+  `JobQueue`'s single background worker thread per gunicorn process ever
+  queues jobs behind each other under real concurrent load (the one real
+  trace checked showed no queueing delay, but that was a single data point,
+  not a load test). (`718d310`)
+
+- **2026-08-21 - Try-on model upgraded to Nano Banana 2 (gemini-3.1-flash-image),
+  with automatic fallback to Nano Banana Pro (gemini-3-pro-image) on failure.**
+  Driven by a real benchmark: 20 real try-on cases (10 garments x 2 candidate
+  models, across two different real avatars) showed Nano Banana 2 averaging
+  ~1.75x faster (13.8-14.1s vs 24.2s for Pro) with no quality regression on
+  shared cases. Its one reliability gap - a reproducible `IMAGE_SAFETY` block
+  on a specific person/garment combination (confirmed on 2 separate runs, though
+  a 3rd later attempt succeeded - not 100% deterministic) - is handled by an
+  automatic fallback: `process_tryon_with_fallback()` /
+  `process_tryon_layered_with_fallback()` try the primary model first and
+  retry with Pro only if it fails outright, wired into all 3 real call sites
+  (async job queue / main `/tryon`, both legs of layered try-on, `/tryon-gemini`).
+  `process_tryon()` and `process_tryon_layered()` now take an explicit
+  `model_name` param instead of reading `Config.GEMINI_MODEL_NAME` directly,
+  so the fallback retry doesn't mutate shared state across gunicorn's 8
+  threads. Also fixed along the way: `/tryon-gemini` wasn't forwarding
+  `aspect_ratio` from the request at all, and `process_tryon_layered` had no
+  canvas-normalization support whatsoever (its own exit log falsely claimed
+  "normalized framing" when no such step existed) - both real, separate causes
+  of try-on results sometimes coming back a different size than the avatar.
+  Verified live: forced a guaranteed primary failure (invalid model name) and
+  confirmed the wrapper correctly caught it and recovered via Pro; normal case
+  and layered flow both verified working; full pytest suite unaffected (same
+  7 pre-existing unrelated failures). No API contract changes - same routes,
+  params, and response shapes; the one newly-read field (`aspect_ratio`) is
+  optional and defaults identically to prior behavior when absent, so older
+  installed app builds are unaffected. Deployed and confirmed live on the VM.
+  (`2e613b2`)
+
+- **2026-08-21 - Garment categorization was English-only, mis-tagging German-
+  storefront lower-body items as upper-body.** `categorize_garment()`'s
+  keyword list had zero German vocabulary. When Zara/H&M scraping is blocked
+  (no title available) and the fallback URL-slug scan runs, German words like
+  `hemd` (shirt), `jacke` (jacket), `hose` (pants), `rock` (skirt) matched
+  nothing - confirmed via a real `culotte-mit-spitzensaum` URL (a lower-body
+  garment) mis-categorized as generic upper-body "top" at zero confidence.
+  Added German vocabulary; every previously-broken real URL now categorizes
+  correctly.
 
 - **2026-08-17 - Backend went fully unresponsive for ~26 hours (silent hang,
   not a crash), root-caused to the one external call in the codebase with no

@@ -82,7 +82,9 @@ def convert_to_supported_format(image_data: bytes) -> bytes:
                 img = img.convert('RGB')
 
             output = BytesIO()
-            img.save(output, format='PNG', optimize=True)
+            # optimize=True's slow exhaustive compression search isn't worth it here
+            # either - see normalize_image()'s comment for the measured cost.
+            img.save(output, format='PNG')
             result = output.getvalue()
             logger.info(f"convert_to_supported_format: Converted {img_format} to PNG ({len(result)} bytes)")
             return result
@@ -237,7 +239,10 @@ def resize_image(image_data: bytes, max_dimension: int = MAX_DIMENSION_RESIZE,
         output = BytesIO()
         # Preserve format
         if img.format == 'PNG':
-            img_resized.save(output, format='PNG', optimize=True)
+            # optimize=True's slow exhaustive compression search isn't worth it here
+            # either - see normalize_image()'s comment for the measured cost. (JPEG's
+            # optimize=True below is a cheaper, different optimization - left as-is.)
+            img_resized.save(output, format='PNG')
         elif img.format == 'WEBP':
             img_resized.save(output, format='WEBP', quality=85)
         else:
@@ -284,7 +289,15 @@ def normalize_image(image_data: bytes, target_format: str = 'PNG') -> bytes:
             # Preserve transparency (RGBA mode) for PNG
             if img.mode not in ('RGBA', 'LA', 'P'):
                 # If image doesn't have alpha channel, keep as is
-                img.save(output, format='PNG', optimize=True)
+                # optimize=True triggers Pillow's exhaustive PNG compression search -
+                # confirmed via a real production trace (2026-08-20) this cost ~5s on
+                # this VM for a single ~1365x2048 garment image, and ~1s for the avatar,
+                # on every single try-on job (this function is preprocess_image()'s
+                # normalization step, run on both). Local benchmark against the exact
+                # same real file: 0.67s optimized vs 0.13s default (~5x), for only ~5%
+                # smaller output - these are mid-pipeline bytes headed to the Gemini API
+                # next, not a final asset where the size saving would matter.
+                img.save(output, format='PNG')
             else:
                 # Ensure RGBA mode for transparency
                 if img.mode == 'P':
@@ -292,7 +305,15 @@ def normalize_image(image_data: bytes, target_format: str = 'PNG') -> bytes:
                 elif img.mode == 'LA':
                     img = img.convert('RGBA')
                 # Save with transparency preserved
-                img.save(output, format='PNG', optimize=True)
+                # optimize=True triggers Pillow's exhaustive PNG compression search -
+                # confirmed via a real production trace (2026-08-20) this cost ~5s on
+                # this VM for a single ~1365x2048 garment image, and ~1s for the avatar,
+                # on every single try-on job (this function is preprocess_image()'s
+                # normalization step, run on both). Local benchmark against the exact
+                # same real file: 0.67s optimized vs 0.13s default (~5x), for only ~5%
+                # smaller output - these are mid-pipeline bytes headed to the Gemini API
+                # next, not a final asset where the size saving would matter.
+                img.save(output, format='PNG')
         elif target_format == 'WEBP':
             # WEBP also supports transparency
             if img.mode in ('RGBA', 'LA', 'P'):
@@ -414,11 +435,22 @@ def fetch_image_from_url(url: str, timeout: int = 10) -> bytes:
         response = requests.get(url, headers=headers, timeout=timeout, proxies=proxies, auth=auth)
         response.raise_for_status()
         
-        # Validate content type
+        # Validate content type - reject outright (SVG icons/logos/flags, HTML
+        # error pages, etc.) rather than just warning and returning them anyway.
+        # Confirmed via a real production trace: a scraped product page's image
+        # gallery included a country-flag SVG and 2 logo SVGs alongside real
+        # product photos - previously these were fetched, logged as "unexpected
+        # content type", then returned as valid candidates regardless. One
+        # (220 bytes, no person in it) then won the flat-lay/no-model
+        # preference in create_tryon_job's candidate scoring over any real
+        # garment photo, since a logo trivially "has no person" too. The
+        # caller already has a per-URL try/except that skips fetch failures
+        # and moves to the next candidate, so raising here is enough to
+        # exclude these without any change to the calling code.
         content_type = response.headers.get('Content-Type', '').lower()
         if not any(mt in content_type for mt in ALLOWED_MIMETYPES):
-            logger.warning(f"fetch_image_from_url: Unexpected content type: {content_type}")
-        
+            raise ValidationError(f"Not a photo (content-type: {content_type or 'unknown'})")
+
         image_data = response.content
         logger.info(f"fetch_image_from_url: EXIT - Fetched {len(image_data)} bytes")
         return image_data
@@ -479,7 +511,14 @@ def clean_and_solidify_alpha_mask(image_bytes: bytes, threshold: int = 15) -> by
 def normalize_avatar_framing(
     image_bytes: bytes,
     target_canvas_size: tuple[int, int] = (900, 1200),
-    target_height_percent: float = 0.95,
+    # Was 0.95 - left only ~3% of canvas height as top headroom (1.0 - 0.95 -
+    # bottom_margin_percent), with no separate top-margin parameter at all -
+    # confirmed via a real currently-saved production avatar: bbox top margin
+    # measured at 46px on a 1200px canvas, just 3.8%. That's tight enough that
+    # a photo with slightly more hair volume, a raised chin, or a less-clean
+    # alpha mask edge would push the head past the top edge. 0.90 roughly
+    # triples the top margin to ~8% for a barely-noticeable size reduction.
+    target_height_percent: float = 0.90,
     bottom_margin_percent: float = 0.02
 ) -> bytes:
     """

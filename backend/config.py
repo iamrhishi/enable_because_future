@@ -29,7 +29,17 @@ class Config:
     # Google Gemini (Nano Banana) API Configuration
     # Used for both background removal and try-on processing
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-    GEMINI_MODEL_NAME = os.environ.get('GEMINI_MODEL_NAME', 'gemini-2.5-flash-image')  # Nano Banana image model
+    # Upgraded from gemini-2.5-flash-image ("Nano Banana v1") after a real
+    # 10-garment x 2-model benchmark (2026-08-21): Nano Banana 2 averaged
+    # ~1.75x faster (13.8s vs 24.2s) with no quality regression on the cases
+    # it shares with Pro.
+    GEMINI_MODEL_NAME = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.1-flash-image')  # Nano Banana 2 (primary)
+    # Fallback used by process_tryon_with_fallback() when the primary model
+    # fails outright (e.g. the confirmed, reproducible IMAGE_SAFETY block
+    # Nano Banana 2 hit on a specific person/garment combination that Nano
+    # Banana Pro handled correctly both times it was tried) - trades latency
+    # for reliability only on the minority of requests that actually need it.
+    GEMINI_FALLBACK_MODEL_NAME = os.environ.get('GEMINI_FALLBACK_MODEL_NAME', 'gemini-3-pro-image')  # Nano Banana Pro
 
     # Try-on latency (optional):
     # - LITE: on IMAGE_OTHER, only run deterministic + relaxed prompt (2 calls max), not 4.
