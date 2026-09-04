@@ -9,17 +9,6 @@
         height="32"
         loading="lazy"
       >
-      <div class="bcf-avatar-switch bcf-hidden" data-tryon-avatar-switch>
-        <button type="button" class="bcf-avatar-chip is-active" data-tryon-avatar-btn data-avatar-url="{{ man_avatar_url }}">
-          <img src="{{ 'man_icon.png' | asset_url }}" alt="Man avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
-        </button>
-        <button type="button" class="bcf-avatar-chip" data-tryon-avatar-btn data-avatar-url="{{ woman_avatar_url }}">
-          <img src="{{ 'woman_icon.png' | asset_url }}" alt="Woman avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
-        </button>
-        <button type="button" class="bcf-avatar-chip" data-upload-trigger="true" aria-label="Upload avatar">
-          <img src="{{ 'camera.png' | asset_url }}" alt="Upload avatar" width="32" height="32" style="width:32px;height:32px;display:block;">
-        </button>
-      </div>
       <button type="button" class="bcf-close-btn" aria-label="Close" data-tryon-close>X</button>
     </div>
     <input type="file" class="bcf-avatar-upload-input bcf-hidden" accept="image/*" data-tryon-upload-input>
@@ -36,7 +25,8 @@
             loading="lazy"
           >
           <div class="bcf-login-copy">
-            <h3>Shop Smarter. Shop Responsibly</h3>
+            <h3>Welcome back</h3>
+            <p>Please enter your email and password</p>
           </div>
 
           <div class="bcf-input-wrap">
@@ -52,7 +42,7 @@
 
           <div class="bcf-login-links">
             <span>Don't have an account?</span>
-            <button type="button" class="bcf-inline-link">Sign up</button>
+            <button type="button" class="bcf-inline-link" data-tryon-signup-open>Sign up</button>
           </div>
 
           <button type="button" class="bcf-secondary-action bcf-guest-link" data-tryon-guest>Continue as guest</button>
@@ -60,10 +50,155 @@
         </div>
       </section>
 
+      <section class="bcf-view bcf-view-signup bcf-hidden" data-tryon-view="signup">
+        <div class="bcf-signup-shell">
+          <div class="bcf-signup-topbar">
+            <button type="button" class="bcf-signup-back" data-signup-back aria-label="Back">&#8249;</button>
+            <span class="bcf-signup-title">Create Account</span>
+            <span class="bcf-signup-topbar-spacer" aria-hidden="true"></span>
+          </div>
+
+          <div class="bcf-signup-progress">
+            <span class="bcf-signup-progress-seg" data-signup-progress="1"></span>
+            <span class="bcf-signup-progress-seg" data-signup-progress="2"></span>
+            <span class="bcf-signup-progress-seg" data-signup-progress="3"></span>
+            <span class="bcf-signup-progress-seg" data-signup-progress="4"></span>
+          </div>
+
+          <div class="bcf-signup-step" data-signup-step="1">
+            <div class="bcf-login-copy bcf-signup-copy">
+              <h3>Create your account</h3>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="email" placeholder="Email" autocomplete="email" data-signup-email>
+            </div>
+            <div class="bcf-input-wrap bcf-password-wrap">
+              <input class="bcf-input bcf-input-large" type="password" placeholder="Password" autocomplete="new-password" data-signup-password>
+              <span class="bcf-password-eye" aria-hidden="true">◔</span>
+            </div>
+            <button type="button" class="bcf-primary-action bcf-login-action" data-signup-next="2">Continue</button>
+          </div>
+
+          <div class="bcf-signup-step bcf-hidden" data-signup-step="2">
+            <div class="bcf-login-copy bcf-signup-copy">
+              <h3>Let's get to know you</h3>
+              <p>Help us tailor your experience</p>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="text" placeholder="First name" data-signup-first-name>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="text" placeholder="Last name" data-signup-last-name>
+            </div>
+            <div class="bcf-input-wrap">
+              <select class="bcf-input bcf-input-large bcf-select" data-signup-gender>
+                <option value="">Gender</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+                <option value="prefer-not-to-say">Prefer not to say</option>
+              </select>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="date" placeholder="Birthday" data-signup-birthday>
+            </div>
+            <button type="button" class="bcf-primary-action bcf-login-action" data-signup-next="3">Continue</button>
+          </div>
+
+          <div class="bcf-signup-step bcf-hidden" data-signup-step="3">
+            <div class="bcf-login-copy bcf-signup-copy">
+              <h3>Where are you based?</h3>
+              <p>Let us understand where you are shopping</p>
+            </div>
+            <div class="bcf-signup-row">
+              <div class="bcf-input-wrap">
+                <input class="bcf-input bcf-input-large" type="text" placeholder="Street name" data-signup-street-name>
+              </div>
+              <div class="bcf-input-wrap">
+                <input class="bcf-input bcf-input-large" type="text" placeholder="Street number" data-signup-street-number>
+              </div>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="text" placeholder="City" data-signup-city>
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="text" placeholder="Postal Code" data-signup-postal-code>
+            </div>
+            <button type="button" class="bcf-primary-action bcf-login-action" data-signup-next="4">Continue</button>
+          </div>
+
+          <div class="bcf-signup-step bcf-hidden" data-signup-step="4">
+            <div class="bcf-login-copy bcf-signup-copy">
+              <h3>Your body measurements?</h3>
+              <p>Add your measurements for faster try-ons and shopping experience</p>
+            </div>
+
+            <div class="bcf-signup-section-label">General</div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Height (in cm)" data-signup-field="height">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Weight (in kg)" data-signup-field="weight">
+            </div>
+
+            <div class="bcf-signup-section-label">Top</div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Shoulder circumference (in cm)" data-signup-field="shoulder_circumference">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Arm length (in cm)" data-signup-field="arm_length">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Breast circumference (in cm)" data-signup-field="breast_circumference">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Under breast circumference (in cm)" data-signup-field="under_breast_circumference">
+            </div>
+
+            <div class="bcf-signup-section-label">Bottom</div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Inner leg length (in cm)" data-signup-field="inner_leg_length">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Waist circumference (in cm)" data-signup-field="waist_circumference">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Hip circumference (in cm)" data-signup-field="hip_circumference">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Upper thigh circumference (in cm)" data-signup-field="upper_thigh_circumference">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Waist to crotch front length (in cm)" data-signup-field="waist_to_crotch_front_length">
+            </div>
+            <div class="bcf-input-wrap">
+              <input class="bcf-input bcf-input-large" type="number" placeholder="Waist to crotch back length (in cm)" data-signup-field="waist_to_crotch_back_length">
+            </div>
+
+            <div class="bcf-signup-final-actions">
+              <button type="button" class="bcf-secondary-action bcf-signup-skip" data-signup-skip>Share later</button>
+              <button type="button" class="bcf-primary-action bcf-signup-submit" data-signup-submit>Get Started</button>
+            </div>
+            <p class="bcf-error-text bcf-hidden" data-signup-error></p>
+          </div>
+        </div>
+      </section>
+
       <section class="bcf-view bcf-view-home bcf-hidden" data-tryon-view="home">
         <div class="bcf-home-canvas">
           <div class="bcf-selected-avatar-wrap bcf-selected-avatar-wrap-large" data-tryon-avatar-stage>
             <img class="bcf-selected-avatar bcf-selected-avatar-large" src="{{ default_avatar_url }}" alt="Selected avatar preview" width="260" height="360" loading="lazy" data-tryon-avatar-preview>
+            <div class="bcf-avatar-switch bcf-hidden" data-tryon-avatar-switch>
+              <button type="button" class="bcf-avatar-chip is-active" data-tryon-avatar-btn data-avatar-url="{{ man_avatar_url }}">
+                <img src="{{ 'male.png' | asset_url }}" alt="Man avatar" width="22" height="22" style="width:22px;height:22px;display:block;">
+              </button>
+              <button type="button" class="bcf-avatar-chip" data-tryon-avatar-btn data-avatar-url="{{ woman_avatar_url }}">
+                <img src="{{ 'female.png' | asset_url }}" alt="Woman avatar" width="22" height="22" style="width:22px;height:22px;display:block;">
+              </button>
+              <button type="button" class="bcf-avatar-chip" data-upload-trigger="true" aria-label="Upload avatar">
+                <img src="{{ 'camera.png' | asset_url }}" alt="Upload avatar" width="22" height="22" style="width:22px;height:22px;display:block;">
+              </button>
+            </div>
             <button type="button" class="bcf-tryon-action" data-tryon-run>
               <span class="bcf-tryon-bolt" aria-hidden="true">&#9889;</span>
               <span>Try On</span>
@@ -92,6 +227,9 @@
           <div class="bcf-result bcf-hidden" data-tryon-result>
             <div class="bcf-result-card">
               <img class="bcf-result-avatar" src="{{ default_avatar_url }}" alt="Generated look preview" width="160" height="210" loading="lazy" data-tryon-result-image>
+              <button type="button" class="bcf-heart-btn" data-tryon-heart aria-label="Save look" aria-pressed="false">
+                <img src="{{ 'heart.png' | asset_url }}" alt="" width="20" height="20" loading="lazy">
+              </button>
               <div class="bcf-result-overlay">
                 <p>Here's your try-on with {{ tryon_product_title }}.</p>
                 <button type="button" class="bcf-try-again" data-tryon-reset>
@@ -110,21 +248,55 @@
       </section>
 
       <section class="bcf-view bcf-view-profile bcf-hidden" data-tryon-view="profile">
-        <div class="bcf-profile-row"><span>Session type</span><strong data-profile-session>Guest</strong></div>
-        <div class="bcf-profile-row"><span>Email</span><strong data-profile-email>guest@example.com</strong></div>
-        <div class="bcf-profile-row"><span>Gender</span><strong>Not set</strong></div>
-        <div class="bcf-profile-row"><span>Birthdate</span><strong>Not set</strong></div>
-        <div class="bcf-profile-row"><span>Age</span><strong>Not set</strong></div>
-        <div class="bcf-profile-row"><span>Height</span><strong>Not set</strong></div>
-        <div class="bcf-profile-row"><span>Weight</span><strong>Not set</strong></div>
-        <div class="bcf-profile-row"><span>Size</span><strong>Not set</strong></div>
+        <div class="bcf-profile-shell">
+          <div class="bcf-login-copy bcf-signup-copy">
+            <h3>Your Profile</h3>
+            <p>Manage your account details</p>
+          </div>
+
+          <div class="bcf-signup-section-label">Account</div>
+          <div class="bcf-profile-row"><span>Session type</span><strong data-profile-session>Guest</strong></div>
+          <div class="bcf-profile-row"><span>Email</span><strong data-profile-email>guest@example.com</strong></div>
+
+          <div class="bcf-signup-section-label">Personal</div>
+          <div class="bcf-profile-row"><span>First name</span><strong data-profile-field="first_name">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Last name</span><strong data-profile-field="last_name">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Gender</span><strong data-profile-field="gender">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Birthdate</span><strong data-profile-field="birthday">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Age</span><strong data-profile-field="age">Not set</strong></div>
+
+          <div class="bcf-signup-section-label">Address</div>
+          <div class="bcf-profile-row"><span>Street</span><strong data-profile-field="street">Not set</strong></div>
+          <div class="bcf-profile-row"><span>City</span><strong data-profile-field="city">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Postal Code</span><strong data-profile-field="postal_code">Not set</strong></div>
+
+          <div class="bcf-signup-section-label">Measurements</div>
+          <div class="bcf-profile-row"><span>Height (cm)</span><strong data-profile-field="height">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Weight (kg)</span><strong data-profile-field="weight">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Shoulder circumference (cm)</span><strong data-profile-field="shoulder_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Arm length (cm)</span><strong data-profile-field="arm_length">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Breast circumference (cm)</span><strong data-profile-field="breast_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Under breast circumference (cm)</span><strong data-profile-field="under_breast_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Inner leg length (cm)</span><strong data-profile-field="inner_leg_length">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Waist circumference (cm)</span><strong data-profile-field="waist_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Hip circumference (cm)</span><strong data-profile-field="hip_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Upper thigh circumference (cm)</span><strong data-profile-field="upper_thigh_circumference">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Waist to crotch front length (cm)</span><strong data-profile-field="waist_to_crotch_front_length">Not set</strong></div>
+          <div class="bcf-profile-row"><span>Waist to crotch back length (cm)</span><strong data-profile-field="waist_to_crotch_back_length">Not set</strong></div>
+        </div>
       </section>
     </div>
 
     <nav class="bcf-bottom-nav bcf-hidden" aria-label="Try-on navigation" data-tryon-nav>
-      <button type="button" class="bcf-nav-btn is-active" data-view="wishlist">Wishlist</button>
-      <button type="button" class="bcf-nav-btn is-active" data-view="home">Home</button>
-      <button type="button" class="bcf-nav-btn" data-view="profile">Profile</button>
+      <button type="button" class="bcf-nav-btn is-active" data-view="wishlist">
+        <img src="{{ 'wishlist.png' | asset_url }}" alt="" width="20" height="20" loading="lazy">
+      </button>
+      <button type="button" class="bcf-nav-btn is-active" data-view="home">
+        <img src="{{ 'home.png' | asset_url }}" alt="" width="20" height="20" loading="lazy">
+      </button>
+      <button type="button" class="bcf-nav-btn" data-view="profile">
+        <img src="{{ 'user.png' | asset_url }}" alt="" width="20" height="20" loading="lazy">
+      </button>
     </nav>
   </div>
 </div>
