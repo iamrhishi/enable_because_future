@@ -66,6 +66,7 @@ def main():
         (35, 'add_image_path_no_bg_to_wardrobe', load_migration(35, 'add_image_path_no_bg_to_wardrobe')),
         (36, 'create_analytics_events_archive', load_migration(36, 'create_analytics_events_archive')),
         (37, 'create_tryon_monthly_usage', load_migration(37, 'create_tryon_monthly_usage')),
+        (38, 'create_two_factor_codes', load_migration(38, 'create_two_factor_codes')),
     ]
     
     migration_manager.run_migrations(migrations)

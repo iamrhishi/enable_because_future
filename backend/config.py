@@ -136,6 +136,18 @@ class Config:
     # Comma-separated list of emails to receive daily analytics reports
     ANALYTICS_REPORT_EMAILS = os.environ.get('ANALYTICS_REPORT_EMAILS', '')
 
+    # Two-Factor Authentication (email OTP on login)
+    # Kill switch: stays off in production until explicitly flipped on, so it
+    # never goes live ahead of an App Store build that can handle the new
+    # login step. Uses its own SMTP identity (separate from the analytics
+    # report's sender) so setting one up doesn't change the other's From address.
+    TWO_FACTOR_AUTH_ENABLED = os.environ.get('TWO_FACTOR_AUTH_ENABLED', 'false').lower() == 'true'
+    TWO_FACTOR_SMTP_USER = os.environ.get('TWO_FACTOR_SMTP_USER', '')
+    TWO_FACTOR_SMTP_PASSWORD = os.environ.get('TWO_FACTOR_SMTP_PASSWORD', '')
+    TWO_FACTOR_EMAIL_FROM = os.environ.get('TWO_FACTOR_EMAIL_FROM', 'engineering@becausefuture.tech')
+    TWO_FACTOR_CODE_TTL_MINUTES = int(os.environ.get('TWO_FACTOR_CODE_TTL_MINUTES', '10'))
+    TWO_FACTOR_MAX_ATTEMPTS = int(os.environ.get('TWO_FACTOR_MAX_ATTEMPTS', '5'))
+
     @staticmethod
     def validate():
         """Validate that all required configuration is present"""

@@ -12,6 +12,7 @@ from shared.validators import validate_email, validate_password, validate_numeri
 from shared.errors import ValidationError, AuthenticationError
 from shared.analytics import track_event, EventType
 from shared.rate_limit import limiter
+from shared.two_factor import generate_and_send_code, verify_code
 from config import Config
 from shared.logger import logger
 import uuid
@@ -276,6 +277,21 @@ def login():
             track_event(EventType.LOGIN_FAILED, user_id=user.userid, user_email=email, metadata={'reason': 'invalid_password'})
             return error_response_from_string('Invalid email or password', 401, 'AUTHENTICATION_ERROR')
 
+        # Two-factor: password is correct, but hold the real token until the
+        # emailed code is verified. Off by default (Config.TWO_FACTOR_AUTH_ENABLED)
+        # until there's an App Store build that can handle this extra step.
+        if Config.TWO_FACTOR_AUTH_ENABLED:
+            try:
+                generate_and_send_code(user.userid, user.email)
+            except AuthenticationError as e:
+                return error_response_from_string(str(e), 500, 'TWO_FACTOR_SEND_FAILED')
+
+            logger.info(f"login: EXIT - 2FA code sent for userid={user.userid}")
+            return success_response(
+                data={'requires_2fa': True, 'email': user.email},
+                message='Verification code sent'
+            )
+
         # Generate JWT token
         token = generate_token(user.userid, user.email)
 
@@ -283,7 +299,7 @@ def login():
         track_event(EventType.LOGIN, user_id=user.userid, user_email=user.email)
 
         logger.info(f"login: EXIT - Login successful for userid={user.userid}")
-        
+
         return success_response(
             data={
                 'token': token,
@@ -291,9 +307,51 @@ def login():
             },
             message='Login successful'
         )
-        
+
     except Exception as e:
         logger.exception(f"login: EXIT - Error: {str(e)}")
+        return server_error_response(e, context='Server error')
+
+
+@auth_bp.route('/verify-2fa', methods=['POST'])
+@limiter.limit('10 per minute')
+def verify_2fa():
+    """Second step of login when Config.TWO_FACTOR_AUTH_ENABLED is on: exchange
+    the emailed code for the real JWT that /login withheld."""
+    logger.info("verify_2fa: ENTRY")
+    try:
+        data = request.get_json() if request.is_json else request.form
+
+        email = (data.get('email') or '').strip()
+        code = (data.get('code') or '').strip()
+
+        if not email or not code:
+            return error_response_from_string('Email and code are required', 400, 'VALIDATION_ERROR')
+
+        user = User.get_by_email(email)
+        if not user or not user.is_active:
+            return error_response_from_string('Invalid email or code', 401, 'AUTHENTICATION_ERROR')
+
+        try:
+            verify_code(user.userid, code)
+        except AuthenticationError as e:
+            logger.warning(f"verify_2fa: Failed for userid={user.userid}: {str(e)}")
+            return error_response_from_string(str(e), 401, 'AUTHENTICATION_ERROR')
+
+        token = generate_token(user.userid, user.email)
+        track_event(EventType.LOGIN, user_id=user.userid, user_email=user.email)
+
+        logger.info(f"verify_2fa: EXIT - Login successful for userid={user.userid}")
+        return success_response(
+            data={
+                'token': token,
+                'user': user.to_dict()
+            },
+            message='Login successful'
+        )
+
+    except Exception as e:
+        logger.exception(f"verify_2fa: EXIT - Error: {str(e)}")
         return server_error_response(e, context='Server error')
 
 
