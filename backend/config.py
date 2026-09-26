@@ -70,6 +70,10 @@ class Config:
         'true',
     ).lower() == 'true'
 
+    # Max try-on attempts a single user may start per calendar month, across
+    # /tryon, /tryon/multi, /tryon/layered and /tryon-gemini combined.
+    TRYON_MONTHLY_LIMIT = int(os.environ.get('TRYON_MONTHLY_LIMIT', '30'))
+
     # Async try-on: recommended delay between GET /api/job/{id} polls while status is queued/processing.
     # Milliseconds (clamped). Clients implement polling; backend only advertises this in JSON responses.
     JOB_STATUS_POLL_INTERVAL_MS = max(250, min(_job_status_poll_interval_ms_raw, 30000))

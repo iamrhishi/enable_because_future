@@ -49,3 +49,13 @@ class ExternalServiceError(BecauseFutureError):
         self.service = service
         super().__init__(message, status_code=502, error_code='EXTERNAL_SERVICE_ERROR')
 
+
+class QuotaExceededError(BecauseFutureError):
+    """
+    Raised when a user hits a usage quota (e.g. monthly try-on limit).
+    status_code=403 (not 429) to match the mobile app's existing
+    tryon-limit-exceeded detection, built and tested against 403.
+    """
+    def __init__(self, message: str = "Quota exceeded"):
+        super().__init__(message, status_code=403, error_code='TRYON_LIMIT_EXCEEDED')
+

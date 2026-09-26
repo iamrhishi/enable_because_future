@@ -7,11 +7,33 @@ from shared.validators import validate_email, validate_password
 from shared.errors import ValidationError
 from shared.logger import logger
 from shared.database import db_manager
+from shared.tryon_quota import get_tryon_usage
 from datetime import datetime
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
 # ...existing endpoints...
+
+@users_bp.route('/tryon-status', methods=['GET'])
+@require_auth
+def get_tryon_status():
+    """
+    Current month's try-on usage for the authenticated user.
+    Path and response shape (tryon_count/tryon_limit/remaining_tryons) match
+    what the mobile app's tryon-limit branch already expects.
+    """
+    user_id = request.user_id
+    logger.info(f"get_tryon_status: ENTRY - user_id={user_id}")
+    try:
+        usage = get_tryon_usage(user_id)
+        return success_response(data={
+            'tryon_count': usage['used'],
+            'tryon_limit': usage['limit'],
+            'remaining_tryons': usage['remaining'],
+        })
+    except Exception as e:
+        logger.exception(f"get_tryon_status: EXIT - Error: {str(e)}")
+        return error_response_from_string(f'Server error: {str(e)}', 500)
 
 @users_bp.route('/avatar', methods=['GET'])
 @require_auth

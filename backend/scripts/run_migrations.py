@@ -65,6 +65,7 @@ def main():
         (34, 'add_is_deleted_to_users', load_migration(34, 'add_is_deleted_to_users')),
         (35, 'add_image_path_no_bg_to_wardrobe', load_migration(35, 'add_image_path_no_bg_to_wardrobe')),
         (36, 'create_analytics_events_archive', load_migration(36, 'create_analytics_events_archive')),
+        (37, 'create_tryon_monthly_usage', load_migration(37, 'create_tryon_monthly_usage')),
     ]
     
     migration_manager.run_migrations(migrations)

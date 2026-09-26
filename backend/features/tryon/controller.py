@@ -16,14 +16,21 @@ from shared.database import db_manager
 from shared.image_processing import preprocess_image, fetch_image_from_url, validate_image, _detect_person_in_image
 from shared.garment_utils import categorize_garment
 from shared.models.user import User
-from shared.response import success_response, error_response_from_string, server_error_response
+from shared.response import success_response, error_response, error_response_from_string, server_error_response
 from shared.middleware import require_auth
 from shared.analytics import track_event, EventType
 from shared.logger import logger
 from shared.validators import validate_url
-from shared.errors import ValidationError
+from shared.errors import ValidationError, QuotaExceededError
+from shared.tryon_quota import check_and_increment_tryon_quota, get_tryon_usage
 
 tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
+
+
+def _usage_payload(used: int) -> dict:
+    """Build the {used, limit, remaining} block returned alongside a just-created try-on."""
+    limit = Config.TRYON_MONTHLY_LIMIT
+    return {'used': used, 'limit': limit, 'remaining': max(0, limit - used)}
 
 
 def _attach_job_poll_hint(job_row) -> dict:
@@ -43,6 +50,8 @@ def create_tryon_job():
         # user_id is extracted from JWT token by @require_auth decorator
         user_id = request.user_id
         logger.info(f"create_tryon_job: ENTRY - user_id={user_id}")
+
+        tryon_quota_used = check_and_increment_tryon_quota(user_id)
 
         # Get person image (selfie, person_image file, or use current user's saved avatar)
         # Priority: 1) selfie file, 2) person_image file, 3) current user's saved avatar (no need to send from frontend)
@@ -939,11 +948,14 @@ def create_tryon_job():
                 'status': 'queued',
                 'estimated_time': 15,  # seconds
                 'poll_interval_ms': Config.JOB_STATUS_POLL_INTERVAL_MS,
+                'tryon_usage': _usage_payload(tryon_quota_used),
             },
             message='Try-on job created',
             status_code=202
         )
-        
+
+    except QuotaExceededError as e:
+        return error_response(e)
     except Exception as e:
         logger.exception(f"create_tryon_job: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500)
@@ -1072,8 +1084,10 @@ def create_multi_tryon_job():
     # user_id comes from JWT token via @require_auth decorator
     user_id = request.user_id
     logger.info(f"create_multi_tryon_job: ENTRY - user_id={user_id} (from JWT)")
-    
+
     try:
+        tryon_quota_used = check_and_increment_tryon_quota(user_id)
+
         # Get person image - use current user's saved avatar if no file provided
         person_image = None
         if 'person_image' in request.files:
@@ -1128,6 +1142,7 @@ def create_multi_tryon_job():
                 'status': 'queued',
                 'estimated_time': 30,
                 'poll_interval_ms': Config.JOB_STATUS_POLL_INTERVAL_MS,
+                'tryon_usage': _usage_payload(tryon_quota_used),
             },
             message='Multi-garment try-on jobs created',
             status_code=202
@@ -1136,6 +1151,8 @@ def create_multi_tryon_job():
     except ValidationError as e:
         logger.warning(f"create_multi_tryon_job: EXIT - ValidationError: {str(e)}")
         return error_response_from_string(str(e), 400, 'VALIDATION_ERROR')
+    except QuotaExceededError as e:
+        return error_response(e)
     except Exception as e:
         logger.exception(f"create_multi_tryon_job: EXIT - Error: {str(e)}")
         return server_error_response(e, context='Server error')
@@ -1165,6 +1182,8 @@ def create_layered_tryon():
     logger.info(f"create_layered_tryon: ENTRY - user_id={user_id}")
 
     try:
+        tryon_quota_used = check_and_increment_tryon_quota(user_id)
+
         from features.tryon.service import process_tryon_with_fallback, process_tryon_layered_with_fallback
         from shared.storage import get_storage_service
         import uuid
@@ -1364,11 +1383,14 @@ def create_layered_tryon():
                 'job_id': job_id,
                 'results': results,
                 'final_result_url': final_result_url,
-                'layers_processed': len(results)
+                'layers_processed': len(results),
+                'tryon_usage': _usage_payload(tryon_quota_used),
             },
             message=f'Layered try-on complete with {len(results)} garments'
         )
 
+    except QuotaExceededError as e:
+        return error_response(e)
     except Exception as e:
         logger.exception(f"create_layered_tryon: EXIT - Error: {str(e)}")
         # Best-effort: if the job row was already created (error happened after
@@ -1410,7 +1432,9 @@ def tryon_gemini_remote():
     try:
         user_id = request.user_id
         logger.info(f"👤 tryon_gemini_remote: User ID: {user_id}")
-        
+
+        tryon_quota_used = check_and_increment_tryon_quota(user_id)
+
         # Get avatar image - use provided file or user's saved avatar
         avatar_bytes = None
         
@@ -1529,11 +1553,19 @@ def tryon_gemini_remote():
         
         # Return PNG image directly
         logger.info("📤 tryon_gemini_remote: Returning result image")
+        usage = _usage_payload(tryon_quota_used)
         return Response(
             result_bytes,
-            mimetype='image/png'
+            mimetype='image/png',
+            headers={
+                'X-Tryon-Usage-Used': str(usage['used']),
+                'X-Tryon-Usage-Limit': str(usage['limit']),
+                'X-Tryon-Usage-Remaining': str(usage['remaining']),
+            }
         )
-    
+
+    except QuotaExceededError as e:
+        return error_response(e)
     except Exception as e:
         logger.exception(f"❌ tryon_gemini_remote: EXIT - Error: {str(e)}")
         return error_response_from_string(f'Server error: {str(e)}', 500, 'GENERATION_ERROR')
