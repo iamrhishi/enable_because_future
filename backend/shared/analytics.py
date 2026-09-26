@@ -107,19 +107,25 @@ def _send_daily_report_for_date(date_str: str):
     report_date = datetime.strptime(date_str, '%Y-%m-%d')
     start_of_day = report_date.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = report_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Get events for that day
     events = get_events_since(start_of_day)
     events = [e for e in events if e.get('created_at', '') <= end_of_day.strftime('%Y-%m-%d %H:%M:%S')]
 
-    if not events:
-        logger.info(f"analytics: No events for {date_str}, skipping report")
+    from shared.api_call_tracking import get_api_call_summary, delete_api_call_events_before
+    api_call_summary = get_api_call_summary(report_date)
+
+    if not events and not api_call_summary.get('total_calls'):
+        logger.info(f"analytics: No events or API calls for {date_str}, skipping report")
         # Still wipe old data
-        delete_events_before(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0))
+        delete_events_before(today_start)
+        delete_api_call_events_before(today_start)
         return
 
     summary = get_daily_summary(report_date)
-    logger.info(f"analytics: Sending report for {date_str} with {len(events)} events")
+    logger.info(f"analytics: Sending report for {date_str} with {len(events)} events, "
+                f"{api_call_summary.get('total_calls', 0)} API calls")
 
     # Import send script functions
     try:
@@ -129,7 +135,7 @@ def _send_daily_report_for_date(date_str: str):
         return
 
     # Generate and send
-    xlsx_data = generate_xlsx_report(events, summary)
+    xlsx_data = generate_xlsx_report(events, summary, api_call_summary)
     filename = f"analytics_report_{date_str}.xlsx"
 
     body_lines = [
@@ -141,6 +147,13 @@ def _send_daily_report_for_date(date_str: str):
     ]
     for event_type, count in sorted(summary['by_type'].items(), key=lambda x: -x[1]):
         body_lines.append(f"  {event_type}: {count}")
+    if api_call_summary.get('total_calls'):
+        body_lines.extend([
+            "",
+            f"API Calls: {api_call_summary['total_calls']} (unique users: {api_call_summary['unique_users']})",
+        ])
+        for platform, count in sorted(api_call_summary['by_platform'].items(), key=lambda x: -x[1]):
+            body_lines.append(f"  {platform}: {count}")
     body_lines.extend(["", "See attached XLSX for full details.", "", "---", "BecauseFuture Analytics"])
     body = '\n'.join(body_lines)
     subject = f"[BecauseFuture] Daily Analytics Report - {date_str}"
@@ -148,8 +161,9 @@ def _send_daily_report_for_date(date_str: str):
     send_email_with_attachment(recipients, subject, body, xlsx_data, filename)
 
     # Wipe reported data
-    deleted = delete_events_before(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0))
-    logger.info(f"analytics: Report sent, wiped {deleted} old events")
+    deleted = delete_events_before(today_start)
+    deleted_calls = delete_api_call_events_before(today_start)
+    logger.info(f"analytics: Report sent, wiped {deleted} old events, {deleted_calls} old API calls")
 
 
 def track_event(

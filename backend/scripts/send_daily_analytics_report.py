@@ -31,10 +31,11 @@ from email import encoders
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.analytics import get_events_since, get_daily_summary, delete_events_before
+from shared.api_call_tracking import get_api_call_summary, delete_api_call_events_before
 from shared.logger import logger
 
 
-def generate_xlsx_report(events: list, summary: dict) -> bytes:
+def generate_xlsx_report(events: list, summary: dict, api_call_summary: dict = None) -> bytes:
     """Generate XLSX report from events."""
     try:
         from openpyxl import Workbook
@@ -102,6 +103,52 @@ def generate_xlsx_report(events: list, summary: dict) -> bytes:
     ws_events.column_dimensions['E'].width = 15
     ws_events.column_dimensions['F'].width = 40
     ws_events.column_dimensions['G'].width = 50
+
+    # ===== API Calls Sheet (platform / website / unique users) =====
+    if api_call_summary and api_call_summary.get('total_calls', 0) > 0:
+        ws_api = wb.create_sheet("API Calls")
+
+        ws_api['A1'] = f"API Call Breakdown - {api_call_summary['date']}"
+        ws_api['A1'].font = Font(bold=True, size=14)
+        ws_api.merge_cells('A1:B1')
+
+        ws_api['A3'] = "Total API Calls"
+        ws_api['B3'] = api_call_summary['total_calls']
+        ws_api['A4'] = "Unique Users"
+        ws_api['B4'] = api_call_summary['unique_users']
+        ws_api['A3'].font = Font(bold=True)
+        ws_api['A4'].font = Font(bold=True)
+
+        row = 6
+        ws_api[f'A{row}'] = "By Platform"
+        ws_api[f'A{row}'].font = Font(bold=True)
+        row += 1
+        ws_api[f'A{row}'] = "Platform"
+        ws_api[f'B{row}'] = "Calls"
+        ws_api[f'A{row}'].font = Font(bold=True)
+        ws_api[f'B{row}'].font = Font(bold=True)
+        row += 1
+        for platform, count in sorted(api_call_summary['by_platform'].items(), key=lambda x: -x[1]):
+            ws_api[f'A{row}'] = platform
+            ws_api[f'B{row}'] = count
+            row += 1
+
+        row += 1
+        ws_api[f'A{row}'] = "By Website (web platform only)"
+        ws_api[f'A{row}'].font = Font(bold=True)
+        row += 1
+        ws_api[f'A{row}'] = "Website"
+        ws_api[f'B{row}'] = "Calls"
+        ws_api[f'A{row}'].font = Font(bold=True)
+        ws_api[f'B{row}'].font = Font(bold=True)
+        row += 1
+        for website, count in sorted(api_call_summary['by_website'].items(), key=lambda x: -x[1]):
+            ws_api[f'A{row}'] = website
+            ws_api[f'B{row}'] = count
+            row += 1
+
+        ws_api.column_dimensions['A'].width = 40
+        ws_api.column_dimensions['B'].width = 12
 
     # Save to bytes
     output = BytesIO()
@@ -181,15 +228,16 @@ def main():
     events = [e for e in events if e.get('created_at', '') <= end_of_yesterday.strftime('%Y-%m-%d %H:%M:%S')]
 
     summary = get_daily_summary(yesterday)
+    api_call_summary = get_api_call_summary(yesterday)
 
-    if not events:
-        logger.info(f"No events for {yesterday.strftime('%Y-%m-%d')}, skipping report")
+    if not events and not api_call_summary.get('total_calls'):
+        logger.info(f"No events or API calls for {yesterday.strftime('%Y-%m-%d')}, skipping report")
         return
 
-    logger.info(f"Found {len(events)} events for {yesterday.strftime('%Y-%m-%d')}")
+    logger.info(f"Found {len(events)} events, {api_call_summary.get('total_calls', 0)} API calls for {yesterday.strftime('%Y-%m-%d')}")
 
     # Generate XLSX
-    xlsx_data = generate_xlsx_report(events, summary)
+    xlsx_data = generate_xlsx_report(events, summary, api_call_summary)
     filename = f"analytics_report_{yesterday.strftime('%Y-%m-%d')}.xlsx"
 
     # Build email body
@@ -203,6 +251,14 @@ def main():
 
     for event_type, count in sorted(summary['by_type'].items(), key=lambda x: -x[1]):
         body_lines.append(f"  {event_type}: {count}")
+
+    if api_call_summary.get('total_calls'):
+        body_lines.extend([
+            "",
+            f"API Calls: {api_call_summary['total_calls']} (unique users: {api_call_summary['unique_users']})",
+        ])
+        for platform, count in sorted(api_call_summary['by_platform'].items(), key=lambda x: -x[1]):
+            body_lines.append(f"  {platform}: {count}")
 
     body_lines.extend([
         "",
@@ -224,7 +280,8 @@ def main():
 
     # Wipe reported data
     deleted = delete_events_before(datetime.now() - timedelta(days=1))
-    logger.info(f"Wiped {deleted} events after sending report")
+    deleted_calls = delete_api_call_events_before(datetime.now() - timedelta(days=1))
+    logger.info(f"Wiped {deleted} events and {deleted_calls} API calls after sending report")
 
     logger.info("send_daily_analytics_report: Complete")
 

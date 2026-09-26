@@ -43,6 +43,28 @@ limiter.init_app(app)
 # Validate configuration
 Config.validate()
 
+
+@app.before_request
+def _log_api_call():
+    """Per-request log backing the analytics report's platform/website/user
+    breakdown - fires on every /api/* call, not just curated business events
+    (see shared/analytics.py). Best-effort: never blocks or fails a request."""
+    if not request.path.startswith('/api/') or request.method == 'OPTIONS':
+        return
+
+    user_id = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        try:
+            from features.auth.service import verify_token
+            token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+            user_id = verify_token(token).get('user_id')
+        except Exception:
+            pass
+
+    from shared.api_call_tracking import log_api_call
+    log_api_call(request, user_id=user_id)
+
 # Warm the rembg background-removal session now, not on first request - session
 # init takes a few seconds and this way it happens during Cloud Run's startup
 # probe (before traffic is routed to this instance), not on a live user's request.

@@ -67,6 +67,7 @@ def main():
         (36, 'create_analytics_events_archive', load_migration(36, 'create_analytics_events_archive')),
         (37, 'create_tryon_monthly_usage', load_migration(37, 'create_tryon_monthly_usage')),
         (38, 'create_two_factor_codes', load_migration(38, 'create_two_factor_codes')),
+        (39, 'create_api_call_events', load_migration(39, 'create_api_call_events')),
     ]
     
     migration_manager.run_migrations(migrations)
