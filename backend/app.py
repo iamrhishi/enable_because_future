@@ -256,6 +256,32 @@ def health():
     except Exception as e:
         return error_response_from_string(f'Unhealthy: {str(e)}', 503, 'UNHEALTHY')
 
+
+@app.route('/api/app-version', methods=['GET'])
+def check_app_version():
+    """
+    Force/soft update gate. Client sends its own version (from PackageInfo,
+    NOT the build number - CFBundleShortVersionString / versionName, e.g.
+    '3.1.0'); backend decides against Config.APP_MIN_SUPPORTED_VERSION /
+    APP_LATEST_VERSION so thresholds can change without an app release.
+    """
+    from shared.app_version import get_update_status
+
+    client_version = request.args.get('version', '')
+    platform = (request.args.get('platform') or '').lower()
+
+    status = get_update_status(client_version)
+
+    store_url = Config.APP_STORE_URL_IOS if platform == 'ios' else Config.APP_STORE_URL_ANDROID
+
+    return success_response(data={
+        'update_status': status,  # 'none' | 'soft' | 'force'
+        'latest_version': Config.APP_LATEST_VERSION,
+        'message': Config.APP_FORCE_UPDATE_MESSAGE if status == 'force' else Config.APP_UPDATE_MESSAGE,
+        'store_url': store_url,
+    })
+
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 

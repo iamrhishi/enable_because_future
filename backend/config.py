@@ -148,6 +148,24 @@ class Config:
     TWO_FACTOR_CODE_TTL_MINUTES = int(os.environ.get('TWO_FACTOR_CODE_TTL_MINUTES', '10'))
     TWO_FACTOR_MAX_ATTEMPTS = int(os.environ.get('TWO_FACTOR_MAX_ATTEMPTS', '5'))
 
+    # App version gate (force/soft update prompts). '0.0.0' effectively
+    # disables both checks - every real client version compares >= that.
+    # MIN_SUPPORTED: below this, the app is unusable until updated (force).
+    # LATEST: below this (but >= MIN_SUPPORTED), a dismissible update prompt
+    # is shown (soft).
+    APP_MIN_SUPPORTED_VERSION = os.environ.get('APP_MIN_SUPPORTED_VERSION', '0.0.0')
+    APP_LATEST_VERSION = os.environ.get('APP_LATEST_VERSION', '0.0.0')
+    APP_UPDATE_MESSAGE = os.environ.get(
+        'APP_UPDATE_MESSAGE',
+        'A new version of BecauseFuture is available with improvements and fixes.'
+    )
+    APP_FORCE_UPDATE_MESSAGE = os.environ.get(
+        'APP_FORCE_UPDATE_MESSAGE',
+        'This version of BecauseFuture is no longer supported. Please update to continue.'
+    )
+    APP_STORE_URL_IOS = os.environ.get('APP_STORE_URL_IOS', '')
+    APP_STORE_URL_ANDROID = os.environ.get('APP_STORE_URL_ANDROID', '')
+
     @staticmethod
     def validate():
         """Validate that all required configuration is present"""
