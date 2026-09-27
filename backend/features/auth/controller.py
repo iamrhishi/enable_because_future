@@ -278,9 +278,12 @@ def login():
             return error_response_from_string('Invalid email or password', 401, 'AUTHENTICATION_ERROR')
 
         # Two-factor: password is correct, but hold the real token until the
-        # emailed code is verified. Off by default (Config.TWO_FACTOR_AUTH_ENABLED)
-        # until there's an App Store build that can handle this extra step.
-        if Config.TWO_FACTOR_AUTH_ENABLED:
+        # emailed code is verified. Off by default (Config.TWO_FACTOR_AUTH_ENABLED),
+        # and even once on, only applied to builds that shipped with the
+        # verify-code UI - those send X-App-Version on every request (see
+        # mobile's init_dependencies.dart); older/live builds never send it,
+        # so they keep getting the old single-step login untouched.
+        if Config.TWO_FACTOR_AUTH_ENABLED and request.headers.get('X-App-Version'):
             try:
                 generate_and_send_code(user.userid, user.email)
             except AuthenticationError as e:
