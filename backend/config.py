@@ -147,6 +147,10 @@ class Config:
     TWO_FACTOR_EMAIL_FROM = os.environ.get('TWO_FACTOR_EMAIL_FROM', 'engineering@becausefuture.tech')
     TWO_FACTOR_CODE_TTL_MINUTES = int(os.environ.get('TWO_FACTOR_CODE_TTL_MINUTES', '10'))
     TWO_FACTOR_MAX_ATTEMPTS = int(os.environ.get('TWO_FACTOR_MAX_ATTEMPTS', '5'))
+    # Accounts that always get this fixed code instead of a random emailed
+    # one - App Store review demo account, internal QA. Comma-separated.
+    TWO_FACTOR_FIXED_OTP_EMAILS = os.environ.get('TWO_FACTOR_FIXED_OTP_EMAILS', '')
+    TWO_FACTOR_FIXED_OTP_CODE = os.environ.get('TWO_FACTOR_FIXED_OTP_CODE', '123456')
 
     # App version gate (force/soft update prompts). '0.0.0' effectively
     # disables both checks - every real client version compares >= that.

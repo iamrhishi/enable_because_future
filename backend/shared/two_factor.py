@@ -25,15 +25,37 @@ def _hash_code(code: str) -> str:
     return hashlib.sha256(code.encode()).hexdigest()
 
 
+def _is_fixed_otp_account(email: str) -> bool:
+    fixed_emails = [
+        e.strip().lower()
+        for e in Config.TWO_FACTOR_FIXED_OTP_EMAILS.split(',')
+        if e.strip()
+    ]
+    return (email or '').strip().lower() in fixed_emails
+
+
 def generate_and_send_code(user_id: str, email: str) -> None:
-    """Create a new 6-digit code for user_id and email it. Raises on send failure."""
-    code = f"{secrets.randbelow(1_000_000):06d}"
+    """
+    Create a new 6-digit code for user_id and email it. Raises on send failure.
+
+    Exception: accounts listed in Config.TWO_FACTOR_FIXED_OTP_EMAILS (App
+    Store review demo account, internal QA) always get the same
+    Config.TWO_FACTOR_FIXED_OTP_CODE instead of a random one, and it's never
+    actually emailed - a reviewer can't check an inbox, and this can't be
+    left dependent on SMTP being up during a live review.
+    """
+    is_fixed = _is_fixed_otp_account(email)
+    code = Config.TWO_FACTOR_FIXED_OTP_CODE if is_fixed else f"{secrets.randbelow(1_000_000):06d}"
     expires_at = datetime.now() + timedelta(minutes=Config.TWO_FACTOR_CODE_TTL_MINUTES)
 
     db_manager.execute_query(
         "INSERT INTO two_factor_codes (user_id, code_hash, expires_at) VALUES (?, ?, ?)",
         (user_id, _hash_code(code), expires_at.strftime('%Y-%m-%d %H:%M:%S'))
     )
+
+    if is_fixed:
+        logger.info(f"two_factor: Fixed-OTP account ({email}) - code not emailed")
+        return
 
     _send_code_email(email, code)
 
