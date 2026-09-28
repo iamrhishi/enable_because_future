@@ -20,6 +20,34 @@
       "brand": "Uniqlo",
       "category": "top",
       "imageURL": "https://image.uniqlo.com/UQ/ST3/us/imagesgoods/482839/item/usgoods_02_482839_3x4.jpg"
+    },
+    {
+      "url": "https://lastdecades.de/collections/vintage-trainingsjacken/products/adidas-d8-trainingsjacke-xl-652986",
+      "name": "Adidas Trainingsjacke (XL)",
+      "brand": "Adidas",
+      "category": "top",
+      "imageURL": "https://cdn.shopify.com/s/files/1/0513/5810/5790/files/4a1e720c-2584-4e98-8931-77e8ad2af458_product_6487216a-7797-4935-b0e4-ff4a63e2fdbf_1782236784165_1aaae974-84c3-4f50-9928-c1af42078f7e.webp?v=1782484705"
+    },
+    {
+      "url": "https://shop.mango.com/de/de/p/damen/tops/party/jacquard-corsagen-top/37064466/02/00",
+      "name": "Jacquard-Corsagen-Top",
+      "brand": "Mango",
+      "category": "top",
+      "imageURL": "https://media.mango.com/is/image/punto/37064466-02-002?wid=2048"
+    },
+    {
+      "url": "https://www.levi.com/DE/de_DE/bekleidung/damen/jeans/bootcut/loose-boot-jeans/p/005DO0031",
+      "name": "Loose Boot Jeans",
+      "brand": "Levi's",
+      "category": "bottom",
+      "imageURL": "https://lscoglobal.scene7.com/is/image/lscoglobal/WB_005DO-0031_GLO_CM_DA?fmt=jpeg&qlt=70&resMode=sharp2&fit=crop,1&op_usm=0.6,0.6,8&wid=800&hei=800"
+    },
+    {
+      "url": "https://www.zara.com/de/de/trf-jeans-flare-extra-komfort-tiefer-bund-p06045215.html?v1=597241753&v2=2419190",
+      "name": "TRF Jeans Flare Extra Komfort",
+      "brand": "Zara",
+      "category": "bottom",
+      "imageURL": "https://static.zara.net/assets/public/8ed8/85f7/4282481fa1b4/7735e4c7c674/00541213800-p/00541213800-p.jpg"
     }
   ],
   "men": [],
