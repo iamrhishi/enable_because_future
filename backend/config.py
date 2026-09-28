@@ -73,6 +73,16 @@ class Config:
     # Max try-on attempts a single user may start per calendar month, across
     # /tryon, /tryon/multi, /tryon/layered and /tryon-gemini combined.
     TRYON_MONTHLY_LIMIT = int(os.environ.get('TRYON_MONTHLY_LIMIT', '30'))
+    # Comma-separated userids exempt from the monthly cap entirely (internal
+    # team / QA accounts, not customers). Resolved by userid, not email, so
+    # this doesn't need a DB lookup on every try-on request:
+    #   02704f4a = bibifuhrmann@web.de (Bianca Fuhrmann)
+    #   2da8a42e = biancafuhrmann@becausefuture.tech (Bianca Fuhrmann)
+    #   b2edc96b = rhishi@enableyou.co (Rhishikesh Thakur)
+    TRYON_LIMIT_EXEMPT_USER_IDS = os.environ.get(
+        'TRYON_LIMIT_EXEMPT_USER_IDS',
+        '02704f4a,2da8a42e,b2edc96b'
+    )
 
     # Async try-on: recommended delay between GET /api/job/{id} polls while status is queued/processing.
     # Milliseconds (clamped). Clients implement polling; backend only advertises this in JSON responses.

@@ -28,9 +28,11 @@ tryon_bp = Blueprint('tryon', __name__, url_prefix='/api')
 
 
 def _usage_payload(used: int) -> dict:
-    """Build the {used, limit, remaining} block returned alongside a just-created try-on."""
+    """Build the {used, limit, remaining, unlimited} block returned alongside a just-created try-on."""
     limit = Config.TRYON_MONTHLY_LIMIT
-    return {'used': used, 'limit': limit, 'remaining': max(0, limit - used)}
+    if used < 0:  # exempt account (check_and_increment_tryon_quota's sentinel)
+        return {'used': 0, 'limit': limit, 'remaining': limit, 'unlimited': True}
+    return {'used': used, 'limit': limit, 'remaining': max(0, limit - used), 'unlimited': False}
 
 
 def _attach_job_poll_hint(job_row) -> dict:

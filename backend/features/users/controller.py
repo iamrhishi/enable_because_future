@@ -30,6 +30,7 @@ def get_tryon_status():
             'tryon_count': usage['used'],
             'tryon_limit': usage['limit'],
             'remaining_tryons': usage['remaining'],
+            'unlimited': usage['unlimited'],
         })
     except Exception as e:
         logger.exception(f"get_tryon_status: EXIT - Error: {str(e)}")

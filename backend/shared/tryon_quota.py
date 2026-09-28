@@ -25,10 +25,21 @@ def _year_month(now: datetime = None) -> str:
     return (now or datetime.now()).strftime('%Y-%m')
 
 
+def _is_exempt(user_id: str) -> bool:
+    exempt_ids = [
+        e.strip() for e in Config.TRYON_LIMIT_EXEMPT_USER_IDS.split(',') if e.strip()
+    ]
+    return user_id in exempt_ids
+
+
 def get_tryon_usage(user_id: str) -> Dict:
     """Return current month's usage for a user: {used, limit, remaining, month}."""
     year_month = _year_month()
     limit = Config.TRYON_MONTHLY_LIMIT
+
+    if _is_exempt(user_id):
+        return {'used': 0, 'limit': limit, 'remaining': limit, 'month': year_month, 'unlimited': True}
+
     row = db_manager.execute_query(
         "SELECT count FROM tryon_monthly_usage WHERE user_id = ? AND year_month = ?",
         (user_id, year_month),
@@ -40,6 +51,7 @@ def get_tryon_usage(user_id: str) -> Dict:
         'limit': limit,
         'remaining': max(0, limit - used),
         'month': year_month,
+        'unlimited': False,
     }
 
 
@@ -50,6 +62,10 @@ def check_and_increment_tryon_quota(user_id: str) -> int:
 
     Call this once per accepted try-on request, before any expensive work.
     """
+    if _is_exempt(user_id):
+        logger.info(f"tryon_quota: user_id={user_id} exempt, skipping quota check")
+        return -1
+
     year_month = _year_month()
     limit = Config.TRYON_MONTHLY_LIMIT
 
