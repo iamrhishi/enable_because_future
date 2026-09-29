@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart because-future-backend if its /health endpoint stops responding
+After=because-future-backend.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enable_because_future/backend/scripts/health_watchdog.sh
