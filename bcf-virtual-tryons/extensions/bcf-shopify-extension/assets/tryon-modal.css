@@ -2,11 +2,48 @@
   display: none !important;
 }
 
+.bcf-tryon-root {
+  position: absolute !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: max-content;
+  z-index: 20;
+  margin: 0 !important;
+  isolation: isolate;
+}
+
+.bcf-tryon-root .bcf-tryon-open-button {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 10px 16px !important;
+  background: #003500 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-tryon-open-button img {
+  width: 20px;
+  height: 20px;
+}
+
 .bcf-tryon-root .bcf-overlay {
   position: fixed;
   inset: 0;
   background: rgba(8, 16, 10, 0.56);
-  z-index: 9999;
+  z-index: 2147483647;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
@@ -60,16 +97,16 @@
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
-  border: 1px;
-  /* Changed from 'none' to add a shadow below */
+  border: none;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 15px; /* Fixed: Added 'px' unit so the browser reads it */
-  border-radius: 5px;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 50%;
   margin: 0;
   cursor: pointer;
 }
@@ -462,6 +499,8 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -472,8 +511,9 @@
   height: 100%;
   max-width: 100%;
   max-height: 100%;
+  box-sizing: border-box;
   border-radius: 18px;
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid #d7e4d7;
   background: #ffffff;
 }
@@ -547,13 +587,18 @@
 .bcf-tryon-root .bcf-loader-scene {
   position: relative;
   height: 220px;
+  min-height: 0;
   margin-bottom: 14px;
+  overflow: hidden;
 }
 
 .bcf-tryon-root .bcf-loader-garment,
 .bcf-tryon-root .bcf-loader-avatar,
 .bcf-tryon-root .bcf-loader-garment-fallback {
   position: absolute;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
   border-radius: 14px;
   background: #ffffff;
   border: 1px solid #dae3da;
@@ -565,7 +610,7 @@
   top: 20px;
   width: 44%;
   height: 62%;
-  object-fit: cover;
+  object-fit: contain;
   transform: rotate(-4deg);
 }
 
@@ -574,7 +619,7 @@
   top: 34px;
   width: 40%;
   height: 68%;
-  object-fit: cover;
+  object-fit: contain;
   transform: rotate(4deg);
 }
 
@@ -596,8 +641,19 @@
   background: #edf2ee;
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 1.35;
   color: #445644;
+  text-align: center;
+}
+
+.bcf-tryon-root .bcf-loader-sticker {
+  display: block;
+  width: min(180px, 100%);
+  height: auto;
+  max-height: 180px;
+  margin: 10px auto 0;
+  object-fit: contain;
 }
 
 @keyframes bcfTryOnPulse {
@@ -655,7 +711,10 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  object-fit: contain;
   margin: 0;
   background: #f7faf7;
 }
@@ -827,5 +886,54 @@
 
   .bcf-tryon-root .bcf-loader-shell h4 {
     font-size: 24px;
+  }
+}
+
+@media (min-width: 641px) {
+  .bcf-tryon-root .bcf-modal {
+    width: min(500px, calc(100vw - 20px));
+  }
+
+  .bcf-tryon-root .bcf-login-copy h3,
+  .bcf-tryon-root .bcf-signup-copy h3 {
+    font-size: 32px;
+  }
+
+  .bcf-tryon-root .bcf-login-copy p,
+  .bcf-tryon-root .bcf-signup-copy p {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-signup-title {
+    font-size: 17px;
+  }
+
+  .bcf-tryon-root .bcf-signup-section-label {
+    font-size: 13px;
+  }
+
+  .bcf-tryon-root .bcf-input,
+  .bcf-tryon-root .bcf-input-large {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-primary-action,
+  .bcf-tryon-root .bcf-secondary-action,
+  .bcf-tryon-root .bcf-tryon-action,
+  .bcf-tryon-root .bcf-try-again,
+  .bcf-tryon-root .bcf-login-action,
+  .bcf-tryon-root .bcf-signup-final-actions .bcf-primary-action,
+  .bcf-tryon-root .bcf-signup-final-actions .bcf-secondary-action {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-profile-row {
+    font-size: 15px;
+  }
+
+  .bcf-tryon-root .bcf-home-note,
+  .bcf-tryon-root .bcf-error-text,
+  .bcf-tryon-root .bcf-login-links {
+    font-size: 15px;
   }
 }

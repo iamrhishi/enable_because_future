@@ -52,6 +52,14 @@
 
       <section class="bcf-view bcf-view-signup bcf-hidden" data-tryon-view="signup">
         <div class="bcf-signup-shell">
+          <img
+            class="bcf-login-logo"
+            src="{{ 'bcf_logo.png' | asset_url }}"
+            alt="BCF logo"
+            width="180"
+            height="64"
+            loading="lazy"
+          >
           <div class="bcf-signup-topbar">
             <button type="button" class="bcf-signup-back" data-signup-back aria-label="Back">&#8249;</button>
             <span class="bcf-signup-title">Create Account</span>
@@ -220,7 +228,17 @@
                 <img class="bcf-loader-avatar" src="{{ default_avatar_url }}" alt="Avatar look preview" width="170" height="220" loading="lazy" data-tryon-avatar-preview>
               </div>
 
-              <div class="bcf-loader-fact">A single cotton T-shirt can take around 2,700L of water to make.</div>
+              <div class="bcf-loader-fact">
+                <div>A single cotton T-shirt can take around 2,700L of water to make.</div>
+                <img
+                  class="bcf-loader-sticker"
+                  src="{{ 'LD_Sticker_01.png' | asset_url }}"
+                  alt=""
+                  width="180"
+                  height="180"
+                  loading="lazy"
+                >
+              </div>
             </div>
           </div>
 
