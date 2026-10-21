@@ -150,6 +150,86 @@ def generate_xlsx_report(events: list, summary: dict, api_call_summary: dict = N
         ws_api.column_dimensions['A'].width = 40
         ws_api.column_dimensions['B'].width = 12
 
+    # ===== By Feature & Device Sheet =====
+    if api_call_summary and api_call_summary.get('by_feature'):
+        ws_feat = wb.create_sheet("By Feature & Device")
+
+        ws_feat['A1'] = f"API Calls by Feature & Device - {api_call_summary['date']}"
+        ws_feat['A1'].font = Font(bold=True, size=14)
+        ws_feat.merge_cells('A1:D1')
+
+        platforms = sorted({
+            p for counts in api_call_summary['by_feature_and_platform'].values() for p in counts
+        })
+        headers = ['Feature'] + [p.title() for p in platforms] + ['Total']
+        for col, h in enumerate(headers, 1):
+            cell = ws_feat.cell(row=3, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+
+        row = 4
+        for feature, total in sorted(api_call_summary['by_feature'].items(), key=lambda x: -x[1]):
+            ws_feat.cell(row=row, column=1, value=feature)
+            by_platform = api_call_summary['by_feature_and_platform'].get(feature, {})
+            for col, platform in enumerate(platforms, 2):
+                ws_feat.cell(row=row, column=col, value=by_platform.get(platform, 0))
+            ws_feat.cell(row=row, column=len(platforms) + 2, value=total)
+            row += 1
+
+        ws_feat.column_dimensions['A'].width = 22
+        for i in range(2, len(platforms) + 3):
+            ws_feat.column_dimensions[ws_feat.cell(row=3, column=i).column_letter].width = 12
+
+    # ===== By Feature & User Sheet =====
+    if api_call_summary and api_call_summary.get('by_feature_and_user'):
+        ws_fu = wb.create_sheet("By Feature & User")
+
+        ws_fu['A1'] = f"API Calls by Feature & User - {api_call_summary['date']}"
+        ws_fu['A1'].font = Font(bold=True, size=14)
+        ws_fu.merge_cells('A1:C1')
+
+        headers = ['Feature', 'User', 'Calls']
+        for col, h in enumerate(headers, 1):
+            cell = ws_fu.cell(row=3, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+
+        row = 4
+        for feature, _ in sorted(api_call_summary['by_feature'].items(), key=lambda x: -x[1]):
+            by_user = api_call_summary['by_feature_and_user'].get(feature, {})
+            for user, count in sorted(by_user.items(), key=lambda x: -x[1]):
+                ws_fu.cell(row=row, column=1, value=feature)
+                ws_fu.cell(row=row, column=2, value=user)
+                ws_fu.cell(row=row, column=3, value=count)
+                row += 1
+
+        ws_fu.column_dimensions['A'].width = 22
+        ws_fu.column_dimensions['B'].width = 30
+        ws_fu.column_dimensions['C'].width = 10
+
+    # ===== Search by Website (Brand) Sheet =====
+    if api_call_summary and api_call_summary.get('by_search_website'):
+        ws_search = wb.create_sheet("Search by Website")
+
+        ws_search['A1'] = f"Garment Search Count by Brand Website - {api_call_summary['date']}"
+        ws_search['A1'].font = Font(bold=True, size=14)
+        ws_search.merge_cells('A1:B1')
+
+        headers = ['Website (Brand)', 'Search Calls']
+        for col, h in enumerate(headers, 1):
+            cell = ws_search.cell(row=3, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+
+        row = 4
+        for website, count in sorted(api_call_summary['by_search_website'].items(), key=lambda x: -x[1]):
+            ws_search.cell(row=row, column=1, value=website)
+            ws_search.cell(row=row, column=2, value=count)
+            row += 1
+
+        ws_search.column_dimensions['A'].width = 35
+        ws_search.column_dimensions['B'].width = 14
+
     # Save to bytes
     output = BytesIO()
     wb.save(output)

@@ -35,6 +35,38 @@ def _extract_host(url: Optional[str]) -> Optional[str]:
         return None
 
 
+def categorize_feature(path: str, method: str = '') -> str:
+    """
+    Maps a request path (+ method, for the one ambiguous case) to one of
+    the named feature buckets used in the drill-down report sections.
+    Order matters - checked most-specific first.
+    """
+    p = path or ''
+    m = (method or '').upper()
+
+    if p.startswith('/api/create-account'):
+        return 'signup'
+    if p.startswith('/api/body-measurements'):
+        return 'body_measurements'
+    if (p.startswith('/api/save-avatar') or p.startswith('/api/get-avatar')
+            or p.startswith('/api/update-avatar') or p.startswith('/api/avatar/')):
+        return 'avatar'
+    if (p.startswith('/api/tryon') or p.startswith('/api/job/')
+            or p.startswith('/api/tryon-results') or p == '/api/users/tryon-status'):
+        return 'tryon'
+    if (p.startswith('/api/garments/scrape') or p.startswith('/api/garments/defaults')
+            or p.startswith('/api/garments/refresh')
+            or p.startswith('/api/wardrobe/extract-from-url')):
+        return 'garment_search'
+    if p.startswith('/api/garments/extract-images'):
+        return 'garment_upload'
+    if p.startswith('/api/wardrobe/items') and m == 'POST':
+        # GET on the same path is just browsing the user's existing
+        # wardrobe, not an upload - only POST (adding an item) counts.
+        return 'garment_upload'
+    return 'other'
+
+
 def detect_platform_and_website(request: Request) -> tuple[str, Optional[str]]:
     """Returns (platform, website_domain). platform is 'mobile' or 'web'."""
     client_platform = (request.headers.get('X-Client-Platform') or '').strip().lower()
@@ -81,8 +113,31 @@ def get_api_call_events_since(since: datetime) -> List[Dict]:
         return []
 
 
+def _user_display_names(user_ids: List[str]) -> Dict[str, str]:
+    """userid -> 'First Last' (or email if no name on file). Never IP-based -
+    this is the only identity lookup the feature/user drill-down uses."""
+    ids = [u for u in set(user_ids) if u]
+    if not ids:
+        return {}
+    placeholders = ','.join('?' for _ in ids)
+    rows = db_manager.execute_query(
+        f"SELECT userid, email, first_name, last_name FROM users WHERE userid IN ({placeholders})",
+        tuple(ids), fetch_all=True
+    )
+    names = {}
+    for row in rows:
+        full_name = ' '.join(p for p in [row['first_name'], row['last_name']] if p).strip()
+        names[row['userid']] = full_name or row['email'] or row['userid']
+    return names
+
+
 def get_api_call_summary(date: datetime = None) -> Dict:
-    """Summary for a day: totals by platform, by website domain, and unique user count."""
+    """
+    Summary for a day: totals by platform, by website domain, unique user
+    count (always by user_id/name - never by IP), plus feature drill-downs:
+    by_feature, by_feature_and_platform (device), by_feature_and_user (name),
+    and by_search_website (garment-search calls grouped by referring brand site).
+    """
     if date is None:
         date = datetime.now() - timedelta(days=1)
 
@@ -97,33 +152,50 @@ def get_api_call_summary(date: datetime = None) -> Dict:
         'by_platform': {},
         'by_website': {},
         'unique_users': 0,
+        'by_feature': {},
+        'by_feature_and_platform': {},
+        'by_feature_and_user': {},
+        'by_search_website': {},
     }
 
     try:
-        platform_rows = db_manager.execute_query(
-            """SELECT platform, COUNT(*) as count FROM api_call_events
-               WHERE created_at >= ? AND created_at <= ? GROUP BY platform ORDER BY count DESC""",
+        rows = db_manager.execute_query(
+            """SELECT path, method, user_id, platform, website_domain FROM api_call_events
+               WHERE created_at >= ? AND created_at <= ?""",
             (start_s, end_s), fetch_all=True
         )
-        for row in platform_rows:
-            summary['by_platform'][row['platform']] = row['count']
-            summary['total_calls'] += row['count']
+        rows = [dict(r) for r in rows]
 
-        website_rows = db_manager.execute_query(
-            """SELECT website_domain, COUNT(*) as count FROM api_call_events
-               WHERE created_at >= ? AND created_at <= ? AND website_domain IS NOT NULL
-               GROUP BY website_domain ORDER BY count DESC""",
-            (start_s, end_s), fetch_all=True
-        )
-        for row in website_rows:
-            summary['by_website'][row['website_domain']] = row['count']
+        names = _user_display_names([r['user_id'] for r in rows])
+        user_ids_seen = set()
 
-        user_row = db_manager.execute_query(
-            """SELECT COUNT(DISTINCT user_id) as count FROM api_call_events
-               WHERE created_at >= ? AND created_at <= ? AND user_id IS NOT NULL""",
-            (start_s, end_s), fetch_one=True
-        )
-        summary['unique_users'] = user_row['count'] if user_row else 0
+        for r in rows:
+            summary['total_calls'] += 1
+            summary['by_platform'][r['platform']] = summary['by_platform'].get(r['platform'], 0) + 1
+
+            if r['website_domain']:
+                summary['by_website'][r['website_domain']] = summary['by_website'].get(r['website_domain'], 0) + 1
+
+            if r['user_id']:
+                user_ids_seen.add(r['user_id'])
+
+            feature = categorize_feature(r['path'], r['method'])
+            summary['by_feature'][feature] = summary['by_feature'].get(feature, 0) + 1
+
+            by_platform_for_feature = summary['by_feature_and_platform'].setdefault(feature, {})
+            by_platform_for_feature[r['platform']] = by_platform_for_feature.get(r['platform'], 0) + 1
+
+            if r['user_id']:
+                display_name = names.get(r['user_id'], r['user_id'])
+                by_user_for_feature = summary['by_feature_and_user'].setdefault(feature, {})
+                by_user_for_feature[display_name] = by_user_for_feature.get(display_name, 0) + 1
+
+            if feature == 'garment_search' and r['website_domain']:
+                summary['by_search_website'][r['website_domain']] = (
+                    summary['by_search_website'].get(r['website_domain'], 0) + 1
+                )
+
+        summary['unique_users'] = len(user_ids_seen)
 
     except Exception as e:
         logger.error(f"api_call_tracking.get_api_call_summary failed: {e}")
