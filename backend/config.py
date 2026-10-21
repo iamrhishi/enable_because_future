@@ -79,9 +79,11 @@ class Config:
     #   02704f4a = bibifuhrmann@web.de (Bianca Fuhrmann)
     #   2da8a42e = biancafuhrmann@becausefuture.tech (Bianca Fuhrmann)
     #   b2edc96b = rhishi@enableyou.co (Rhishikesh Thakur)
+    #   52ea1dda = dev@enableyou.co (App Store review / QA demo account -
+    #     fixed-OTP 2FA account; must never hit the cap mid-review)
     TRYON_LIMIT_EXEMPT_USER_IDS = os.environ.get(
         'TRYON_LIMIT_EXEMPT_USER_IDS',
-        '02704f4a,2da8a42e,b2edc96b'
+        '02704f4a,2da8a42e,b2edc96b,52ea1dda'
     )
 
     # Async try-on: recommended delay between GET /api/job/{id} polls while status is queued/processing.
