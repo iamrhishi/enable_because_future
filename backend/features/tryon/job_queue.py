@@ -26,6 +26,14 @@ MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '50'))  # Max jobs in queu
 # would have eventually succeeded into a guaranteed hard failure. 450s
 # gives ~40% margin over the worst observed real duration.
 JOB_TIMEOUT_SECONDS = int(os.environ.get('JOB_TIMEOUT_SECONDS', '450'))
+# How often each worker loop re-sweeps for stuck jobs while idle. Separate from
+# JOB_TIMEOUT_SECONDS because _cleanup_stuck_jobs() used to only run once, at
+# JobQueue() startup - a job abandoned mid-flight by gunicorn's --max-requests
+# worker recycling (the owning process's daemon thread dies with no exception,
+# no DB update, nothing) would never be revisited by anyone and stayed
+# 'processing' forever. Re-running the same sweep periodically from the
+# worker loop bounds that exposure to ~JOB_TIMEOUT_SECONDS + this interval.
+CLEANUP_SWEEP_INTERVAL_SECONDS = int(os.environ.get('CLEANUP_SWEEP_INTERVAL_SECONDS', '60'))
 
 
 class JobQueue:
@@ -39,6 +47,7 @@ class JobQueue:
         self.running = False
         self.job_start_times: Dict[str, float] = {}  # Track job start times for timeout
         self._cleanup_stuck_jobs()  # Mark any stuck jobs from previous crash as failed
+        self._last_cleanup_sweep = time.time()
         self._start_worker()
         logger.info(f"JobQueue.__init__: EXIT - Initialized (max_queue_size={MAX_QUEUE_SIZE}, timeout={JOB_TIMEOUT_SECONDS}s)")
 
@@ -62,7 +71,7 @@ class JobQueue:
                 datetime.datetime.utcnow() - datetime.timedelta(seconds=JOB_TIMEOUT_SECONDS + 30)
             ).strftime('%Y-%m-%d %H:%M:%S')
             stuck_jobs = db_manager.execute_query(
-                "SELECT job_id FROM tryon_jobs WHERE status = 'processing' AND updated_at < ?",
+                "SELECT job_id, user_id FROM tryon_jobs WHERE status = 'processing' AND updated_at < ?",
                 (cutoff,),
                 fetch_all=True
             )
@@ -72,12 +81,20 @@ class JobQueue:
                     db_manager.execute_query(
                         """UPDATE tryon_jobs
                            SET status = 'failed',
-                               error_message = 'Server restarted while job was processing',
+                               error_message = 'Job abandoned (worker restarted or recycled while processing) - please try again',
                                updated_at = CURRENT_TIMESTAMP
                            WHERE job_id = ?""",
                         (job_id,)
                     )
                     logger.warning(f"JobQueue._cleanup_stuck_jobs: Marked stuck job {job_id} as failed")
+                    try:
+                        track_event(
+                            EventType.TRYON_FAILED,
+                            user_id=job['user_id'],
+                            metadata={'job_id': job_id, 'reason': 'abandoned_stuck_sweep'}
+                        )
+                    except Exception:
+                        pass
                 logger.info(f"JobQueue._cleanup_stuck_jobs: Cleaned up {len(stuck_jobs)} stuck job(s)")
         except Exception as e:
             logger.warning(f"JobQueue._cleanup_stuck_jobs: Error: {e}")
@@ -130,6 +147,9 @@ class JobQueue:
                         logger.error(f"JobQueue._worker_loop: Failed to update crashed job status: {update_error}")
                 self.queue.task_done()
             except queue.Empty:
+                if time.time() - self._last_cleanup_sweep > CLEANUP_SWEEP_INTERVAL_SECONDS:
+                    self._last_cleanup_sweep = time.time()
+                    self._cleanup_stuck_jobs()
                 continue
             except Exception as e:
                 logger.exception(f"JobQueue._worker_loop: Error in worker loop: {str(e)}")
