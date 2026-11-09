@@ -220,11 +220,30 @@ def create_account():
             measurements.save()
             logger.info(f"create_account: Body measurements saved for userid={userid}")
         
-        # Generate JWT token
-        token = generate_token(userid, email)
-
         # Track signup event
         track_event(EventType.SIGNUP, user_id=userid, user_email=email)
+
+        # Email verification: account exists, but hold the real token until
+        # the emailed code is verified (same mechanism login used to use -
+        # verify_2fa() is generic, keyed by email/user_id, not login-specific,
+        # so it's reused here as-is). Gated the same way login's 2FA was:
+        # only for builds that ship the verify-code UI (X-App-Version header),
+        # so older/live builds without it keep getting a token immediately.
+        if Config.TWO_FACTOR_AUTH_ENABLED and request.headers.get('X-App-Version'):
+            try:
+                generate_and_send_code(userid, email)
+            except AuthenticationError as e:
+                return error_response_from_string(str(e), 500, 'TWO_FACTOR_SEND_FAILED')
+
+            logger.info(f"create_account: EXIT - Account created, verification code sent for userid={userid}")
+            return success_response(
+                data={'requires_2fa': True, 'email': email},
+                message='Verification code sent',
+                status_code=201
+            )
+
+        # Generate JWT token
+        token = generate_token(userid, email)
 
         logger.info(f"create_account: EXIT - Account created successfully for userid={userid}")
 
@@ -277,23 +296,9 @@ def login():
             track_event(EventType.LOGIN_FAILED, user_id=user.userid, user_email=email, metadata={'reason': 'invalid_password'})
             return error_response_from_string('Invalid email or password', 401, 'AUTHENTICATION_ERROR')
 
-        # Two-factor: password is correct, but hold the real token until the
-        # emailed code is verified. Off by default (Config.TWO_FACTOR_AUTH_ENABLED),
-        # and even once on, only applied to builds that shipped with the
-        # verify-code UI - those send X-App-Version on every request (see
-        # mobile's init_dependencies.dart); older/live builds never send it,
-        # so they keep getting the old single-step login untouched.
-        if Config.TWO_FACTOR_AUTH_ENABLED and request.headers.get('X-App-Version'):
-            try:
-                generate_and_send_code(user.userid, user.email)
-            except AuthenticationError as e:
-                return error_response_from_string(str(e), 500, 'TWO_FACTOR_SEND_FAILED')
-
-            logger.info(f"login: EXIT - 2FA code sent for userid={user.userid}")
-            return success_response(
-                data={'requires_2fa': True, 'email': user.email},
-                message='Verification code sent'
-            )
+        # 2FA moved to signup-time email verification (create_account) -
+        # login is a single step again. verify_2fa() itself is untouched and
+        # still reused there (it's generic, not login-specific).
 
         # Generate JWT token
         token = generate_token(user.userid, user.email)
@@ -319,8 +324,8 @@ def login():
 @auth_bp.route('/verify-2fa', methods=['POST'])
 @limiter.limit('10 per minute')
 def verify_2fa():
-    """Second step of login when Config.TWO_FACTOR_AUTH_ENABLED is on: exchange
-    the emailed code for the real JWT that /login withheld."""
+    """Second step of signup when Config.TWO_FACTOR_AUTH_ENABLED is on: exchange
+    the emailed code for the real JWT that /create-account withheld."""
     logger.info("verify_2fa: ENTRY")
     try:
         data = request.get_json() if request.is_json else request.form

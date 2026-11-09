@@ -57,7 +57,10 @@ class Config:
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
     JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
-    JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
+    # 30 days - users shouldn't have to log in again for a month (business
+    # requirement: stay logged in as long as practical, short of a token
+    # that never expires at all).
+    JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '720'))
     
     # File Upload Configuration
     MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE', '6291456'))  # 6MB in bytes
