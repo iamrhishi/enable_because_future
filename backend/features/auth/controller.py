@@ -13,6 +13,7 @@ from shared.errors import ValidationError, AuthenticationError
 from shared.analytics import track_event, EventType
 from shared.rate_limit import limiter
 from shared.two_factor import generate_and_send_code, verify_code
+from shared.app_version import is_build_gated_feature_enabled
 from config import Config
 from shared.logger import logger
 import uuid
@@ -226,10 +227,15 @@ def create_account():
         # Email verification: account exists, but hold the real token until
         # the emailed code is verified (same mechanism login used to use -
         # verify_2fa() is generic, keyed by email/user_id, not login-specific,
-        # so it's reused here as-is). Gated the same way login's 2FA was:
-        # only for builds that ship the verify-code UI (X-App-Version header),
-        # so older/live builds without it keep getting a token immediately.
-        if Config.TWO_FACTOR_AUTH_ENABLED and request.headers.get('X-App-Version'):
+        # so it's reused here as-is). Gated by build number, NOT by
+        # X-App-Version presence - unlike login's old 2FA rollout, every
+        # live build (including the one actually submitted to the App
+        # Store) already sends that header, so it can't distinguish
+        # "has the signup dialog" from "doesn't". See config.py's
+        # SIGNUP_VERIFICATION_MIN_BUILD for why.
+        if Config.TWO_FACTOR_AUTH_ENABLED and is_build_gated_feature_enabled(
+            request, Config.SIGNUP_VERIFICATION_MIN_BUILD
+        ):
             try:
                 generate_and_send_code(userid, email)
             except AuthenticationError as e:

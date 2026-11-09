@@ -185,6 +185,16 @@ class Config:
     APP_STORE_URL_IOS = os.environ.get('APP_STORE_URL_IOS', '')
     APP_STORE_URL_ANDROID = os.environ.get('APP_STORE_URL_ANDROID', '')
 
+    # Minimum X-App-Build that has the signup-email-verification UI
+    # (mobile commit 0e8c250, shipped in 3.1.1+31). X-App-Version alone
+    # can't gate this the way it gated login's old 2FA - every build since
+    # 3.1.1+24 (Sep 27) already sends that header, including 3.1.1+29,
+    # the build actually submitted to the App Store, which predates the
+    # signup dialog by 40+ days. Must use is_build_gated_feature_enabled()
+    # (shared/app_version.py) instead, exactly as that module's docstring
+    # anticipated for "anything gated after" the version-header rollout.
+    SIGNUP_VERIFICATION_MIN_BUILD = int(os.environ.get('SIGNUP_VERIFICATION_MIN_BUILD', '31'))
+
     @staticmethod
     def validate():
         """Validate that all required configuration is present"""
