@@ -2,11 +2,48 @@
   display: none !important;
 }
 
+.bcf-tryon-root {
+  position: absolute !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: max-content;
+  z-index: 20;
+  margin: 0 !important;
+  isolation: isolate;
+}
+
+.bcf-tryon-root .bcf-tryon-open-button {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 10px 16px !important;
+  background: #003500 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-tryon-open-button img {
+  width: 20px;
+  height: 20px;
+}
+
 .bcf-tryon-root .bcf-overlay {
   position: fixed;
   inset: 0;
   background: rgba(8, 16, 10, 0.56);
-  z-index: 9999;
+  z-index: 2147483647;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
@@ -15,9 +52,9 @@
 }
 
 .bcf-tryon-root .bcf-modal {
-  width: min(390px, calc(100vw - 20px));
-  height: min(86vh, 720px);
-  max-height: 86vh;
+  width: min(432px, calc(100vw - 20px));
+  height: min(91.08vh, 851.4px);
+  max-height: 91.08vh;
   border-radius: 20px;
   overflow: hidden;
   background: #ffffff;
@@ -45,24 +82,31 @@
 }
 
 .bcf-tryon-root .bcf-avatar-switch {
-  display: inline-flex;
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-left: auto;
+  gap: 10px;
 }
 
 .bcf-tryon-root .bcf-avatar-chip {
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
-  border: 0;
-  box-shadow: none;
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 50%;
   margin: 0;
   cursor: pointer;
 }
@@ -144,7 +188,7 @@
 .bcf-tryon-root .bcf-login-copy h3 {
   margin: 0 0 8px;
   color: #0a4813;
-  font-size: 22px;
+  font-size: 28px;
   line-height: 1.1;
   font-family: Georgia, "Times New Roman", serif;
   font-style: italic;
@@ -210,6 +254,7 @@
   padding: 0;
   font-size: 16px;
   font-weight: 700;
+  text-decoration: underline;
   cursor: pointer;
 }
 
@@ -223,11 +268,127 @@
   text-decoration: underline;
 }
 
+.bcf-tryon-root .bcf-signup-shell {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 18px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.bcf-tryon-root .bcf-signup-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bcf-tryon-root .bcf-signup-back {
+  border: none;
+  background: transparent;
+  color: #0a4813;
+  font-size: 24px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-signup-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #113312;
+}
+
+.bcf-tryon-root .bcf-signup-topbar-spacer {
+  width: 24px;
+}
+
+.bcf-tryon-root .bcf-signup-progress {
+  display: flex;
+  gap: 6px;
+}
+
+.bcf-tryon-root .bcf-signup-progress-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: #dbe8db;
+}
+
+.bcf-tryon-root .bcf-signup-progress-seg.is-active {
+  background: #0a4813;
+}
+
+.bcf-tryon-root .bcf-signup-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bcf-tryon-root .bcf-signup-copy {
+  text-align: left;
+}
+
+.bcf-tryon-root .bcf-signup-copy h3 {
+  margin: 0 0 6px;
+}
+
+.bcf-tryon-root .bcf-signup-copy p {
+  margin: 0;
+}
+
+.bcf-tryon-root .bcf-signup-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bcf-tryon-root .bcf-signup-row .bcf-input-wrap {
+  margin: 0;
+}
+
+.bcf-tryon-root .bcf-signup-section-label {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #113312;
+}
+
+.bcf-tryon-root .bcf-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23697769' stroke-width='1.6' fill='none' fill-rule='evenodd'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+}
+
+.bcf-tryon-root .bcf-signup-final-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bcf-tryon-root .bcf-signup-final-actions .bcf-secondary-action,
+.bcf-tryon-root .bcf-signup-final-actions .bcf-primary-action {
+  width: auto;
+  flex: 1;
+  border-radius: 999px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 16px;
+  padding: 14px 12px;
+}
+
 .bcf-tryon-root .bcf-view-home {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow: hidden;
+  min-height: 100%;
+  overflow: visible;
 }
 
 .bcf-tryon-root .bcf-view label {
@@ -336,7 +497,10 @@
 .bcf-tryon-root .bcf-selected-avatar-wrap-large {
   position: relative;
   flex: 1;
+  min-height: 0;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -347,6 +511,7 @@
   height: 100%;
   max-width: 100%;
   max-height: 100%;
+  box-sizing: border-box;
   border-radius: 18px;
   object-fit: contain;
   border: 1px solid #d7e4d7;
@@ -422,13 +587,18 @@
 .bcf-tryon-root .bcf-loader-scene {
   position: relative;
   height: 220px;
+  min-height: 0;
   margin-bottom: 14px;
+  overflow: hidden;
 }
 
 .bcf-tryon-root .bcf-loader-garment,
 .bcf-tryon-root .bcf-loader-avatar,
 .bcf-tryon-root .bcf-loader-garment-fallback {
   position: absolute;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
   border-radius: 14px;
   background: #ffffff;
   border: 1px solid #dae3da;
@@ -440,7 +610,7 @@
   top: 20px;
   width: 44%;
   height: 62%;
-  object-fit: cover;
+  object-fit: contain;
   transform: rotate(-4deg);
 }
 
@@ -449,7 +619,7 @@
   top: 34px;
   width: 40%;
   height: 68%;
-  object-fit: cover;
+  object-fit: contain;
   transform: rotate(4deg);
 }
 
@@ -471,8 +641,19 @@
   background: #edf2ee;
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 1.35;
   color: #445644;
+  text-align: center;
+}
+
+.bcf-tryon-root .bcf-loader-sticker {
+  display: block;
+  width: min(180px, 100%);
+  height: auto;
+  max-height: 180px;
+  margin: 10px auto 0;
+  object-fit: contain;
 }
 
 @keyframes bcfTryOnPulse {
@@ -530,7 +711,10 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  object-fit: contain;
   margin: 0;
   background: #f7faf7;
 }
@@ -547,6 +731,39 @@
   gap: 12px;
   padding: 44px 16px 18px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(7, 34, 11, 0.78) 62%, rgba(7, 34, 11, 0.9) 100%);
+}
+
+.bcf-tryon-root .bcf-heart-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.bcf-tryon-root .bcf-heart-btn img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.bcf-tryon-root .bcf-heart-btn.is-liked {
+  background: #ffffff;
+}
+
+.bcf-tryon-root .bcf-heart-btn.is-liked img {
+  filter: invert(21%) sepia(89%) saturate(4000%) hue-rotate(340deg) brightness(90%);
 }
 
 .bcf-tryon-root .bcf-result-overlay p {
@@ -573,21 +790,35 @@
 
 .bcf-tryon-root .bcf-profile-row {
   background: #ffffff;
-  border: 1px solid #d6e5d6;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border: 1px solid #d7ddd7;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(19, 31, 20, 0.08);
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  color: #244025;
-  margin-bottom: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: #697769;
+  margin-bottom: 10px;
   gap: 10px;
 }
 
 .bcf-tryon-root .bcf-profile-row strong {
-  color: #0d2d0f;
+  color: #0a4813;
+  font-weight: 600;
   text-align: right;
   word-break: break-word;
+}
+
+.bcf-tryon-root .bcf-profile-shell {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px 18px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .bcf-tryon-root .bcf-error-text {
@@ -598,24 +829,41 @@
 }
 
 .bcf-tryon-root .bcf-bottom-nav {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
   border-top: 1px solid #dbe8db;
   background: #ffffff;
-  padding: 10px;
+  padding: 12px 10px;
 }
 
 .bcf-tryon-root .bcf-nav-btn {
-  background: #eff5ef;
-  color: #244025;
-  padding: 10px;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  padding: 6px;
+  width: 36px;
+  height: 36px;
+  box-sizing: border-box;
+}
+
+.bcf-tryon-root .bcf-nav-btn img {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: contain;
+  opacity: 0.55;
 }
 
 .bcf-tryon-root .bcf-nav-btn.is-active {
-  background: #003500;
-  color: #ffffff;
+  border-color: #0a4813;
+}
+
+.bcf-tryon-root .bcf-nav-btn.is-active img {
+  opacity: 1;
 }
 
 @media (max-width: 640px) {
@@ -638,5 +886,54 @@
 
   .bcf-tryon-root .bcf-loader-shell h4 {
     font-size: 24px;
+  }
+}
+
+@media (min-width: 641px) {
+  .bcf-tryon-root .bcf-modal {
+    width: min(500px, calc(100vw - 20px));
+  }
+
+  .bcf-tryon-root .bcf-login-copy h3,
+  .bcf-tryon-root .bcf-signup-copy h3 {
+    font-size: 32px;
+  }
+
+  .bcf-tryon-root .bcf-login-copy p,
+  .bcf-tryon-root .bcf-signup-copy p {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-signup-title {
+    font-size: 17px;
+  }
+
+  .bcf-tryon-root .bcf-signup-section-label {
+    font-size: 13px;
+  }
+
+  .bcf-tryon-root .bcf-input,
+  .bcf-tryon-root .bcf-input-large {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-primary-action,
+  .bcf-tryon-root .bcf-secondary-action,
+  .bcf-tryon-root .bcf-tryon-action,
+  .bcf-tryon-root .bcf-try-again,
+  .bcf-tryon-root .bcf-login-action,
+  .bcf-tryon-root .bcf-signup-final-actions .bcf-primary-action,
+  .bcf-tryon-root .bcf-signup-final-actions .bcf-secondary-action {
+    font-size: 16px;
+  }
+
+  .bcf-tryon-root .bcf-profile-row {
+    font-size: 15px;
+  }
+
+  .bcf-tryon-root .bcf-home-note,
+  .bcf-tryon-root .bcf-error-text,
+  .bcf-tryon-root .bcf-login-links {
+    font-size: 15px;
   }
 }
